@@ -135,3 +135,7 @@
 > 127.0.0.1 www.growtopia1.com
 > 127.0.0.1 www.growtopia2.com
 > ```
+
+## Hosting many servers
+
+The [`web/`](web/README.md) folder has the website where people create and manage their own servers, the supervisor that runs them, and a step-by-step guide for a Linux VPS.

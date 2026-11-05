@@ -1,0 +1,19 @@
+<%- include('partials/head') %>
+<h1>Admin</h1>
+<p class="muted"><%= users %> accounts · <%= list.length %> servers</p>
+<table class="table">
+  <thead><tr><th>Server</th><th>Owner</th><th>Status</th><th>Players</th><th>Port</th><th>Created</th></tr></thead>
+  <tbody>
+  <% for (const s of list) { %>
+    <tr>
+      <td><a href="/servers/<%= s.id %>"><%= s.name %></a></td>
+      <td><%= s.ownerName || ('#' + s.ownerId) %></td>
+      <td><%- include('partials/badge', { view: s.view }) %></td>
+      <td><%= s.online %> / <%= s.maxPlayers %></td>
+      <td><%= s.port %></td>
+      <td><%= s.createdAt ? new Date(s.createdAt).toISOString().slice(0, 10) : '' %></td>
+    </tr>
+  <% } %>
+  </tbody>
+</table>
+<%- include('partials/foot') %>

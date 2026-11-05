@@ -1,0 +1,28 @@
+# Runs every game server. Install to /etc/systemd/system/, then:
+#   systemctl daemon-reload && systemctl enable --now gurotopia-supervisor
+[Unit]
+Description=Gurotopia supervisor (starts and stops game servers)
+After=network-online.target mariadb.service
+Wants=network-online.target mariadb.service
+
+[Service]
+User=gurotopia
+Group=gurotopia
+WorkingDirectory=/opt/gurotopia-web
+EnvironmentFile=/etc/gurotopia/panel.env
+ExecStart=/usr/bin/node src/supervisor.js
+Restart=always
+RestartSec=3
+# @note SIGTERM goes only to the supervisor, which then sends SIGINT to each server so they save.
+# whatever is still running after TimeoutStopSec gets SIGKILL.
+KillMode=mixed
+TimeoutStopSec=60
+LimitNOFILE=65536
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+ReadWritePaths=/srv/gurotopia
+
+[Install]
+WantedBy=multi-user.target
