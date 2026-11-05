@@ -1,0 +1,23 @@
+# The website. Install to /etc/systemd/system/, then:
+#   systemctl daemon-reload && systemctl enable --now gurotopia-panel
+# Restarting it (for example after an update) does not touch the game servers.
+[Unit]
+Description=Gurotopia website
+After=network-online.target mariadb.service gurotopia-supervisor.service
+Wants=network-online.target mariadb.service
+
+[Service]
+User=gurotopia
+Group=gurotopia
+WorkingDirectory=/opt/gurotopia-web
+EnvironmentFile=/etc/gurotopia/panel.env
+ExecStart=/usr/bin/node src/panel.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

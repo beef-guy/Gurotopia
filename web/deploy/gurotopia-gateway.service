@@ -1,0 +1,24 @@
+# The gateway: the one address every player connects to. It checks the login and
+# sends each player on to the server they named. Install to /etc/systemd/system/, then:
+#   systemctl daemon-reload && systemctl enable --now gurotopia-gateway
+[Unit]
+Description=Gurotopia gateway (login and routing by server name)
+After=network-online.target mariadb.service
+Wants=network-online.target mariadb.service
+
+[Service]
+User=gurotopia
+Group=gurotopia
+WorkingDirectory=/opt/gurotopia
+# @note nginx holds TCP 443 and passes the game's requests to 8443 (see nginx.conf)
+ExecStart=/opt/gurotopia/main.out --gateway --platform-db gurotopia_platform --https-port 8443
+KillSignal=SIGINT
+TimeoutStopSec=60
+Restart=always
+RestartSec=2
+LimitNOFILE=65536
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

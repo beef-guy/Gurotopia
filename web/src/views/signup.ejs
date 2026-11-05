@@ -1,0 +1,25 @@
+<%- include('partials/head') %>
+<section class="card narrow">
+  <h1>Create an account</h1>
+  <p class="muted">This account is for managing servers on this website. It is separate from your in-game GrowID.</p>
+  <% if (error) { %><p class="notice bad"><%= error %></p><% } %>
+  <form method="post" action="/signup" class="stack">
+    <label>Username
+      <input name="username" value="<%= values.username || '' %>" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" autocomplete="username" autofocus>
+    </label>
+    <label>Password
+      <input name="password" type="password" required minlength="8" maxlength="72" autocomplete="new-password">
+    </label>
+    <label>Password again
+      <input name="password2" type="password" required minlength="8" maxlength="72" autocomplete="new-password">
+    </label>
+    <% if (config.signupCode) { %>
+    <label>Invite code
+      <input name="code" value="<%= values.code || '' %>" required autocomplete="off">
+    </label>
+    <% } %>
+    <button type="submit">Create account</button>
+  </form>
+  <p class="muted">Already have one? <a href="/login">Log in</a>.</p>
+</section>
+<%- include('partials/foot') %>

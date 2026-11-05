@@ -1,0 +1,37 @@
+<%- include('partials/head') %>
+<h1>Your servers</h1>
+<% if (list.length === 0) { %>
+  <p class="muted">You don't have a server yet. Create one below.</p>
+<% } else { %>
+  <div class="list">
+  <% for (const s of list) { %>
+    <a class="row" href="/servers/<%= s.id %>">
+      <span class="name"><%= s.name %></span>
+      <%- include('partials/badge', { view: s.view }) %>
+      <span class="muted"><%= s.online %> / <%= s.maxPlayers %> players</span>
+    </a>
+  <% } %>
+  </div>
+<% } %>
+
+<section class="card">
+  <h2>Create a server</h2>
+  <% if (error) { %><p class="notice bad"><%= error %></p><% } %>
+  <% if (canCreate) { %>
+  <form method="post" action="/servers" class="grid-form">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <label>Server name
+      <input name="name" value="<%= values.name || '' %>" required minlength="3" maxlength="24" pattern="[A-Za-z0-9]{3,24}" placeholder="e.g. SkyBlock">
+      <small>Players type this on the login screen. Letters and digits only.</small>
+    </label>
+    <label>Max players
+      <input name="maxPlayers" type="number" min="1" max="<%= config.maxPlayersLimit %>" value="<%= values.maxPlayers %>" required>
+      <small>Up to <%= config.maxPlayersLimit %>.</small>
+    </label>
+    <button type="submit">Create server</button>
+  </form>
+  <% } else { %>
+  <p class="muted">You have reached the limit of <%= config.serversPerUser %> servers. Delete one to make another.</p>
+  <% } %>
+</section>
+<%- include('partials/foot') %>
