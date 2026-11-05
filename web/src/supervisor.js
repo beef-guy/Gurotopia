@@ -178,7 +178,9 @@ async function prepareFolder(id) {
       await fsp.lstat(link);
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
-      await fsp.symlink(target, link);
+      // @note Windows needs admin rights for links, so copy there (only for testing on a PC)
+      if (process.platform === 'win32') await fsp.cp(target, link, { recursive: true });
+      else await fsp.symlink(target, link);
     }
   }
 
