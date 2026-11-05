@@ -173,6 +173,7 @@ int main(int argc, char *argv[])
     }
 
     std::signal(SIGINT, signal_handler);
+    std::signal(SIGTERM, signal_handler); // @note systemd, docker and kill stop the server cleanly too
 #ifdef SIGHUP // @note unix
     std::signal(SIGHUP, signal_handler); // @note PuTTY, SSH problems
 #endif
