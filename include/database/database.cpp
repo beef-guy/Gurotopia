@@ -63,6 +63,31 @@ void mysql_gateway::integrity()
     if (!column_found("peer", "xp"))    alter_table("peer", "xp INT DEFAULT 0");
     if (!column_found("peer", "wl_storage")) alter_table("peer", "wl_storage INT DEFAULT 0");
     if (!column_found("peer", "role")) alter_table("peer", "role INT DEFAULT 0"); // @note 0 PLAYER, 1 MODERATOR, 2 DEVELOPER
+    if (!column_found("peer", "banned_until")) alter_table("peer", "banned_until BIGINT DEFAULT 0"); // @note unix time
+    if (!column_found("peer", "ban_reason"))   alter_table("peer", "ban_reason VARCHAR(128) DEFAULT ''");
+    if (!column_found("peer", "muted_until"))  alter_table("peer", "muted_until BIGINT DEFAULT 0");
+    if (!column_found("peer", "clothing"))     alter_table("peer", "clothing VARCHAR(128) DEFAULT ''");
+    if (!column_found("peer", "skin_color"))   alter_table("peer", "skin_color BIGINT DEFAULT 2527912447");
+    if (!column_found("world", "access"))      alter_table("world", "access VARCHAR(512) DEFAULT ''"); // @note user ids, comma separated
+    if (!column_found("world", "min_level"))   alter_table("world", "min_level INT DEFAULT 1");
+
+    /* @note moderation: IP bans and a log of every staff action */
+    mysql_query(mysql,
+        "CREATE TABLE IF NOT EXISTS ip_bans ("
+        "ip VARCHAR(45) NOT NULL PRIMARY KEY,"
+        "until BIGINT NOT NULL,"
+        "reason VARCHAR(128) DEFAULT '',"
+        "by_uid INT DEFAULT 0"
+    ")");
+    mysql_query(mysql,
+        "CREATE TABLE IF NOT EXISTS mod_log ("
+        "id INT AUTO_INCREMENT PRIMARY KEY,"
+        "at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "actor VARCHAR(18),"
+        "action VARCHAR(16),"
+        "target VARCHAR(18),"
+        "detail VARCHAR(255)"
+    ")");
 
     /* @note BLOB stops at 64KB, a busy world can be bigger than that */
     mysql_query(mysql, "ALTER TABLE world MODIFY blocks MEDIUMBLOB, MODIFY objects MEDIUMBLOB");

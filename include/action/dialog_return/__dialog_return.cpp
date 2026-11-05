@@ -6,6 +6,7 @@
 #include "trash_item.hpp"
 #include "find_item.hpp"
 #include "trade_item.hpp"
+#include "action/trade.hpp"
 
 #include "gateway_edit.hpp"
 
@@ -26,6 +27,7 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
     {"trash_item", std::bind(&trash_item, std::placeholders::_1, std::placeholders::_2)},
     {"find_item", std::bind(&find_item, std::placeholders::_1, std::placeholders::_2)},
     {"trade_item", std::bind(&trade_item, std::placeholders::_1, std::placeholders::_2)},
+    {"trade_confirm", std::bind(&trade_confirm, std::placeholders::_1, std::placeholders::_2)},
 
     {"gateway_edit", std::bind(&gateway_edit, std::placeholders::_1, std::placeholders::_2)},
     {"door_edit", std::bind(&gateway_edit, std::placeholders::_1, std::placeholders::_2)},

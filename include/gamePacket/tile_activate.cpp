@@ -5,6 +5,8 @@
 
 #include "tile_activate.hpp"
 
+#include <cmath>
+
 void tile_activate(ENetEvent& event, ::gamePacket gamePacket)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
@@ -13,6 +15,10 @@ void tile_activate(ENetEvent& event, ::gamePacket gamePacket)
     auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
     if (world == worlds.end()) return;
     if (!valid_tile(*world, gamePacket.punch)) return;
+
+    /* @note doors and checkpoints work by walking into them, so the player has to be right there */
+    const ::pos standing = pPeer->pos.by_32(true);
+    if (pPeer->role < MODERATOR && (std::abs(gamePacket.punch.x - standing.x) > 2.0f || std::abs(gamePacket.punch.y - standing.y) > 2.0f)) return;
 
     ::block &block = world->blocks[cord(gamePacket.punch.x, gamePacket.punch.y)];
     const ::item &item = id_to_item(block.fg);

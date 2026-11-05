@@ -12,6 +12,12 @@ void action::mod_trade(ENetEvent& event, const std::string& header)
     const ::item &item = id_to_item(atoi(pipes[3ull].c_str()));
 
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    if (pPeer->trade_with == 0) return; // @note not trading
+    if (item.cat & CAT_UNTRADEABLE)
+    {
+        send_varlist(event.peer, { "OnTextOverlay", "You can't trade that." });
+        return;
+    }
 
     for (const ::slot &slot : pPeer->slots)
         if (slot.id == item.id) 
@@ -26,5 +32,6 @@ void action::mod_trade(ENetEvent& event, const std::string& header)
                     .embed_data("itemID", item.id)
                     .end_dialog("trade_item")
             });
+            return;
         }
 }

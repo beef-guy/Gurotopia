@@ -1,6 +1,7 @@
 #include "pch.hpp"
 
 #include "popup.hpp"
+#include "action/trade.hpp"
 #include <unordered_map>
 
 static const std::unordered_map<std::string, std::string> rml_pages{
@@ -80,15 +81,14 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
     }
     else if (hPipe["buttonClicked"] == "trade")
     {
-        int user_id = atoi(hPipe["netID"].c_str());
+        const int netid = atoi(hPipe["netID"].c_str()); // @note the wrench menu embeds the other player's netID
 
-        peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [&event, &pPeer, user_id](ENetPeer *p)
+        ENetPeer *other = nullptr;
+        peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [&](ENetPeer *p)
         {
-            ::peer *pOthers = static_cast<::peer*>(p->data);
-            if (pOthers->user_id == user_id)
-            {
-                send_varlist(event.peer, { "OnStartTrade", pOthers->display_growid, pOthers->user_id });
-            }
+            const ::peer *pOthers = static_cast<::peer*>(p->data);
+            if (other == nullptr && pOthers->netid == netid && p != event.peer) other = p;
         });
+        if (other != nullptr) trade::request(event, other);
     }
 }

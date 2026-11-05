@@ -4,11 +4,14 @@
 #include "onVariant/ConsoleMessage.hpp"
 
 #include "quit_to_exit.hpp"
+#include "trade.hpp"
 
 void action::quit_to_exit(ENetEvent& event, const std::string& header, bool skip_selection = false) 
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
     if (pPeer == nullptr || pPeer->netid == 0) return; // @note peer was not in a world, therefore nothing to exit from.
+
+    trade::cancel(event.peer, std::format("`4{} left, so the trade was canceled.``", pPeer->display_growid));
 
     auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
     if (world == worlds.end()) return;

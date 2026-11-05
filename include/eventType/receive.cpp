@@ -25,7 +25,6 @@ void receive(ENetEvent& event)
                     reinterpret_cast<const char*>(event.packet->data + 4),
                     event.packet->dataLength - 4 - sizeof('\0')
                 };
-                print(header);
 
                 for (char &c : header) if (c == '\n') c = '|';
                 const std::vector<std::string> pipes = readch(header, '|');
@@ -37,6 +36,10 @@ void receive(ENetEvent& event)
                     action = (pipes[0ull] == "requestedName") ? "tankIDName" : pipes[0ull];
                 }
                 else action = std::format("{}|{}", pipes[0ull], pipes[1ull]);
+
+                /* @note login packets carry the password (ltoken is only base64), never write them to the log */
+                if (action == "protocol" || action == "tankIDName") print(std::format("{} (login details hidden)", action));
+                else print(header.size() > 512ull ? header.substr(0, 512ull) + "..." : header);
 
                 if (!pPeer->authenticated && action != "protocol" && action != "tankIDName" && action != "action|quit") break; // @note must log in first
 

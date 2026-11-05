@@ -52,6 +52,19 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
             it = worlds.emplace(worlds.end(), name);
             
         ::world &world = *it;
+
+        const bool has_access = pPeer->user_id == world.owner || pPeer->role >= MODERATOR ||
+            std::ranges::find(world.access, pPeer->user_id) != world.access.end();
+        if (!has_access && pPeer->level.front() < world.minimum_entry_level)
+        {
+            const std::string why = std::format("`4You need to be level {} to enter {}.``", static_cast<int>(world.minimum_entry_level), world.name);
+            if (world.visitors == 0) // @note nobody else is here, don't keep it loaded
+            {
+                world.save();
+                worlds.erase(it);
+            }
+            throw std::runtime_error(why);
+        }
         {
             ::blob blob = compress_state(::gamePacket{ .type = 0x04, /*PACKET_SEND_MAP_DATA*/ .state = (int)gamePacketState::EXTENDED });
             blob.push_back(world.serialize());

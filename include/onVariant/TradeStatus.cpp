@@ -2,26 +2,24 @@
 
 #include "TradeStatus.hpp"
 
-void on::TradeStatus(ENetPeer *peer) 
+void on::TradeStatus(ENetPeer *to, const ::peer &owner) 
 {
-    ::peer *pPeer = static_cast<::peer*>(peer->data);
-
     std::string add_slots;
-    for (const ::slot &slot : pPeer->trade_offers)
+    for (const ::slot &slot : owner.trade_offers)
     {
         add_slots += std::format("add_slot|{}|{}\n", slot.id, slot.count);
     }
-    send_varlist(peer, {
+    send_varlist(to, {
         "OnTradeStatus",
-        pPeer->netid,
+        owner.netid,
         "",
-        std::format("`o{}'s offer.``", pPeer->display_growid),
+        std::format("`o{}'s offer.``", owner.display_growid),
         std::format(
             "{}"
-            "locked|{}\n"
-            "reset_locks|{}\n"
+            "locked|0\n"
+            "reset_locks|1\n"
             "accepted|{}\n", 
-            add_slots, "0", "1", pPeer->trade_accepted) // @todo complete this later...
+            add_slots, owner.trade_accepted ? 1 : 0)
         }
     );
 }
