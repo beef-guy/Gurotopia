@@ -7,7 +7,9 @@
 void me(ENetEvent& event, const std::string_view text)
 {
     
-    const std::string message{ text.substr(sizeof("/me ")-1) };
+    const std::string message{ command_arg(text) };
+    if (message.empty()) return;
+
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
     
     peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [&event, &pPeer, message](ENetPeer *peer)

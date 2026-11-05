@@ -18,7 +18,7 @@ void action::tankIDName(ENetEvent& event, const std::string& header)
 
     /* @todo instead of setting these values we should check if there valid from SQL.*/
     std::string protocol{};
-    for (std::size_t i = 0; i < pipes.size(); ++i)
+    for (std::size_t i = 0; i + 1 < pipes.size(); ++i)
     {
         if      (pipes[i] == "tankIDName") pPeer->growid = pipes[i+1];
         else if (pipes[i] == "tankIDPass") pPeer->password = pipes[i+1];
@@ -43,7 +43,11 @@ void action::tankIDName(ENetEvent& event, const std::string& header)
     else if (!pPeer->growid.empty()) {
         loaded = pPeer->load(pPeer->growid, pPeer->password);
     }
-    if (!loaded) send_gameMessage(event.peer, {.message = "action|logon_fail\n"}); // @note triggers action|quit on client.
+    if (!loaded)
+    {
+        send_gameMessage(event.peer, {.message = "action|logon_fail\n"}); // @note triggers action|quit on client.
+        return;
+    }
 
     send_varlist(event.peer, { "OnOverrideGDPRFromServer", 18, 1, 0, 1 });
 

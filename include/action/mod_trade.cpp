@@ -6,9 +6,10 @@
 
 void action::mod_trade(ENetEvent& event, const std::string& header) 
 {
-    const std::string &itemID = readch(header, '|')[3];
+    const std::vector<std::string> pipes = readch(header, '|');
+    if (pipes.size() < 4ull) return;
 
-    const ::item &item = id_to_item(atoi(itemID.c_str()));
+    const ::item &item = id_to_item(atoi(pipes[3ull].c_str()));
 
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
 

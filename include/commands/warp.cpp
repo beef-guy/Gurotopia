@@ -7,7 +7,12 @@
 
 void warp(ENetEvent& event, const std::string_view text)
 {
-    std::string world_name{ text.substr(sizeof("/warp ")-1) };
+    std::string world_name{ command_arg(text) };
+    if (world_name.empty() || world_name.length() > 24 || !isalnum(world_name))
+    {
+        send_gameMessage(event.peer, {.message = "action|log\nmsg|Usage: /warp <`$world name``> - letters and numbers only, up to 24 characters."});
+        return;
+    }
     for (char &c : world_name) c = std::toupper(c); // @note start -> START
 
     send_gameMessage(event.peer, {.message = std::format("action|log\nmsg| `6/warp {}``", world_name)});

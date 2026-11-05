@@ -7,7 +7,8 @@
 void movement(ENetEvent& event, ::gamePacket gamePacket) 
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
-    
+    if (pPeer->netid == 0) return; // @note not in a world
+
     pPeer->pos = gamePacket.pos;
     pPeer->facing_left = gamePacket.state & (int)gamePacketState::MOVE_LEFT;
 

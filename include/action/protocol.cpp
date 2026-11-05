@@ -50,10 +50,14 @@ void action::protocol(ENetEvent& event, const std::string& header)
     else {
         loaded = pPeer->load(pPeer->growid, pPeer->password);
     }
-    if (!loaded) send_gameMessage(event.peer, {.message = "action|logon_fail\n"}); // @note triggers action|quit on client.
+    if (!loaded)
+    {
+        send_gameMessage(event.peer, {.message = "action|logon_fail\n"}); // @note triggers action|quit on client.
+        return;
+    }
 
     send_varlist(event.peer, {
-        "OnSendToServer", 
+        "OnSendToServer",  
         (signed)gServer_data.port, 
         0, 
         pPeer->user_id, 

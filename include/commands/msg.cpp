@@ -4,7 +4,7 @@
 
 void msg(ENetEvent& event, const std::string_view text)
 {
-    std::vector<std::string> spaces = readch(text.data(), ' ');
+    std::vector<std::string> spaces = readch(std::string{ text }, ' ');
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
 
     std::string growid = (spaces.size() > 1) ? spaces[1] : "";
@@ -25,17 +25,11 @@ void msg(ENetEvent& event, const std::string_view text)
         peers("", PeerSearch::EVERYONE, [&event, &pPeer, &online, growid, msg](ENetPeer *peer)
         {
             ::peer *pOthers = static_cast<::peer*>(peer->data);
-            if (growid == pPeer->growid) // @todo add ignore
-            {
-                send_gameMessage(event.peer, {.message = "action|log\n`6>> `4SYSTEM``: Sorry! This player has ignored private messages from non-friends. Become friends to chat!"});
-                online = true;
-            }
-            else if (pOthers->growid == growid)
-            {
-                send_gameMessage(event.peer, {.message = std::format("action|log\nmsg|CT:[MSG]_`6>> (Sent to `${}`)``", growid, msg)});
-                online = true;
-            }
-            if (online) return;
+            if (online || pOthers == nullptr || pOthers->growid != growid) return;
+
+            online = true;
+            send_gameMessage(event.peer, {.message = std::format("action|log\nmsg|CT:[MSG]_`6>> (Sent to `${}``)``", growid)});
+            send_gameMessage(peer, {.message = std::format("action|log\nmsg|CT:[MSG]_`6>> Private msg from `${}``: `${}``", pPeer->growid, msg)});
         });
         if (!online)
         {

@@ -11,6 +11,7 @@ void trade_item(ENetEvent& event, const ::hPipe &hPipe)
     short count  = atoi(hPipe["count"].c_str());
 
     if (pPeer->trade_offers.size() >= 4) return; // @todo get the prompt message
+    if (count <= 0 || count > pPeer->have_slot(::slot(itemID, 0))) return;
 
     pPeer->trade_offers.emplace_back(::slot{itemID, count});
 

@@ -12,6 +12,7 @@
 #include "include/automate/holiday.hpp"
 #include "include/tools/terminal.hpp"
 
+#include <chrono>
 #include <csignal>
 #include <thread>
 
@@ -21,45 +22,85 @@ namespace
 }
 static void signal_handler(int signal) { gSignal = signal; }
 
+/* @note save everyone online and every open world */
+static void save_everything()
+{
+    peers("", PeerSearch::EVERYONE, [](ENetPeer *peer)
+    {
+        ::peer *pPeer = static_cast<::peer*>(peer->data);
+        if (pPeer != nullptr && pPeer->authenticated) pPeer->mysql_update_all();
+    });
+    for (::world &world : worlds) world.save();
+}
+
 int main()
 {
     std::signal(SIGINT, signal_handler);
 #ifdef SIGHUP // @note unix
     std::signal(SIGHUP, signal_handler); // @note PuTTY, SSH problems
 #endif
+#ifdef SIGBREAK // @note windows, closing the console
+    std::signal(SIGBREAK, signal_handler);
+#endif
 
-    mysql_library_init(0, NULL, NULL);
-    enet_initialize();
+    try
     {
-        gServer_data.init(); // @note ./server_data.php
-        std::thread(&https::listener).detach();
+        mysql_library_init(0, NULL, NULL);
+        enet_initialize();
+        {
+            gServer_data.init(); // @note ./server_data.php
+            std::thread(&https::listener).detach();
 
-        ENetAddress address{
-            .type = ENET_ADDRESS_TYPE_IPV4, 
-            .port = gServer_data.port
-        };
-        host = enet_host_create (ENET_ADDRESS_TYPE_IPV4, &address, 50ull/* max peer count */, 2ull, 0u, 0u);
-    } // @note delete address
-    host->usingNewPacketForServer = true;
-    host->checksum = enet_crc32;
-    enet_host_compress_with_range_coder(host);
+            ENetAddress address{
+                .type = ENET_ADDRESS_TYPE_IPV4,
+                .port = gServer_data.port
+            };
+            host = enet_host_create (ENET_ADDRESS_TYPE_IPV4, &address, 50ull/* max peer count */, 2ull, 0u, 0u);
+        } // @note delete address
+        if (host == nullptr) throw std::runtime_error(std::format("could not open port {}. is the server already running?", gServer_data.port));
 
-    db.load_login(); // @note ./mysql_login.txt
-    db.mysql_connect();
+        host->usingNewPacketForServer = true;
+        host->checksum = enet_crc32;
+        enet_host_compress_with_range_coder(host);
 
-    decode_items_dat();
-    parse_store();
-    check_for_holiday();
+        db.load_login(); // @note ./mysql_login.txt
+        db.mysql_connect();
+
+        decode_items_dat();
+        parse_store();
+        check_for_holiday();
+    }
+    catch (const std::exception &exc)
+    {
+        print(std::format("the server could not start: {}", exc.what()));
+        fflush(stdout);
+        return EXIT_FAILURE;
+    }
+
+    using clock = std::chrono::steady_clock;
+    clock::time_point last_save = clock::now();
 
     ENetEvent event{};
     while (!gSignal)
-        while (enet_host_service(host, &event, 1000/*ms*/) > 0)
+    {
+        if (enet_host_service(host, &event, 1000/*ms*/) > 0 && event.type < eventType_pool.size())
             eventType_pool[event.type](event);
 
+        if (clock::now() - last_save >= std::chrono::seconds(60)) // @note so a crash or force stop loses at most a minute
+        {
+            save_everything();
+            last_save = clock::now();
+        }
+    }
+
     safe_disconnect_peers(gSignal);
+    save_everything();
+    worlds.clear(); // @note before the database connection closes
     enet_host_destroy(host);
     if (host != nullptr) host = nullptr;
     enet_deinitialize();
+    mysql_close(db.mysql);
+    db.mysql = nullptr;
     mysql_library_end();
 
     print("killed gurotopia! [EXIT_SUCCESS]");

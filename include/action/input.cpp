@@ -16,10 +16,11 @@ void action::input(ENetEvent& event, const std::string& header)
     ::hPipe hPipe{ header };
     std::string text = hPipe["text"];
 
-    if (text.empty() || text.front() == '\r' || std::ranges::all_of(text, ::isspace)) return;
-    
-    text.erase(text.begin(), std::find_if_not(text.begin(), text.end(), ::isspace));
-    text.erase(std::find_if_not(text.rbegin(), text.rend(), ::isspace).base(), text.end());
+    const auto is_space = [](char c) { return std::isspace(static_cast<u_char>(c)) != 0; }; // @note non-english letters are negative chars, which ::isspace can't take
+    if (text.empty() || text.front() == '\r' || std::ranges::all_of(text, is_space)) return;
+
+    text.erase(text.begin(), std::find_if_not(text.begin(), text.end(), is_space));
+    text.erase(std::find_if_not(text.rbegin(), text.rend(), is_space).base(), text.end());
     if (text.empty()) return; // @note we recheck if empty since we did trimming.
     
     const u_int now = ticks();

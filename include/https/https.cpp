@@ -113,6 +113,9 @@ void https::listener()
     if (bind(socket, (struct sockaddr*)&addr, addrlen) == SOCKET_ERROR)
     {
         cross_log("could not bind socket");
+        print("port 443 is in use, this server won't answer logins. is GOWebServer still running?");
+        cross_close(socket);
+        return; // @note the game server keeps running, this avoids spinning on a dead socket
     }
 
     const std::string Content =
@@ -140,6 +143,8 @@ void https::listener()
     if (listen(socket, SOMAXCONN) == SOCKET_ERROR)
     {
         cross_log("failed to listen on socket");
+        cross_close(socket);
+        return;
     }
     else print(std::format("listening on {}:{}", gServer_data.server, gServer_data.port));
     
@@ -148,10 +153,23 @@ void https::listener()
         /* https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-accept */
         SOCKET fd = accept(socket, reinterpret_cast<sockaddr*>(&addr), &addrlen);
         if (fd == INVALID_SOCKET) continue;
-        
+
+        /* @note one slow connection must not hold up everyone else's login */
+#ifdef _WIN32
+        const DWORD timeout = 3000; // @note milliseconds
+#else
+        const timeval timeout{ .tv_sec = 3, .tv_usec = 0 };
+#endif
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
+
         /* https://docs.openssl.org/3.0/man3/SSL_new/#return-values */
         SSL *ssl = SSL_new(ctx);
-        if (!ssl || !SSL_up_ref(ssl)) continue;
+        if (!ssl)
+        {
+            cross_close(fd);
+            continue;
+        }
         /* https://docs.openssl.org/3.0/man3/SSL_set_fd/#return-values */
         /* https://docs.openssl.org/3.0/man3/SSL_accept/#return-values */
         else if (SSL_set_fd(ssl, fd) != 1 || SSL_accept(ssl) <= 0) {
@@ -172,7 +190,7 @@ void https::listener()
         }
 
         /* "It can also occur when not all data was read using SSL_read()." */
-        if (SSL_shutdown(ssl) <0) 
+        if (SSL_is_init_finished(ssl) && SSL_shutdown(ssl) < 0)
         {
             //int ret = SSL_get_error(ssl, 3);
             print("SSL_shutdown() failed.");

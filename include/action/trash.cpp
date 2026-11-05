@@ -6,9 +6,10 @@
 
 void action::trash(ENetEvent& event, const std::string& header)
 {
-    const std::string &itemID = readch(header, '|')[4];
+    const std::vector<std::string> pipes = readch(header, '|');
+    if (pipes.size() < 5ull) return;
 
-    const ::item &item = id_to_item(atoi(itemID.c_str()));
+    const ::item &item = id_to_item(atoi(pipes[4ull].c_str()));
 
     if (item.type == type::FIST || item.type == type::WRENCH)
     {
