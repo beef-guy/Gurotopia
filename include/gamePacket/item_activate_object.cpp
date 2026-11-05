@@ -8,6 +8,7 @@
 void item_activate_object(ENetEvent& event, ::gamePacket gamePacket) 
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    if (pPeer->netid == 0) return; // @note not in a world
 
     auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
     if (world == worlds.end()) return;

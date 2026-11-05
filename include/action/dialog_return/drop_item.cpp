@@ -9,16 +9,16 @@ void drop_item(ENetEvent& event, const ::hPipe &hPipe)
     auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
     if (world == worlds.end()) return;
 
-    const short itemID = atoi(hPipe["itemID"].c_str());
-    short count = atoi(hPipe["count"].c_str());
+    if (pPeer->netid == 0) return;
 
-    for (const ::slot &slot : pPeer->slots)
-        if (slot.id == itemID)
-            if (count > slot.count) count = slot.count;
-            else if (count < 0) count = 0;
+    const short itemID = atoi(hPipe["itemID"].c_str());
+    const int owned = pPeer->have_slot(::slot(itemID, 0));
+    const short count = static_cast<short>(std::min(atoi(hPipe["count"].c_str()), owned));
+    if (count <= 0) return; // @note also covers items peer doesn't have
+    if (id_to_item(itemID).cat & CAT_UNTRADEABLE) return;
 
     modify_item_inventory(event, ::slot(itemID, -count));
 
     float x_nabor = (pPeer->facing_left) ? pPeer->pos.x - 32 : pPeer->pos.x + 32; // @note peer's naboring tile (drop position)
-    add_drop(event, {itemID, count}, {x_nabor, pPeer->pos.y}, *world);
+    add_drop(event, ::slot(itemID, count), {x_nabor, pPeer->pos.y}, *world);
 }

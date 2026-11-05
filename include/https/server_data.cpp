@@ -8,10 +8,10 @@
 
 void ::server_data::init()
 {
-    std::ifstream file("server_data.php");
+    std::ifstream file(this->config_file);
     if (!file.is_open())
     {
-        std::ofstream ostrm("server_data.php");
+        std::ofstream ostrm(this->config_file);
         ostrm << 
             std::format(
                 "server|{}\n"
@@ -27,19 +27,25 @@ void ::server_data::init()
     } // @note close ostrm
     else
     {
-        std::vector<std::string> pipes;
-        for (std::string line; std::getline(file, line); ) 
+        /* @note read each line by name, a missing or empty line keeps its default */
+        for (std::string line; std::getline(file, line); )
         {
-            auto pipe_pair = readch(line, '|');
-            pipes.insert(pipes.end(), pipe_pair.begin(), pipe_pair.end());
-        }
+            if (!line.empty() && line.back() == '\r') line.pop_back();
 
-        this->server = pipes[1];
-        this->port = std::stoi(pipes[3]);
-        this->type = std::stoi(pipes[5]);
-        this->type2 = std::stoi(pipes[7]);
-        this->maint = pipes[9];
-        this->loginurl = pipes[11];
-        this->meta = pipes[13];
-    } // @note delete str, pipes
+            const std::size_t pipe = line.find('|');
+            if (pipe == std::string::npos || pipe + 1 == line.size()) continue;
+
+            const std::string key = line.substr(0, pipe);
+            const std::string value = line.substr(pipe + 1);
+
+            if      (key == "server")   this->server = value;
+            else if (key == "port")     this->port = static_cast<u_short>(atoi(value.c_str()));
+            else if (key == "type")     this->type = static_cast<u_char>(atoi(value.c_str()));
+            else if (key == "type2")    this->type2 = static_cast<u_char>(atoi(value.c_str()));
+            else if (key == "#maint")   this->maint = value;
+            else if (key == "loginurl") this->loginurl = value;
+            else if (key == "meta")     this->meta = value;
+        }
+    }
+    if (this->port_override > 0) this->port = static_cast<u_short>(this->port_override);
 } // @note close file

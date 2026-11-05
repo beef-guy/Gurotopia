@@ -2,6 +2,16 @@
     "configurations": [
         {
             "name": "Run Gurotopia",
+            "type": "node-terminal", // runs the server in a plain terminal, without a debugger. stop it with Ctrl+C so everything saves.
+            "request": "launch",
+            "command": ".\\main.exe",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PATH": "C:\\msys64\\ucrt64\\bin;C:\\msys64\\usr\\bin;${env:PATH}"
+            }
+        },
+        {
+            "name": "Debug Gurotopia",
             "type": "cppvsdbg",
             "request": "launch",
             "program": "main.exe", // assume running on windows not linux
@@ -9,7 +19,7 @@
             "environment": [
                 {
                     "name": "PATH",
-                    "value": "${env:PATH};C:/msys64/ucrt64/bin;C:/msys64/usr/bin"
+                    "value": "C:/msys64/ucrt64/bin;C:/msys64/usr/bin;${env:PATH}"
                 }
             ],
             "console": "integratedTerminal"

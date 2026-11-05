@@ -7,7 +7,7 @@
             "command": "c:/msys64/usr/bin/bash.exe",
             "args": [
                 "-c",
-                "export PATH=\"/c/msys64/usr/bin:$PATH\" && make -j$(nproc)",
+                "export PATH=/c/msys64/ucrt64/bin:/c/msys64/usr/bin:$PATH && make -j$(nproc)"
             ],
             "group": {
                 "kind": "build",
@@ -20,7 +20,7 @@
             "command": "c:/msys64/usr/bin/bash.exe",
             "args": [
                 "-c",
-                "export PATH=\"/c/msys64/usr/bin:$PATH\" && make clean"
+                "export PATH=/c/msys64/ucrt64/bin:/c/msys64/usr/bin:$PATH && make clean"
             ]
         }
     ]

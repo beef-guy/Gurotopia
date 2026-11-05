@@ -6,7 +6,7 @@ void action::store(ENetEvent& event, const std::string& header)
 {
     std::vector<std::string> pipes = readch(header, '|');
 
-    if (header.empty() || pipes[3] == "gem") // @note location|gem
+    if (header.empty() || (pipes.size() > 3ull && pipes[3] == "gem")) // @note location|gem
     {
         std::string payment_site{ "https://discord.gg/zzWHgzaF7J" }; // @note replace with your payment site (paypal, ect)
 

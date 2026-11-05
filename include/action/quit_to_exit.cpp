@@ -4,13 +4,17 @@
 #include "onVariant/ConsoleMessage.hpp"
 
 #include "quit_to_exit.hpp"
+#include "trade.hpp"
 
 void action::quit_to_exit(ENetEvent& event, const std::string& header, bool skip_selection = false) 
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    if (pPeer == nullptr || pPeer->netid == 0) return; // @note peer was not in a world, therefore nothing to exit from.
+
+    trade::cancel(event.peer, std::format("`4{} left, so the trade was canceled.``", pPeer->display_growid));
 
     auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
-    if (world == worlds.end()) return; // @note peer was not in a world, therefore nothing to exit from.
+    if (world == worlds.end()) return;
 
     std::string message = std::format("`5<{} left, `w{}`` others here>``", pPeer->display_growid, world->visitors-1);
     std::string netid = std::format("netID|{}\n", pPeer->netid);
@@ -20,11 +24,16 @@ void action::quit_to_exit(ENetEvent& event, const std::string& header, bool skip
         ::peer *pOthers = static_cast<::peer*>(peer->data);
         if (pOthers->user_id == pPeer->user_id) return;
 
-        on::ConsoleMessage(event.peer, message);
+        on::ConsoleMessage(peer, message);
         send_varlist(peer, { "OnRemove", netid, pId }); // @todo
     });
 
-    if (--world->visitors <= 0) worlds.erase(world); // @note take 1, and if result is 0, delete memory copy of world.
+    if (world->visitors <= 1) // @note last one out, delete memory copy of world.
+    {
+        world->save(); // @note erase() overwrites this world without running ~world(), so save it here.
+        worlds.erase(world);
+    }
+    else --world->visitors;
     pPeer->netid = 0; // this will fix any packets being sent outside of world; this can also be used to check if peer is not in a world.
 
     pPeer->display_growid = std::format("`w{}``", pPeer->growid);

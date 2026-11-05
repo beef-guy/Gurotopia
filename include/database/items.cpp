@@ -24,8 +24,13 @@ void shift_pos(const std::vector<u_char> &data, u_int &pos, T &value) noexcept /
 {
     u_char *i8 = reinterpret_cast<u_char*>(&value);
 
-    if (pos + sizeof(T) >= data.size()) print("this items.dat is unsupported");
-    for (std::size_t i = 0ull; i < sizeof(T); ++i) 
+    if (pos + sizeof(T) > data.size())
+    {
+        print("this items.dat is unsupported");
+        pos = data.size();
+        return;
+    }
+    for (std::size_t i = 0ull; i < sizeof(T); ++i)
     {
         i8[i] = data[pos + i];
     }
@@ -47,6 +52,9 @@ void data_modify(std::vector<u_char> &data, const u_int &pos, const T &value) no
 
 void decode_items_dat()
 {
+    if (!std::filesystem::exists("items.dat"))
+        throw std::runtime_error("items.dat is missing. copy it from your Growtopia cache folder into the server folder.");
+
     const u_int size = std::filesystem::file_size("items.dat");
     im_data = compress_state(::gamePacket{ 
         .type = 0x10,/*PACKET_SEND_ITEM_DATABASE_DATA*/ 
@@ -66,8 +74,13 @@ void decode_items_dat()
     shift_pos(im_data, pos, count);
 
     const std::string_view token{"PBG892FXX982ABC*"};
+    if (version > 0x1b) print(std::format("items.dat version {} is newer than this server knows, it may not load correctly", version));
+
     for (u_int i = 0; i < count; ++i)
     {
+        if (pos >= im_data.size())
+            throw std::runtime_error("items.dat ended early, this version is not supported.");
+
         ::item item;
         
         shift_pos(im_data, pos, item.id); pos += 2; // @note downside im.id to 2 bit (short)

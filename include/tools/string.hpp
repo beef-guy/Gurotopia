@@ -29,6 +29,15 @@ private:
 extern std::string join(const std::vector<std::string>& range, const std::string& del);
 
 /*
+    @return everything after the command, e.g. "/warp start" returns "start". empty if nothing was typed.
+*/
+inline std::string_view command_arg(std::string_view text)
+{
+    const std::size_t space = text.find(' ');
+    return (space == std::string_view::npos) ? std::string_view{} : text.substr(space + 1);
+}
+
+/*
     @return true if string contains ONLY numbers or alphabet [1, 2, 3, a, b, c]
 */
 extern bool isalnum(const std::string &str);

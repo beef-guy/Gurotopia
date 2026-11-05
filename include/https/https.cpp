@@ -97,7 +97,10 @@ void https::listener()
         cross_log("socket function failed");
     }
 
-#ifdef SO_REUSEADDR
+#ifdef _WIN32
+    /* @note on windows SO_REUSEADDR would let a 2nd server steal the port, so ask for it alone instead */
+    setsockopt(socket, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (char*)&enable, sizeof(enable));
+#elif defined(SO_REUSEADDR)
     setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, (char*)&enable, sizeof(enable));
 #endif
 #ifdef TCP_DEFER_ACCEPT // @note unix
@@ -106,13 +109,16 @@ void https::listener()
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons(443);
+    addr.sin_port = htons(gServer_data.https_port);
     socklen_t addrlen = sizeof(addr);
 
     /* https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind */
     if (bind(socket, (struct sockaddr*)&addr, addrlen) == SOCKET_ERROR)
     {
         cross_log("could not bind socket");
+        print(std::format("port {} is in use, this server won't answer logins. is GOWebServer or another server still running?", gServer_data.https_port));
+        cross_close(socket);
+        return; // @note the game server keeps running, this avoids spinning on a dead socket
     }
 
     const std::string Content =
@@ -140,6 +146,8 @@ void https::listener()
     if (listen(socket, SOMAXCONN) == SOCKET_ERROR)
     {
         cross_log("failed to listen on socket");
+        cross_close(socket);
+        return;
     }
     else print(std::format("listening on {}:{}", gServer_data.server, gServer_data.port));
     
@@ -148,10 +156,23 @@ void https::listener()
         /* https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-accept */
         SOCKET fd = accept(socket, reinterpret_cast<sockaddr*>(&addr), &addrlen);
         if (fd == INVALID_SOCKET) continue;
-        
+
+        /* @note one slow connection must not hold up everyone else's login */
+#ifdef _WIN32
+        const DWORD timeout = 3000; // @note milliseconds
+#else
+        const timeval timeout{ .tv_sec = 3, .tv_usec = 0 };
+#endif
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
+
         /* https://docs.openssl.org/3.0/man3/SSL_new/#return-values */
         SSL *ssl = SSL_new(ctx);
-        if (!ssl || !SSL_up_ref(ssl)) continue;
+        if (!ssl)
+        {
+            cross_close(fd);
+            continue;
+        }
         /* https://docs.openssl.org/3.0/man3/SSL_set_fd/#return-values */
         /* https://docs.openssl.org/3.0/man3/SSL_accept/#return-values */
         else if (SSL_set_fd(ssl, fd) != 1 || SSL_accept(ssl) <= 0) {
@@ -172,7 +193,7 @@ void https::listener()
         }
 
         /* "It can also occur when not all data was read using SSL_read()." */
-        if (SSL_shutdown(ssl) <0) 
+        if (SSL_is_init_finished(ssl) && SSL_shutdown(ssl) < 0)
         {
             //int ret = SSL_get_error(ssl, 3);
             print("SSL_shutdown() failed.");

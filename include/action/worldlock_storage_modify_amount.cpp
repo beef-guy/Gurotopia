@@ -14,12 +14,11 @@ void action::worldlock_storage_modify_amount(ENetEvent& event, const std::string
 
     const ::hPipe hPipe{header};
     
-    u_int amount = atoi(hPipe["amount"].c_str());
+    const int amount = atoi(hPipe["amount"].c_str());
     if (amount <= 0) return;
     int type = atoi(hPipe["type"].c_str());
-    if (type < -1 || type > 1) return;
-
-    pPeer->wl_storage += type*amount;
+    if (type != -1 && type != 1) return;
+    if (type == -1 && amount > pPeer->wl_storage) return; // @note can't take out more than is stored
 
     u_short wl = amount, 
             dl = amount / DIAMOND_LOCK_VALUE, 
@@ -34,6 +33,10 @@ void action::worldlock_storage_modify_amount(ENetEvent& event, const std::string
         convert_lock(amount, wl, dl, bgl, str);
     }
     else convert_lock(amount, wl, dl, bgl, str);
+
+    if (wl + dl * DIAMOND_LOCK_VALUE + bgl * BLUE_GEM_LOCK_VALUE != amount) return; // @note backpack can't cover this exact amount
+
+    pPeer->wl_storage += type * amount;
 
     if (bgl > 0) modify_item_inventory(event, ::slot(7188, -(type)*bgl));
     if (dl  > 0) modify_item_inventory(event, ::slot(1796, -(type)*dl));

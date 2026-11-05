@@ -54,7 +54,7 @@ struct block
 
     ::blob to_blob() const;
 };
-#define cord(x,y) (y * 100 + x)
+#define cord(x,y) ((y) * 100 + (x))
 
 struct door 
 {
@@ -134,7 +134,8 @@ public:
     world(const std::string &name = "");/*DEFAULT*/
     ~world();
 
-    bool exists(const std::string& name);
+    static bool exists(const std::string& name);
+    void save(); // @note write this world to the database
 
     template<typename T>
     void mysql_insert(const std::string& column, const T& value);
@@ -171,6 +172,12 @@ public:
     ::blob serialize();
 };
 extern std::vector<world> worlds;
+
+/* @return true if a tile position is inside this world */
+inline bool valid_tile(const ::world &world, const ::pos &pos)
+{
+    return pos.x >= 0 && pos.x < 100 && pos.y >= 0 && cord(pos.x, pos.y) < world.blocks.size();
+}
 
 extern void send_gameMessage(ENetPeer *peer, ::gameMessage gameMessage) ;
 

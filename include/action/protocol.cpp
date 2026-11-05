@@ -1,6 +1,9 @@
 #include "pch.hpp"
 
 #include "https/server_data.hpp"
+#include "tools/auth.hpp"
+#include "database/database.hpp"
+#include "database/platform.hpp"
 
 #include "protocol.hpp"
 
@@ -8,6 +11,7 @@ void action::protocol(ENetEvent& event, const std::string& header)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
     bool is_reg = false;
+    std::string server_name{};
     try
     {
         std::vector<std::string> pipes = readch(header, '|');
@@ -34,6 +38,10 @@ void action::protocol(ENetEvent& event, const std::string& header)
                 std::string reg_str = decoded.substr(pos, decoded.find('&', pos) - pos);
                 is_reg = (reg_str == "1");
             }
+            for (const std::string &pair : readch(decoded, '&')) // @note the server the player typed on the login page
+            {
+                if (pair.starts_with("server=")) server_name = pair.substr(sizeof("server=") - 1);
+            }
         } // @note delete decoded
         if (pPeer->growid.empty() || pPeer->password.empty()) throw std::runtime_error("");
     }
@@ -41,6 +49,37 @@ void action::protocol(ENetEvent& event, const std::string& header)
         send_gameMessage(event.peer, {.message = "action|logon_fail\n"}); // @note triggers action|quit on client.
         
         return; // @note stop processing invalid protocol data
+    }
+    if (auth::login_blocked(event.peer->address))
+    {
+        send_gameMessage(event.peer, {.message = "action|log\nmsg|`4Too many wrong passwords.`` Please wait a few minutes and try again."});
+        send_gameMessage(event.peer, {.message = "action|logon_fail\n"}); // @note triggers action|quit on client.
+        return;
+    }
+    /* @note the gateway checks the password in the chosen server's own database, then sends the player there */
+    std::optional<platform::server> target{};
+    if (platform::gateway)
+    {
+        if (server_name.empty()) server_name = platform::default_server;
+        target = platform::find_running(server_name);
+        if (!target)
+        {
+            const std::string why = server_name.empty()
+                ? "`4Please type a server name`` on the login page."
+                : std::format("`4There's no server called {} online right now.``", platform::valid_name(server_name) ? server_name : "that");
+            send_gameMessage(event.peer, {.message = std::format("action|log\nmsg|{}", why)});
+            send_gameMessage(event.peer, {.message = "action|logon_fail\n"});
+            pPeer->password.clear();
+            return;
+        }
+        if (mysql_select_db(db.mysql, target->db_name.c_str()) != 0)
+        {
+            print(std::format("gateway could not open database {}: {}", target->db_name, mysql_error(db.mysql)));
+            send_gameMessage(event.peer, {.message = "action|log\nmsg|`4That server isn't ready yet.`` Try again in a minute."});
+            send_gameMessage(event.peer, {.message = "action|logon_fail\n"});
+            pPeer->password.clear();
+            return;
+        }
     }
     bool loaded = false;
     if (is_reg)
@@ -50,14 +89,27 @@ void action::protocol(ENetEvent& event, const std::string& header)
     else {
         loaded = pPeer->load(pPeer->growid, pPeer->password);
     }
-    if (!loaded) send_gameMessage(event.peer, {.message = "action|logon_fail\n"}); // @note triggers action|quit on client.
+    if (platform::gateway) mysql_select_db(db.mysql, platform::database.c_str()); // @note back to the gateway's own database
+    pPeer->password.clear(); // @note don't keep the password around once it's checked
+    if (!loaded)
+    {
+        if (!is_reg) auth::login_failed(event.peer->address);
+        pPeer->authenticated = false;
+        send_gameMessage(event.peer, {.message = "action|logon_fail\n"}); // @note triggers action|quit on client.
+        return;
+    }
+    auth::login_succeeded(event.peer->address);
+
+    /* @note the client proves it's the same login when it reconnects, see action::tankIDName */
+    const auth::ticket ticket = auth::issue_ticket(pPeer->user_id, target ? target->name : platform::server_name);
+    pPeer->authenticated = false; // @note this connection is about to close. the next one has to show the ticket.
 
     send_varlist(event.peer, {
-        "OnSendToServer", 
-        (signed)gServer_data.port, 
-        0, 
+        "OnSendToServer",  
+        target ? target->port : (signed)gServer_data.port, 
+        ticket.token, 
         pPeer->user_id, 
-        std::format("{}|0|0", gServer_data.server), // @todo UUIDToken
+        std::format("{}|0|{}", gServer_data.server, ticket.uuid),
         1, 
         pPeer->growid.c_str()
     }); // @note PACKET_DISCONNECT from client.

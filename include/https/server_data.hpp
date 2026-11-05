@@ -11,6 +11,14 @@ public:
     std::string loginurl{"login-gurotopia.vercel.app"};
     std::string meta{"gurotopia"};
 
+    /* @note launch options, see main.cpp --help */
+    std::string config_file{"server_data.php"};
+    int port_override{0};      // @note 0 = use the port in config_file
+    u_short https_port{443};   // @note 0 = don't answer the client's HTTPS request (for a 2nd server on the same PC)
+    std::size_t max_players{50ull};
+    std::string owner{};       // @note --owner: this account is always a developer here (the server's owner)
+    bool sandbox{false};       // @note --sandbox: everyone may use /find
+
     void init();
 };
 extern ::server_data gServer_data;

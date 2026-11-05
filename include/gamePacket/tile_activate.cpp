@@ -5,12 +5,20 @@
 
 #include "tile_activate.hpp"
 
+#include <cmath>
+
 void tile_activate(ENetEvent& event, ::gamePacket gamePacket)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    if (pPeer->netid == 0) return; // @note not in a world
 
     auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
     if (world == worlds.end()) return;
+    if (!valid_tile(*world, gamePacket.punch)) return;
+
+    /* @note doors and checkpoints work by walking into them, so the player has to be right there */
+    const ::pos standing = pPeer->pos.by_32(true);
+    if (pPeer->role < MODERATOR && (std::abs(gamePacket.punch.x - standing.x) > 2.0f || std::abs(gamePacket.punch.y - standing.y) > 2.0f)) return;
 
     ::block &block = world->blocks[cord(gamePacket.punch.x, gamePacket.punch.y)];
     const ::item &item = id_to_item(block.fg);
@@ -27,8 +35,9 @@ void tile_activate(ENetEvent& event, ::gamePacket gamePacket)
             auto door = std::ranges::find(world->doors, gamePacket.punch, &::door::pos);
             if (door != world->doors.end() && !door->dest.empty())
             {
+                const std::string dest = door->dest; // @note leaving can delete this world, door goes with it
                 action::quit_to_exit(event, "", true);
-                action::join_request(event, "", door->dest);
+                action::join_request(event, "", dest);
             }
             else {
                 send_varlist(event.peer, ::VariantList{
@@ -51,10 +60,13 @@ void tile_activate(ENetEvent& event, ::gamePacket gamePacket)
         }
         case type::CHECKPOINT:
         {
-            ::block &checkpoint = world->blocks[cord(pPeer->rest_pos.by_32(true).x, pPeer->rest_pos.by_32(true).y)]; // @note get previous checkpoint from respawn position
+            if (valid_tile(*world, pPeer->rest_pos.by_32(true)))
+            {
+                ::block &checkpoint = world->blocks[cord(pPeer->rest_pos.by_32(true).x, pPeer->rest_pos.by_32(true).y)]; // @note get previous checkpoint from respawn position
 
-            checkpoint.state[2] &= ~S_TOGGLE;
-            send_tile_update(event, ::gamePacket{.id = block.fg/*has to be 'block' or else iterfere with main door*/, .punch = pPeer->rest_pos.by_32(true)}, checkpoint, *world);
+                checkpoint.state[2] &= ~S_TOGGLE;
+                send_tile_update(event, ::gamePacket{.id = block.fg/*has to be 'block' or else iterfere with main door*/, .punch = pPeer->rest_pos.by_32(true)}, checkpoint, *world);
+            }
 
             pPeer->rest_pos = gamePacket.punch.by_32();
             block.state[2] |= S_TOGGLE; // @note toggle current checkpoint
