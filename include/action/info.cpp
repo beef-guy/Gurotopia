@@ -25,7 +25,7 @@ void action::info(ENetEvent& event, const std::string& header)
 {
     const std::vector<std::string> pipes = readch(header, '|');
 
-    for (std::size_t i = 0; i < pipes.size(); ++i) 
+    for (std::size_t i = 0; i + 1 < pipes.size(); ++i)  
     {
         if (pipes[i] == "itemID")
         {

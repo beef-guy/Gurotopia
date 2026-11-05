@@ -92,6 +92,8 @@ public:
     void mysql_select_all(bool by_user_id = false);
     void mysql_update_all();
 
+    bool authenticated{false}; // @note true once logged in. nothing is saved to the database before that.
+
     int user_id{}; // @note unqiue user id.
     std::string growid{""}, password{""};
     std::time_t created_at{}; // @note when inserted in SQL (account age)
@@ -135,7 +137,7 @@ public:
 
     long long gems{0};
     int wl_storage{0};
-    std::array<u_short, 2ull> level{ 1, 0 }; // {level, xp} XP formula credits: https://www.growtopiagame.com/forums/member/553046-kasete
+    std::array<u_int, 2ull> level{ 1, 0 }; // {level, xp} XP formula credits: https://www.growtopiagame.com/forums/member/553046-kasete
     /*
     * @brief add XP safely, this function also handles level up.
     */

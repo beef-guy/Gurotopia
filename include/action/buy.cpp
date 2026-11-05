@@ -16,6 +16,7 @@ void action::buy(ENetEvent& event, const std::string& header, const std::string_
     int backpack_cost = (100 * No * No - 200 * No + 200);
 
     auto growtoken = std::ranges::find(pPeer->slots, 1486, &::slot::id);
+    const int growtokens_owned = (growtoken != pPeer->slots.end()) ? growtoken->count : 0; // @note giving items below can move the backpack and break the iterator
 
     const std::string item = hPipe["item"];
 
@@ -76,14 +77,14 @@ void action::buy(ENetEvent& event, const std::string& header, const std::string_
             int growtoken_cost = std::abs(shouhin.cost);
             if (shouhin.btn == "upgrade_backpack") shouhin.cost = backpack_cost;
             if ((_tab == 5)
-                ? (growtoken == pPeer->slots.end() || growtoken->count < growtoken_cost)
+                ? (growtokens_owned < growtoken_cost)
                 : pPeer->gems < shouhin.cost)
             {
                 send_varlist(event.peer, { "OnStorePurchaseResult", (_tab < 5) ? 
                     std::format("You can't afford `0{}``!  You're `${}`` Gems short.", 
                         shouhin.name, shouhin.cost - pPeer->gems).c_str() :
                     std::format("You can't afford `0{}``!  You're `${}`` `2Growtokens`` short.", 
-                        shouhin.name, (growtoken == pPeer->slots.end()) ? growtoken_cost : growtoken_cost - growtoken->count) 
+                        shouhin.name, growtoken_cost - growtokens_owned)  
                 });
                 return;
             }
@@ -100,7 +101,7 @@ void action::buy(ENetEvent& event, const std::string& header, const std::string_
                 for (const ::item &item : items)
                     if (item.type == type::SEED && item.rarity >= 13 && item.rarity <= 60)
                         ids.emplace_back(item.id);
-                for (u_char i = 0; i < 5; ++i)
+                for (u_char i = 0; i < 5 && !ids.empty(); ++i)
                     shouhin.items.emplace_back(ids[rand() % ids.size()], 1);
             }
             else if (shouhin.btn == "clothes_pack") // @note source: https://growtopia.fandom.com/wiki/Clothes_Pack
@@ -108,7 +109,7 @@ void action::buy(ENetEvent& event, const std::string& header, const std::string_
                 for (const ::item &item : items)
                     if (item.type == type::CLOTHING && item.rarity <= 10)
                         ids.emplace_back(item.id);
-                for (u_char i = 0; i < 3; ++i)
+                for (u_char i = 0; i < 3 && !ids.empty(); ++i)
                     shouhin.items.emplace_back(ids[rand() % ids.size()], 1);
             }
             else if (shouhin.btn == "rare_clothes_pack") // @note source: https://growtopia.fandom.com/wiki/Rare_Clothes_Pack
@@ -116,7 +117,7 @@ void action::buy(ENetEvent& event, const std::string& header, const std::string_
                 for (const ::item &item : items)
                     if (item.type == type::CLOTHING && item.rarity >= 11 && item.rarity <= 60)
                         ids.emplace_back(item.id);
-                for (u_char i = 0; i < 3; ++i)
+                for (u_char i = 0; i < 3 && !ids.empty(); ++i)
                     shouhin.items.emplace_back(ids[rand() % ids.size()], 1);
             }
             std::string received{};
@@ -139,14 +140,14 @@ void action::buy(ENetEvent& event, const std::string& header, const std::string_
                     shouhin.name, shouhin.cost, pPeer->gems -= shouhin.cost, received) :
                 std::format(
                     "You've purchased `0{}`` for `${}`` `2Growtokens``.\nYou have `${}`` `2Growtokens`` left.\n\n`5Received: ```0{}``",
-                    shouhin.name, growtoken_cost, growtoken->count - growtoken_cost, received)
+                    shouhin.name, growtoken_cost, growtokens_owned - growtoken_cost, received)
             });
             if (_tab < 5/*growtoken tab*/)
             {
                 pPeer->mysql_update("gems", pPeer->gems);
                 on::SetBux(event);
             }
-            else modify_item_inventory(event, ::slot(growtoken->id, -growtoken_cost));
+            else modify_item_inventory(event, ::slot(1486, -growtoken_cost));
             break;
         }
     }

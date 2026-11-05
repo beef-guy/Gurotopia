@@ -23,10 +23,15 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
     try
     {
+        if (pPeer->netid == 0) return; // @note not in a world
+
         auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
         if (world == worlds.end()) return;
+        if (!valid_tile(*world, gamePacket.punch)) return;
 
         ::block &block = world->blocks[cord(gamePacket.punch.x, gamePacket.punch.y)];
+
+        if (gamePacket.id != 18 && gamePacket.id != 32 && pPeer->have_slot(::slot(gamePacket.id, 0)) == 0) return; // @note can only use items peer has
 
         const ::item &item = id_to_item((gamePacket.id != 32 && gamePacket.id != 18) ? gamePacket.id : (block.fg != 0) ? block.fg : block.bg);
         if (item.id == 0) return;
@@ -186,7 +191,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 case type::SEED:
                 {
                     auto tree = std::ranges::find(world->trees, gamePacket.punch, &::tree::pos);
-                    if (ticks() - tree->tick >= item.tick) // @todo limit this check.
+                    if (tree != world->trees.end() && ticks() - tree->tick >= item.tick) // @todo limit this check.
                     {
                         block.hits[0] = 99;
                         add_drop(event, ::slot(item.id - 1, RandomRange(1, tree->fruit*3)), gamePacket.punch.by_32(), *world); // @note fruit (from tree)
@@ -236,6 +241,13 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
             else if (block.hits[1] >= item.hits) block.bg = 0, block.hits[1] = 0;
             else return;
             
+            if (block.fg == 0) // @note forget what was on this tile, so the next block here starts fresh
+            {
+                std::erase_if(world->doors, [&](const ::door &door) { return door.pos == gamePacket.punch; });
+                std::erase_if(world->signs, [&](const ::sign &sign) { return sign.pos == gamePacket.punch; });
+                std::erase_if(world->trees, [&](const ::tree &tree) { return tree.pos == gamePacket.punch; });
+            }
+
             /* @todo update these changes with tile_update() */
             block.state[2] = 0x00; // @note reset tile direction
             block.state[3] &= ~S_VANISH; // @note remove paint
@@ -650,7 +662,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
             if (block.fg != 0) // @note placing something ontop of exisitng block
             {
                 bool update_tile{};
-                switch (items[world->blocks[cord(gamePacket.punch.x, gamePacket.punch.y)].fg].type)
+                switch (id_to_item(block.fg).type)
                 {
                     case type::SEED:
                     {
@@ -673,7 +685,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                                         splice0.raw_name, splice1.raw_name, item.raw_name.substr(0, item.raw_name.length()-5/* seed*/)), // @todo this is hardcoded
                                     0u, 1u
                                 });
-                                tree->tick = ticks();
+                                if (tree != world->trees.end()) tree->tick = ticks();
                                 block.state[2] = S_SPLICED; // @todo handle for multiple flags
 
                                 block.fg = item.id;
@@ -701,6 +713,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
             switch (item.type)
             {
                 case type::DOOR:
+                case type::PORTAL:
                 {
                     world->doors.emplace_back("","","", gamePacket.punch);
                     tile_update = true;

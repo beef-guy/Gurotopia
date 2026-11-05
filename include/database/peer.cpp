@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include <algorithm>
 #include "items.hpp"
 #include "world.hpp"
 #include "onVariant/SetClothing.hpp"
@@ -6,6 +7,7 @@
 #include "onVariant/ConsoleMessage.hpp"
 #include "commands/punch.hpp"
 #include "tools/string.hpp"
+#include "tools/auth.hpp"
 
 #include "peer.hpp"
 
@@ -77,7 +79,7 @@ T peer::mysql_select(const std::string &column, const std::string &arg, bool by_
 
     hStmt.execute();
     hStmt.fetch();
-    if constexpr (std::is_same_v<T, std::string>)
+    if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, ::blob>)
         value.resize(length);
 
     return value;
@@ -87,15 +89,16 @@ template std::string peer::mysql_select<std::string>(const std::string&, const s
 
 void peer::mysql_select_all(bool by_user_id)
 {
-    this->user_id    = this->mysql_select<signed>("uid");
-    this->growid     = this->mysql_select<std::string>("growid");
-    this->password   = this->mysql_select<std::string>("password");
-    this->created_at = this->mysql_select<std::time_t>("created_at", "UNIX_TIMESTAMP");
-    this->gems       = this->mysql_select<long long>("gems");
-    this->wl_storage = this->mysql_select<signed>("wl_storage");
-    this->level[0]   = this->mysql_select<signed>("level");
-    this->level[1]   = this->mysql_select<signed>("xp");
-    auto inventory   = this->mysql_select<::blob>("inventory");
+    this->user_id    = this->mysql_select<signed>("uid", "", by_user_id);
+    this->growid     = this->mysql_select<std::string>("growid", "", by_user_id);
+    this->password   = this->mysql_select<std::string>("password", "", by_user_id);
+    this->created_at = this->mysql_select<std::time_t>("created_at", "UNIX_TIMESTAMP", by_user_id);
+    this->gems       = this->mysql_select<long long>("gems", "", by_user_id);
+    this->wl_storage = this->mysql_select<signed>("wl_storage", "", by_user_id);
+    this->level[0]   = this->mysql_select<signed>("level", "", by_user_id);
+    this->level[1]   = this->mysql_select<signed>("xp", "", by_user_id);
+    this->role       = static_cast<u_char>(this->mysql_select<signed>("role", "", by_user_id));
+    auto inventory   = this->mysql_select<::blob>("inventory", "", by_user_id);
 
     if (inventory.size() >= sizeof(int)/*slot_size*/ + sizeof(short)/*size*/)
     {
@@ -104,7 +107,7 @@ void peer::mysql_select_all(bool by_user_id)
 
         short size{};
         inventory.read_i16(size, pos);
-        this->slots.resize(size);
+        this->slots.resize(std::max<short>(size, 0)); // @note a damaged save can't be negative
         for (::slot &slot : this->slots)
         {
             if (!inventory.read_i16(slot.id, pos)) break;
@@ -162,10 +165,16 @@ bool peer::load(const std::string &growid, const std::string password)
         return false;
     }
     this->mysql_select_all(false);
-    if (password.empty() || this->password != password)
+    if (!auth::verify_password(password, this->password))
     {
         return false;
     }
+    if (!auth::is_hashed(this->password)) // @note upgrade a plain-text password the first time its owner logs in
+    {
+        this->password = auth::hash_password(password);
+        this->mysql_update("password", this->password);
+    }
+    this->authenticated = true;
     return true;
 }
 
@@ -173,18 +182,22 @@ bool peer::load_by_uid(int uid)
 {
     this->user_id = uid;
     this->mysql_select_all(true);
-    return !this->growid.empty();
+    this->authenticated = !this->growid.empty();
+    return this->authenticated;
 }
 
 bool peer::create_account(const std::string &growid, const std::string &password)
 {
+    if (growid.empty() || growid.length() > 18 || !isalnum(growid)) return false; // @note fits peer.growid VARCHAR(18)
+    if (password.empty() || password.length() > 18) return false; // @note fits peer.password VARCHAR(18)
+
     this->growid = growid;
     if (this->exists(growid))
     {
         return false;
     }
     this->mysql_insert("growid", growid);
-    this->mysql_update("password", password);
+    this->mysql_update("password", auth::hash_password(password));
 
     this->slots.resize(3ull); // @note default starter items
     this->slots[0ull] = ::slot{18, 1};   // @note fist
@@ -193,12 +206,13 @@ bool peer::create_account(const std::string &growid, const std::string &password
 
     this->mysql_update_all();
     this->mysql_select_all(false);
+    this->authenticated = true;
     return true;
 }
 
 peer::~peer()
 {
-    this->mysql_update_all();
+    if (this->authenticated) this->mysql_update_all(); // @note a failed login must never overwrite the account it tried to use
 }
 
 u_short peer::emplace(::slot slot) 
@@ -208,14 +222,15 @@ u_short peer::emplace(::slot slot)
     if (it != this->slots.end()) 
     {
         const u_short excess = std::max(0, (it->count + slot.count) - 200);
-        it->count = std::min(it->count + slot.count, 200);
+        it->count = std::clamp(it->count + slot.count, 0, 200);
         if (it->count == 0)
         {
             const ::item &item = id_to_item(it->id);
-            if (item.cloth_type != clothing::NONE) this->clothing[item.cloth_type] = 0;
+            if (item.cloth_type < this->clothing.size()) this->clothing[item.cloth_type] = 0;
         }
         return excess;
     }
+    if (slot.count <= 0) return 0; // @note can't take away an item peer doesn't have
     this->slots.emplace_back(std::move(slot)); // @note no such item in inventory, so we create a new entry.
     return 0;
 }
@@ -231,12 +246,12 @@ u_short peer::have_slot(::slot slot)
 
 void peer::add_xp(ENetEvent &event, u_short value) 
 {
-    u_short &lvl = this->level.front();
-    u_short &xp = this->level.back() += value; // @note factor the new xp amount
+    u_int &lvl = this->level.front();
+    u_int &xp = this->level.back() += value; // @note factor the new xp amount
 
     for (; lvl < 125; )
     {
-        u_short xp_formula = 50 * (lvl * lvl + 2); // @author https://www.growtopiagame.com/forums/member/553046-kasete
+        const u_int xp_formula = 50 * (lvl * lvl + 2); // @author https://www.growtopiagame.com/forums/member/553046-kasete
         if (xp < xp_formula) break;
 
         xp -= xp_formula;

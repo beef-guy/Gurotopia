@@ -6,10 +6,9 @@
 
 void sb(ENetEvent& event, const std::string_view text)
 {
-    std::vector<std::string> spaces = readch(text.data(), ' ');
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
 
-    std::string message = (spaces.size() > 1) ? spaces[1] : "";
+    const std::string message{ command_arg(text) }; // @note the whole message, not only the first word
     u_int cost = host->connectedPeers * 30;
 
     if (message.empty())
