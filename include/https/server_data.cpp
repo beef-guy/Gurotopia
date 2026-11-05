@@ -8,10 +8,10 @@
 
 void ::server_data::init()
 {
-    std::ifstream file("server_data.php");
+    std::ifstream file(this->config_file);
     if (!file.is_open())
     {
-        std::ofstream ostrm("server_data.php");
+        std::ofstream ostrm(this->config_file);
         ostrm << 
             std::format(
                 "server|{}\n"
@@ -47,4 +47,5 @@ void ::server_data::init()
             else if (key == "meta")     this->meta = value;
         }
     }
+    if (this->port_override > 0) this->port = static_cast<u_short>(this->port_override);
 } // @note close file

@@ -77,14 +77,20 @@ void mysql_gateway::mysql_connect()
     if (!mysql_real_connect(mysql, this->host.c_str(), this->user.c_str(), this->passwd.c_str(), NULL, 3306u, NULL, 0ul))
     {
         print(mysql_error(mysql));
-        print("could not connect to MariaDB. check that it's running and that mysql_login.txt is correct.");
+        print("could not connect to MariaDB. check that it's running and that " + this->login_file + " is correct.");
         fflush(stdout);
         std::exit(EXIT_FAILURE);
     }
     else print(std::format("connected to MariaDB server on {}:{}", mysql->host, mysql->port).c_str());
 
-    mysql_query(mysql, "CREATE DATABASE IF NOT EXISTS gurotopia");
-    mysql_select_db(mysql, "gurotopia");
+    mysql_query(mysql, std::format("CREATE DATABASE IF NOT EXISTS `{}`", this->database).c_str()); // @note name is checked in main.cpp
+    if (mysql_select_db(mysql, this->database.c_str()) != 0)
+    {
+        print(std::format("could not open database {}: {}", this->database, mysql_error(mysql)));
+        fflush(stdout);
+        std::exit(EXIT_FAILURE);
+    }
+    print(std::format("using database {}", this->database));
 
     create_table_if_not_exist();
     integrity();
@@ -92,10 +98,10 @@ void mysql_gateway::mysql_connect()
 
 void mysql_gateway::load_login()
 {
-    std::ifstream istrm("mysql_login.txt");
+    std::ifstream istrm(this->login_file);
     if (!istrm.is_open())
     {
-        std::ofstream ostrm("mysql_login.txt");
+        std::ofstream ostrm(this->login_file);
         ostrm << 
             std::format(
                 "host|{}\n"

@@ -12,6 +12,8 @@
 #include "include/automate/holiday.hpp"
 #include "include/tools/terminal.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <csignal>
 #include <thread>
@@ -33,8 +35,95 @@ static void save_everything()
     for (::world &world : worlds) world.save();
 }
 
-int main()
+static void print_help()
 {
+    print(
+        "usage: main.exe [options]\n"
+        "  --port N            game port (default: the port in server_data.php, 17091)\n"
+        "  --database NAME     MariaDB database to use (default: gurotopia)\n"
+        "  --server-data FILE  server settings file (default: server_data.php)\n"
+        "  --mysql-login FILE  MariaDB login file (default: mysql_login.txt)\n"
+        "  --max-players N     most players online at once (default: 50)\n"
+        "  --https-port N      port for the game's login request (default: 443)\n"
+        "  --no-https          don't answer the login request. use for a 2nd server on the same PC\n"
+        "  --help              show this"
+    );
+}
+
+/* @note returns false when the options are wrong, after printing why */
+static bool parse_options(int argc, char *argv[])
+{
+    const auto number = [](const std::string &text, int low, int high, int &out) -> bool
+    {
+        try {
+            std::size_t used = 0;
+            out = std::stoi(text, &used);
+            return used == text.size() && out >= low && out <= high;
+        }
+        catch (const std::logic_error &) { return false; }
+    };
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string option = argv[i];
+        if (option == "--help" || option == "-h")
+        {
+            print_help();
+            std::exit(EXIT_SUCCESS);
+        }
+        if (option == "--no-https")
+        {
+            gServer_data.https_port = 0;
+            continue;
+        }
+        if (i + 1 >= argc)
+        {
+            print(std::format("{} needs a value. run with --help to see the options.", option));
+            return false;
+        }
+        const std::string value = argv[++i];
+        int n = 0;
+
+        if (option == "--port")
+        {
+            if (!number(value, 1, 65535, n)) { print(std::format("--port must be 1 to 65535, not {}", value)); return false; }
+            gServer_data.port_override = n;
+        }
+        else if (option == "--https-port")
+        {
+            if (!number(value, 0, 65535, n)) { print(std::format("--https-port must be 0 to 65535, not {}", value)); return false; }
+            gServer_data.https_port = static_cast<u_short>(n);
+        }
+        else if (option == "--max-players")
+        {
+            if (!number(value, 1, 4095, n)) { print(std::format("--max-players must be 1 to 4095, not {}", value)); return false; } // @note ENet's limit
+            gServer_data.max_players = static_cast<std::size_t>(n);
+        }
+        else if (option == "--database")
+        {
+            const bool valid = !value.empty() && value.size() <= 64 &&
+                std::ranges::all_of(value, [](unsigned char c) { return std::isalnum(c) || c == '_'; });
+            if (!valid) { print("--database may only use letters, digits and _ (at most 64)"); return false; }
+            db.database = value;
+        }
+        else if (option == "--server-data") gServer_data.config_file = value;
+        else if (option == "--mysql-login") db.login_file = value;
+        else
+        {
+            print(std::format("unknown option {}. run with --help to see the options.", option));
+            return false;
+        }
+    }
+    return true;
+}
+
+int main(int argc, char *argv[])
+{
+    if (!parse_options(argc, argv))
+    {
+        fflush(stdout);
+        return EXIT_FAILURE;
+    }
+
     std::signal(SIGINT, signal_handler);
 #ifdef SIGHUP // @note unix
     std::signal(SIGHUP, signal_handler); // @note PuTTY, SSH problems
@@ -48,22 +137,25 @@ int main()
         mysql_library_init(0, NULL, NULL);
         enet_initialize();
         {
-            gServer_data.init(); // @note ./server_data.php
-            std::thread(&https::listener).detach();
+            gServer_data.init(); // @note ./server_data.php, or --server-data
+            if (gServer_data.https_port != 0) std::thread(&https::listener).detach();
+            else print("not answering the login request (--no-https). another server must do that.");
 
             ENetAddress address{
                 .type = ENET_ADDRESS_TYPE_IPV4,
                 .port = gServer_data.port
             };
-            host = enet_host_create (ENET_ADDRESS_TYPE_IPV4, &address, 50ull/* max peer count */, 2ull, 0u, 0u);
+            host = enet_host_create (ENET_ADDRESS_TYPE_IPV4, &address, gServer_data.max_players, 2ull, 0u, 0u);
         } // @note delete address
         if (host == nullptr) throw std::runtime_error(std::format("could not open port {}. is the server already running?", gServer_data.port));
+
+        print(std::format("game port {}, up to {} players", gServer_data.port, gServer_data.max_players));
 
         host->usingNewPacketForServer = true;
         host->checksum = enet_crc32;
         enet_host_compress_with_range_coder(host);
 
-        db.load_login(); // @note ./mysql_login.txt
+        db.load_login(); // @note ./mysql_login.txt, or --mysql-login
         db.mysql_connect();
 
         decode_items_dat();

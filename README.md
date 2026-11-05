@@ -135,3 +135,20 @@
 > 127.0.0.1 www.growtopia1.com
 > 127.0.0.1 www.growtopia2.com
 > ```
+
+## Running more than one server
+
+Each copy of the server can get its own port, database and settings files:
+
+```
+main.exe --port 17092 --database server2 --no-https --max-players 20
+```
+
+| option | what it does |
+| --- | --- |
+| `--port N` | game port (default: the port in `server_data.php`, 17091) |
+| `--database NAME` | MariaDB database (default: `gurotopia`); give every server its own |
+| `--server-data FILE` | settings file instead of `server_data.php` |
+| `--mysql-login FILE` | MariaDB login file instead of `mysql_login.txt` |
+| `--max-players N` | most players online at once (default: 50) |
+| `--https-port N` / `--no-https` | port for the game's login request (default: 443). Only one server per IP can answer it, so turn it off on the others |

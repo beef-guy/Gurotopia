@@ -19,6 +19,8 @@ public:
     void load_login();
 
     MYSQL *mysql{nullptr};
+    std::string login_file{"mysql_login.txt"};
+    std::string database{"gurotopia"}; // @note each server on the same MariaDB needs its own
 private:
     std::string host{"127.0.0.1"};
     std::string user{"root"};

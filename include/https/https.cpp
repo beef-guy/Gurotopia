@@ -97,7 +97,10 @@ void https::listener()
         cross_log("socket function failed");
     }
 
-#ifdef SO_REUSEADDR
+#ifdef _WIN32
+    /* @note on windows SO_REUSEADDR would let a 2nd server steal the port, so ask for it alone instead */
+    setsockopt(socket, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (char*)&enable, sizeof(enable));
+#elif defined(SO_REUSEADDR)
     setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, (char*)&enable, sizeof(enable));
 #endif
 #ifdef TCP_DEFER_ACCEPT // @note unix
@@ -106,14 +109,14 @@ void https::listener()
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons(443);
+    addr.sin_port = htons(gServer_data.https_port);
     socklen_t addrlen = sizeof(addr);
 
     /* https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind */
     if (bind(socket, (struct sockaddr*)&addr, addrlen) == SOCKET_ERROR)
     {
         cross_log("could not bind socket");
-        print("port 443 is in use, this server won't answer logins. is GOWebServer still running?");
+        print(std::format("port {} is in use, this server won't answer logins. is GOWebServer or another server still running?", gServer_data.https_port));
         cross_close(socket);
         return; // @note the game server keeps running, this avoids spinning on a dead socket
     }
