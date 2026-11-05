@@ -21,6 +21,8 @@ void action::wrench(ENetEvent& event, const std::string& header)
                 /* wrench yourself */
                 if (pOthers->user_id == pPeer->user_id)
                 {
+                    auto here = std::ranges::find(worlds, pOthers->recent_worlds.back(), &::world::name);
+                    const int people_here = (here != worlds.end()) ? here->visitors : 0;
                     send_varlist(event.peer, {
                         "OnDialogRequest",
                         ::create_dialog()
@@ -64,11 +66,14 @@ void action::wrench(ENetEvent& event, const std::string& header)
                             .add_smalltext(std::format("Fires Put Out: {}", pOthers->fires_removed))
                             .add_spacer("small")
                             .add_textbox(std::format("`oYou have `w{}`` backpack slots.``", pOthers->slot_size))
-                            .add_textbox(std::format("`oCurrent world: `w{}`` (`w{}``, `w{}``) (`w0`` person)````", 
-                                                    pOthers->recent_worlds.back(), pOthers->pos.by_32(true).x_int(), pOthers->pos.by_32(true).y_int()))
+                            .add_textbox(std::format("`oCurrent world: `w{}`` (`w{}``, `w{}``) (`w{}`` {})````", 
+                                                    pOthers->recent_worlds.back(), pOthers->pos.by_32(true).x_int(), pOthers->pos.by_32(true).y_int(),
+                                                    people_here, (people_here == 1) ? "person" : "people"))
                             .add_textbox("`oYou are standing on the note \"A\".``")
                             .add_spacer("small")
-                            .add_textbox("`oTotal time played is `w0.0`` hours.  This account was created `w0`` days ago.``")
+                            .add_textbox(std::format("`oTotal time played is `w{:.1f}`` hours.  This account was created `w{}`` days ago.``",
+                                                    static_cast<double>(pOthers->total_playtime()) / 3600.0,
+                                                    std::max<long long>(0, (std::time(nullptr) - pOthers->created_at) / 86400)))
                             .add_spacer("small")
                             .add_quick_exit()
                             .end_dialog("popup", "", "Continue")

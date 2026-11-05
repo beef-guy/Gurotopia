@@ -7,11 +7,27 @@ enum wstate3 : u_char
     S_LEFT    = 0x20,
     S_SPLICED = 0x1d, // @todo understand the percise flags.
     S_TOGGLE  = 0x40,
-    S_PUBLIC  = 0x80
+    S_PUBLIC  = 0x80,
+
+    S_EXTRA   = 0x01, // @note tile has extra data after its flags (doors, signs, locks...)
+    S_PARENT  = 0x02  // @note tile belongs to an area lock; state[0..1] holds the lock's tile index
 };
 
 /* locks that only occupy a number of tiles, and not the whole world. */
 #define is_tile_lock(id) (id == 202/*small*/ || id == 204/*big*/ || id == 206/*huge*/ || id == 4994/*builder*/)
+
+/* @return how many tiles an area lock covers. source: https://growtopia.fandom.com/wiki/Locks */
+inline int tile_lock_size(int id)
+{
+    switch (id)
+    {
+        case 202: return 10;   // @note Small Lock
+        case 204: return 48;   // @note Big Lock
+        case 206: return 200;  // @note Huge Lock
+        case 4994: return 200; // @note Builder's Lock
+    }
+    return 0;
+}
 
 enum wstate4 : u_char
 {
@@ -64,6 +80,7 @@ struct door
     std::string label{};
     std::string dest{};
     std::string id{};
+    bool is_public{true}; // @note false: only people who can build here may walk through
 
     ::pos pos{};
 
@@ -128,6 +145,34 @@ struct object
     ::blob to_blob() const;
 };
 
+/* @brief Small, Big, Huge and Builder's Lock. the tiles it covers carry S_PARENT and the lock's tile index */
+struct area_lock
+{
+    ::pos pos{};
+    int owner{};
+    std::vector<int> access{}; // @note user ids
+    bool is_public{};
+    bool ignore_air{}; // @note only lock tiles that have something on them
+    u_char builder_mode{}; // @note Builder's Lock: 0 build & break, 1 only building, 2 only breaking (for people with access)
+};
+
+/* @brief a Vending Machine's stock. price > 0 is World Locks per item, price < 0 is items per World Lock */
+struct vending
+{
+    ::pos pos{};
+    short id{};
+    int count{};
+    int price{};
+    int earned{}; // @note World Locks waiting for the owner
+};
+
+/* @brief Storage Box Xtreme contents */
+struct storage
+{
+    ::pos pos{};
+    std::vector<::slot> items{};
+};
+
 class world 
 {
 public:
@@ -165,11 +210,30 @@ public:
     std::vector<::random_block> random_blocks{};
     std::vector<::sign> signs{};
     std::vector<::tree> trees{};
+    std::vector<::area_lock> area_locks{};
+    std::vector<::vending> vendings{};
+    std::vector<::storage> storages{};
+    std::vector<::display> displays{};
+
+    /* @return the area lock that covers this tile, or nullptr */
+    ::area_lock *lock_at(const ::pos &pos);
+    /* @brief (re)claim tiles around an area lock, up to its size */
+    void apply_area_lock(::area_lock &lock, u_short lock_id);
+    /* @brief release every tile an area lock holds */
+    void release_area_lock(const ::pos &lock_pos);
+    /* @return true if peer may build (or break) on this tile */
+    bool can_edit(const ::peer &peer, const ::pos &pos, bool breaking);
+    /* @return true if a Signal Jammer is switched on here */
+    bool jammed() const;
 
     ::pos spawn{}; // @note position of main door
     ::pos weather{};
 
     ::blob serialize();
+    /* @brief one tile as the client reads it: block, area lock parent, extra data */
+    ::blob tile_blob(int index);
+    ::blob extras_blob() const;
+    void load_extras(::blob &blob);
 };
 extern std::vector<world> worlds;
 

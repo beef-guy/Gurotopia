@@ -94,17 +94,25 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
             pPeer->display_growid = std::format("`#@{}``", pPeer->growid);
 
         pPeer->rest_pos = world.spawn;
+        ::pos start = pPeer->rest_pos; // @note where the player appears: the main door, or the door they came through
+        if (!pPeer->door_target.empty())
+        {
+            auto door = std::ranges::find(world.doors, pPeer->door_target, &::door::id);
+            if (door != world.doors.end()) start = door->pos.by_32(false);
+            pPeer->door_target.clear();
+        }
+        pPeer->pos = start;
 
         if (++world.netid_counter == 0) ++world.netid_counter; // @note netid 0 means "not in a world"
         pPeer->netid = world.netid_counter;
-        peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [&event, &pPeer, &world](ENetPeer *peer/*send to everyone in world*/) 
+        peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [&event, &pPeer, &world, &start](ENetPeer *peer/*send to everyone in world*/) 
         {
             ::peer *pOthers = static_cast<::peer*>(peer->data); // @note everyone in world's peer.data
             
             if (pOthers->user_id != pPeer->user_id)
             {
                 on::Spawn(*event.peer, pOthers->netid, pOthers->user_id, pOthers->pos, pOthers->display_growid, pOthers->country, pOthers->role, pOthers->role >= DEVELOPER, false);
-                on::Spawn(*peer, pPeer->netid, pPeer->user_id, pPeer->rest_pos, pPeer->display_growid, pPeer->country, pPeer->role, pPeer->role >= DEVELOPER, false);
+                on::Spawn(*peer, pPeer->netid, pPeer->user_id, start, pPeer->display_growid, pPeer->country, pPeer->role, pPeer->role >= DEVELOPER, false);
                 on::SetClothing(peer);
                 on::ConsoleMessage(peer, std::format("`5<{} entered, `w{}`` others here>``", pPeer->display_growid, world.visitors));
                 send_varlist(peer, {
@@ -115,13 +123,13 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
                 });
             }
         });
-        on::Spawn(*event.peer, pPeer->netid, pPeer->user_id, pPeer->rest_pos, pPeer->display_growid, pPeer->country, pPeer->role, pPeer->role >= DEVELOPER, true);
+        on::Spawn(*event.peer, pPeer->netid, pPeer->user_id, start, pPeer->display_growid, pPeer->country, pPeer->role, pPeer->role >= DEVELOPER, true);
 
         if (pPeer->billboard.id != 0) on::BillboardChange(event); // @note don't waste memory if billboard is empty.
 
         send_varlist(event.peer, {
             "OnSetPos", 
-            CL_Vec2f{pPeer->rest_pos.x, pPeer->rest_pos.y}
+            CL_Vec2f{start.x, start.y}
         }, pPeer->netid);
 
         on::ConsoleMessage(event.peer, 

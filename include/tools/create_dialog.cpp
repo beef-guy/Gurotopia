@@ -37,6 +37,11 @@ create_dialog& create_dialog::add_text_input(std::string id, std::string label, 
     _d.append(std::format("add_text_input|{}|{}|{}|{}|\n", id, label, set_value, length));
     return *this;
 }
+create_dialog& create_dialog::add_checkbox(std::string id, std::string label, bool checked)
+{
+    _d.append(std::format("add_checkbox|{}|{}|{}\n", id, label, checked ? 1 : 0));
+    return *this;
+}
 create_dialog& create_dialog::add_smalltext(std::string label)
 {
     _d.append(std::format("add_smalltext|{}|left|\n", label));

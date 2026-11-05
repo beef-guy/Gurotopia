@@ -33,11 +33,37 @@ void tile_activate(ENetEvent& event, ::gamePacket gamePacket)
         case type::PORTAL:
         {
             auto door = std::ranges::find(world->doors, gamePacket.punch, &::door::pos);
+            if (door != world->doors.end() && !door->is_public && !world->can_edit(*pPeer, gamePacket.punch, false))
+            {
+                send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "The door is locked.", 0u, 1u }); // @note not open to public
+                send_varlist(event.peer, ::VariantList{ "OnSetFreezeState", 0u }, pPeer->netid);
+                break;
+            }
+            std::string dest_world{}, dest_id{};
             if (door != world->doors.end() && !door->dest.empty())
             {
-                const std::string dest = door->dest; // @note leaving can delete this world, door goes with it
-                action::quit_to_exit(event, "", true);
-                action::join_request(event, "", dest);
+                const std::size_t colon = door->dest.find(':');
+                dest_world = door->dest.substr(0, colon);
+                if (colon != std::string::npos) dest_id = door->dest.substr(colon + 1);
+            }
+            if (!dest_world.empty() && dest_world != world->name)
+            {
+                pPeer->door_target = dest_id; // @note WORLD:ID appears at that door
+                action::quit_to_exit(event, "", true); // @note leaving can delete this world, door goes with it
+                action::join_request(event, "", dest_world);
+            }
+            else if (!dest_id.empty()) // @note :ID (or this world's name) moves to another door here
+            {
+                auto target = std::ranges::find(world->doors, dest_id, &::door::id);
+                const ::pos to = (target != world->doors.end()) ? target->pos.by_32(false) : world->spawn;
+                pPeer->pos = to;
+                send_varlist(event.peer, ::VariantList{ "OnSetPos", CL_Vec2f{to.x, to.y} }, pPeer->netid);
+                send_varlist(event.peer, ::VariantList{ "OnZoomCamera", 10000.0f, 1000u });
+                send_varlist(event.peer, ::VariantList{ "OnSetFreezeState", 0u }, pPeer->netid);
+                peers(world->name, PeerSearch::WORLD, [&](ENetPeer *peer) // @note others see the player move too
+                {
+                    if (peer != event.peer) send_varlist(peer, ::VariantList{ "OnSetPos", CL_Vec2f{to.x, to.y} }, pPeer->netid);
+                });
             }
             else {
                 send_varlist(event.peer, ::VariantList{

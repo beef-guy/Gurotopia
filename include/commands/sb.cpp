@@ -49,7 +49,9 @@ void sb(ENetEvent& event, const std::string_view text)
         on::SetBux(event);
     }
 
-    const std::string display = pPeer->recent_worlds.back();
+    std::string display = pPeer->recent_worlds.back();
+    if (auto world = std::ranges::find(worlds, display, &::world::name); world != worlds.end() && world->jammed())
+        display = "`4JAMMED!``"; // @note Signal Jammer hides where the broadcast came from
     peers("", PeerSearch::EVERYONE, [&pPeer, message, display](ENetPeer *peer)
     {
         const ::peer *pOthers = static_cast<::peer*>(peer->data);
