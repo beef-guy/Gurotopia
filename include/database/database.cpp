@@ -15,7 +15,7 @@ void mysql_gateway::create_table_if_not_exist()
         "CREATE TABLE IF NOT EXISTS peer ("
         "uid INT AUTO_INCREMENT PRIMARY KEY,"
         "growid VARCHAR(18) UNIQUE,"
-        "password VARCHAR(18),"
+        "password VARCHAR(128),"
         "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
         "inventory MEDIUMBLOB,"
         "gems BIGINT DEFAULT 0,"
@@ -66,6 +66,7 @@ void mysql_gateway::integrity()
     /* @note BLOB stops at 64KB, a busy world can be bigger than that */
     mysql_query(mysql, "ALTER TABLE world MODIFY blocks MEDIUMBLOB, MODIFY objects MEDIUMBLOB");
     mysql_query(mysql, "ALTER TABLE peer MODIFY inventory MEDIUMBLOB");
+    mysql_query(mysql, "ALTER TABLE peer MODIFY password VARCHAR(128)"); // @note room for a hashed password
 }
 
 void mysql_gateway::mysql_connect()

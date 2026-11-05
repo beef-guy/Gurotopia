@@ -1,6 +1,7 @@
 #include "pch.hpp"
 
 #include "https/server_data.hpp"
+#include "tools/auth.hpp"
 
 #include "protocol.hpp"
 
@@ -42,6 +43,12 @@ void action::protocol(ENetEvent& event, const std::string& header)
         
         return; // @note stop processing invalid protocol data
     }
+    if (auth::login_blocked(event.peer->address))
+    {
+        send_gameMessage(event.peer, {.message = "action|log\nmsg|`4Too many wrong passwords.`` Please wait a few minutes and try again."});
+        send_gameMessage(event.peer, {.message = "action|logon_fail\n"}); // @note triggers action|quit on client.
+        return;
+    }
     bool loaded = false;
     if (is_reg)
     {
@@ -50,18 +57,26 @@ void action::protocol(ENetEvent& event, const std::string& header)
     else {
         loaded = pPeer->load(pPeer->growid, pPeer->password);
     }
+    pPeer->password.clear(); // @note don't keep the password around once it's checked
     if (!loaded)
     {
+        if (!is_reg) auth::login_failed(event.peer->address);
+        pPeer->authenticated = false;
         send_gameMessage(event.peer, {.message = "action|logon_fail\n"}); // @note triggers action|quit on client.
         return;
     }
+    auth::login_succeeded(event.peer->address);
+
+    /* @note the client proves it's the same login when it reconnects, see action::tankIDName */
+    const auth::ticket ticket = auth::issue_ticket(pPeer->user_id);
+    pPeer->authenticated = false; // @note this connection is about to close. the next one has to show the ticket.
 
     send_varlist(event.peer, {
         "OnSendToServer",  
         (signed)gServer_data.port, 
-        0, 
+        ticket.token, 
         pPeer->user_id, 
-        std::format("{}|0|0", gServer_data.server), // @todo UUIDToken
+        std::format("{}|0|{}", gServer_data.server, ticket.uuid),
         1, 
         pPeer->growid.c_str()
     }); // @note PACKET_DISCONNECT from client.

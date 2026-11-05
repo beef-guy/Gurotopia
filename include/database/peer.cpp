@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include <algorithm>
 #include "items.hpp"
 #include "world.hpp"
 #include "onVariant/SetClothing.hpp"
@@ -6,6 +7,7 @@
 #include "onVariant/ConsoleMessage.hpp"
 #include "commands/punch.hpp"
 #include "tools/string.hpp"
+#include "tools/auth.hpp"
 
 #include "peer.hpp"
 
@@ -163,9 +165,14 @@ bool peer::load(const std::string &growid, const std::string password)
         return false;
     }
     this->mysql_select_all(false);
-    if (password.empty() || this->password != password)
+    if (!auth::verify_password(password, this->password))
     {
         return false;
+    }
+    if (!auth::is_hashed(this->password)) // @note upgrade a plain-text password the first time its owner logs in
+    {
+        this->password = auth::hash_password(password);
+        this->mysql_update("password", this->password);
     }
     this->authenticated = true;
     return true;
@@ -190,7 +197,7 @@ bool peer::create_account(const std::string &growid, const std::string &password
         return false;
     }
     this->mysql_insert("growid", growid);
-    this->mysql_update("password", password);
+    this->mysql_update("password", auth::hash_password(password));
 
     this->slots.resize(3ull); // @note default starter items
     this->slots[0ull] = ::slot{18, 1};   // @note fist

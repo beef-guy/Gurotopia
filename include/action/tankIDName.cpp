@@ -1,6 +1,8 @@
 #include "pch.hpp"
 
 #include "automate/holiday.hpp"
+#include "tools/auth.hpp"
+#include "tools/terminal.hpp"
 
 #include "tankIDName.hpp"
 
@@ -17,7 +19,8 @@ void action::tankIDName(ENetEvent& event, const std::string& header)
     }
 
     /* @todo instead of setting these values we should check if there valid from SQL.*/
-    std::string protocol{};
+    std::string protocol{}, uuid_token{};
+    int token = 0;
     for (std::size_t i = 0; i + 1 < pipes.size(); ++i)
     {
         if      (pipes[i] == "tankIDName") pPeer->growid = pipes[i+1];
@@ -25,6 +28,8 @@ void action::tankIDName(ENetEvent& event, const std::string& header)
         else if (pipes[i] == "protocol")   protocol = pipes[i+1];
         else if (pipes[i] == "country")    pPeer->country = pipes[i+1];
         else if (pipes[i] == "user")       pPeer->user_id = std::atoi(pipes[i+1].c_str());
+        else if (pipes[i] == "token")      token = std::atoi(pipes[i+1].c_str());
+        else if (pipes[i] == "UUIDToken")  uuid_token = pipes[i+1];
         else if (pipes[i] == "game_version") 
         {
             try { 
@@ -38,13 +43,25 @@ void action::tankIDName(ENetEvent& event, const std::string& header)
     bool loaded = false;
     if (pPeer->user_id > 0)
     {
-        loaded = pPeer->load_by_uid(pPeer->user_id);
+        /* @note only someone who just typed the right password gets a ticket for this account */
+        if (!auth::login_blocked(event.peer->address) && auth::redeem_ticket(pPeer->user_id, token, uuid_token))
+        {
+            loaded = pPeer->load_by_uid(pPeer->user_id);
+        }
+        else {
+            auth::login_failed(event.peer->address);
+            print(std::format("refused login for user {}: missing or wrong login ticket", pPeer->user_id));
+        }
     }
-    else if (!pPeer->growid.empty()) {
+    else if (!pPeer->growid.empty() && !auth::login_blocked(event.peer->address)) {
         loaded = pPeer->load(pPeer->growid, pPeer->password);
+        if (!loaded) auth::login_failed(event.peer->address);
+        else auth::login_succeeded(event.peer->address);
     }
+    pPeer->password.clear(); // @note don't keep the password around once it's checked
     if (!loaded)
     {
+        pPeer->authenticated = false;
         send_gameMessage(event.peer, {.message = "action|logon_fail\n"}); // @note triggers action|quit on client.
         return;
     }
