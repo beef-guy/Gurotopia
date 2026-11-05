@@ -4,6 +4,11 @@
 #include "tools/auth.hpp"
 #include "tools/terminal.hpp"
 #include "database/platform.hpp"
+#include "commands/moderation.hpp"
+#include "https/server_data.hpp"
+
+#include <cctype>
+#include <ctime>
 
 #include "tankIDName.hpp"
 
@@ -70,6 +75,39 @@ void action::tankIDName(ENetEvent& event, const std::string& header)
         pPeer->authenticated = false;
         send_gameMessage(event.peer, {.message = "action|logon_fail\n"}); // @note triggers action|quit on client.
         return;
+    }
+
+    /* @note banned accounts and IPs can't come in */
+    {
+        std::string reason{};
+        long long until = pPeer->banned_until;
+        const long long now = std::time(nullptr);
+        bool banned = (until < 0 || until > now);
+        if (banned) reason = pPeer->ban_reason;
+        else if (pPeer->role < MODERATOR) banned = moderation::ip_banned(event.peer->address, reason, until); // @note staff can't be locked out by an IP ban
+        if (banned)
+        {
+            print(std::format("refused login for {}: banned", pPeer->growid));
+            pPeer->authenticated = false; // @note so nothing is saved over the account on the way out
+            send_gameMessage(event.peer, {.message = std::format(
+                "action|log\nmsg|`4Sorry, this account or device is banned{}.``{}",
+                (until < 0) ? "" : " for " + moderation::duration(until - now), reason.empty() ? "" : " Reason: " + reason)});
+            send_gameMessage(event.peer, {.message = "action|logon_fail\n"});
+            enet_peer_disconnect_later(event.peer, 0);
+            return;
+        }
+    }
+    /* @note the server's owner (--owner) always gets developer rights */
+    if (!gServer_data.owner.empty() && pPeer->role < DEVELOPER)
+    {
+        std::string a = gServer_data.owner, b = pPeer->growid;
+        for (char &c : a) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        for (char &c : b) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (a == b)
+        {
+            pPeer->role = DEVELOPER;
+            pPeer->mysql_update("role", static_cast<signed>(DEVELOPER));
+        }
     }
 
     send_varlist(event.peer, { "OnOverrideGDPRFromServer", 18, 1, 0, 1 });

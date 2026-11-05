@@ -92,6 +92,10 @@ public:
     void mysql_select_all(bool by_user_id = false);
     void mysql_update_all();
 
+    /* @note clothing as "id,id,..." so it can be saved in one column */
+    std::string serialize_clothing() const;
+    void load_clothing(const std::string &text);
+
     bool authenticated{false}; // @note true once logged in. nothing is saved to the database before that.
 
     int user_id{}; // @note unqiue user id.
@@ -159,6 +163,15 @@ public:
     /* @todo move outside */
     std::vector<::slot> trade_offers{};
     bool trade_accepted = false;
+    bool trade_confirmed = false; // @note pressed "Do The Deal!" on the final dialog
+    int trade_with{};    // @note user_id of the peer this peer is trading with. 0 = not trading
+    int trade_request{}; // @note user_id this peer asked to trade with, until they answer
+
+    long long banned_until{}; // @note unix time. 0 = not banned
+    std::string ban_reason{};
+    long long muted_until{};  // @note unix time. 0 = not muted
+    std::time_t duct_tape_until{}; // @note unix time duct tape falls off
+    u_int last_sb{};          // @note ticks() of the last /sb, for the cooldown
 };
 
 extern ENetHost* host;

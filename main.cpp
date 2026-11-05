@@ -47,6 +47,8 @@ static void print_help()
         "  --max-players N     most players online at once (default: 50)\n"
         "  --https-port N      port for the game's login request (default: 443)\n"
         "  --no-https          don't answer the login request. use for a 2nd server on the same PC\n"
+        "  --owner NAME        this account is always a developer (staff commands, /find, /give)\n"
+        "  --sandbox           let every player use /find (a creative server)\n"
         "\n"
         "  many servers behind one IP:\n"
         "  --platform-db NAME  database that lists the servers (e.g. gurotopia_platform)\n"
@@ -85,6 +87,11 @@ static bool parse_options(int argc, char *argv[])
         if (option == "--no-https")
         {
             gServer_data.https_port = 0;
+            continue;
+        }
+        if (option == "--sandbox")
+        {
+            gServer_data.sandbox = true;
             continue;
         }
         if (option == "--gateway")
@@ -129,6 +136,11 @@ static bool parse_options(int argc, char *argv[])
         {
             if (!platform::valid_name(value)) { print(std::format("{} may only use letters and digits (at most 24)", option)); return false; }
             (option == "--name" ? platform::server_name : platform::default_server) = value;
+        }
+        else if (option == "--owner")
+        {
+            if (value.empty() || value.size() > 18 || !isalnum(value)) { print("--owner must be a GrowID: letters and digits, at most 18"); return false; }
+            gServer_data.owner = value;
         }
         else if (option == "--server-data") gServer_data.config_file = value;
         else if (option == "--mysql-login") db.login_file = value;

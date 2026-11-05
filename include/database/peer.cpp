@@ -86,6 +86,8 @@ T peer::mysql_select(const std::string &column, const std::string &arg, bool by_
 }
 /* since we will only select during mysql_select_all */ // @note add templates here if use select outside of this file.
 template std::string peer::mysql_select<std::string>(const std::string&, const std::string&, bool); // @note tile_change.cpp (World Lock owner name)
+template signed peer::mysql_select<signed>(const std::string&, const std::string&, bool); // @note moderation.cpp (offline players)
+template long long peer::mysql_select<long long>(const std::string&, const std::string&, bool);
 
 void peer::mysql_select_all(bool by_user_id)
 {
@@ -98,6 +100,11 @@ void peer::mysql_select_all(bool by_user_id)
     this->level[0]   = this->mysql_select<signed>("level", "", by_user_id);
     this->level[1]   = this->mysql_select<signed>("xp", "", by_user_id);
     this->role       = static_cast<u_char>(this->mysql_select<signed>("role", "", by_user_id));
+    this->banned_until = this->mysql_select<long long>("banned_until", "", by_user_id);
+    this->ban_reason   = this->mysql_select<std::string>("ban_reason", "", by_user_id);
+    this->muted_until  = this->mysql_select<long long>("muted_until", "", by_user_id);
+    this->skin_color   = static_cast<u_int>(this->mysql_select<long long>("skin_color", "", by_user_id));
+    const std::string clothing = this->mysql_select<std::string>("clothing", "", by_user_id);
     auto inventory   = this->mysql_select<::blob>("inventory", "", by_user_id);
 
     if (inventory.size() >= sizeof(int)/*slot_size*/ + sizeof(short)/*size*/)
@@ -123,6 +130,34 @@ void peer::mysql_select_all(bool by_user_id)
         this->slots[2ull] = ::slot{9640, 1}; // @note my first world lock
         this->mysql_update_all();
     }
+    this->load_clothing(clothing); // @note after the inventory, so only items peer still has are worn
+}
+
+std::string peer::serialize_clothing() const
+{
+    std::string text{};
+    for (std::size_t i = 0; i < this->clothing.size(); ++i)
+    {
+        if (i != 0) text += ',';
+        text += std::to_string(static_cast<int>(this->clothing[i]));
+    }
+    return text;
+}
+
+void peer::load_clothing(const std::string &text)
+{
+    this->clothing.fill(0.0f);
+    std::size_t i = 0;
+    for (const std::string &part : readch(text, ','))
+    {
+        if (i >= this->clothing.size()) break;
+        const int id = atoi(part.c_str());
+        if (id > 0 && static_cast<std::size_t>(id) < items.size() && this->have_slot(::slot(id, 0)) > 0 &&
+            id_to_item(id).cloth_type == i)
+            this->clothing[i] = static_cast<float>(id);
+        ++i;
+    }
+    this->update_effects();
 }
 
 ::blob peer::serialize_inventory() const
@@ -141,16 +176,20 @@ void peer::mysql_update_all()
 {
     if (this->growid.empty()) return;
 
-    ::hStmt hStmt{ "UPDATE peer SET inventory = ?, gems = ?, level = ?, xp = ?, wl_storage = ? WHERE growid = ?" };
+    ::hStmt hStmt{ "UPDATE peer SET inventory = ?, gems = ?, level = ?, xp = ?, wl_storage = ?, clothing = ?, skin_color = ? WHERE growid = ?" };
     const ::blob inventory = this->serialize_inventory();
     const int level_value = this->level[0], xp_value = this->level[1];
+    const std::string clothing = this->serialize_clothing();
+    const long long skin = this->skin_color;
 
-    MYSQL_BIND params[6] = {
+    MYSQL_BIND params[8] = {
         make_bind_in(inventory),
         make_bind_in(this->gems),
         make_bind_in(level_value),
         make_bind_in(xp_value),
         make_bind_in(this->wl_storage),
+        make_bind_in(clothing),
+        make_bind_in(skin),
         make_bind_in(this->growid)
     };
     hStmt.bind_param(params);

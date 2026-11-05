@@ -1,33 +1,30 @@
 #include "pch.hpp"
 
-#include "onVariant/TradeStatus.hpp"
+#include "action/trade.hpp"
 
 #include "trade_item.hpp"
+
+#include <algorithm>
 
 void trade_item(ENetEvent& event, const ::hPipe &hPipe)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
-    short itemID = atoi(hPipe["itemID"].c_str());
-    short count  = atoi(hPipe["count"].c_str());
+    if (pPeer->trade_with == 0) return; // @note not trading
 
-    if (pPeer->trade_offers.size() >= 4) return; // @todo get the prompt message
+    const short itemID = atoi(hPipe["itemID"].c_str());
+    const int count  = atoi(hPipe["count"].c_str());
+
+    if (id_to_item(itemID).cat & CAT_UNTRADEABLE) return;
     if (count <= 0 || count > pPeer->have_slot(::slot(itemID, 0))) return;
 
-    pPeer->trade_offers.emplace_back(::slot{itemID, count});
-
-    on::TradeStatus(event.peer);
-
-    peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [&event, &pPeer](ENetPeer *peer) 
+    if (auto it = std::ranges::find(pPeer->trade_offers, itemID, &::slot::id); it != pPeer->trade_offers.end())
+        it->count = static_cast<short>(count); // @note changing the amount of something already offered
+    else if (pPeer->trade_offers.size() >= 4)
     {
-        ::peer *pOthers = static_cast<::peer*>(peer->data);
+        send_varlist(event.peer, { "OnTextOverlay", "You can only offer 4 different items." });
+        return;
+    }
+    else pPeer->trade_offers.emplace_back(::slot{itemID, static_cast<short>(count)});
 
-        if (pOthers->user_id == /*@todo trading with*/0 ||
-            pOthers->user_id == pPeer->user_id)
-        {
-            send_varlist(event.peer, { "OnTextOverlay", "The deal has changed" });
-            // action|play_sfx
-            // audio/tile_removed.wav
-            // delayMS|0
-        }
-    });
+    trade::changed(event);
 }

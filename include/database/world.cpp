@@ -133,7 +133,7 @@ void block::reset()
                 blob.u8(this->lock_state);
                 blob.i32(this->owner);
                 blob.i32(access);
-                /* @todo access list */
+                for (const int uid : this->access) if (uid > 0) blob.i32(uid); // @note the access list follows its count
             }
             else if (type == '\x04'/*seed*/)
             {
@@ -230,6 +230,12 @@ void world::mysql_select_all()
 {
     this->name = this->mysql_select<std::string>("name");
     this->owner = this->mysql_select<int>("owner");
+    this->minimum_entry_level = static_cast<u_char>(std::clamp(this->mysql_select<int>("min_level"), 1, 125));
+    {
+        std::size_t i = 0;
+        for (const std::string &uid : readch(this->mysql_select<std::string>("access"), ','))
+            if (const int id = atoi(uid.c_str()); id > 0 && i < this->access.size()) this->access[i++] = id;
+    }
     {
         ::blob blob = this->mysql_select<::blob>("blocks");
         if (blob.size() == 0ull) // @note the server stopped before this world was ever saved
@@ -282,6 +288,7 @@ void world::mysql_select_all()
 
                     blob.read_u32(tree.tick, pos);
                     blob.read_u8(tree.fruit, pos);
+                    if (tree.tick > ticks()) tree.tick = ticks(); // @note a timer from the future would never finish
                 }
             }
             ++i;
@@ -327,6 +334,13 @@ void world::save()
     if (this->blocks.empty()) return; // @note never overwrite a saved world with nothing
 
     this->mysql_update("owner", this->owner);
+    this->mysql_update("min_level", static_cast<int>(this->minimum_entry_level));
+    {
+        std::string access{};
+        for (const int uid : this->access)
+            if (uid > 0) access += (access.empty() ? "" : ",") + std::to_string(uid);
+        this->mysql_update("access", access);
+    }
     {
         ::blob blob;
 
@@ -519,6 +533,7 @@ void send_tile_update(ENetEvent &event, ::gamePacket gamePacket, ::block &block,
             blob.u8(world.lock_state);
             blob.i32(world.owner);
             blob.i32(access);
+            for (const int uid : world.access) if (uid > 0) blob.i32(uid);
             break;
         }
         case type::SEED:

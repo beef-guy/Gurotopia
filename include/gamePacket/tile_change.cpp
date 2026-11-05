@@ -17,6 +17,8 @@
 #include "tile_change.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <ctime>
 
 void tile_change(ENetEvent& event, ::gamePacket gamePacket) 
 {
@@ -28,6 +30,14 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
         if (world == worlds.end()) return;
         if (!valid_tile(*world, gamePacket.punch)) return;
+
+        /* @note reach: a normal client can't punch or build further than a few tiles away. staff skip this */
+        if (pPeer->role < MODERATOR)
+        {
+            const ::pos standing = pPeer->pos.by_32(true);
+            const float reach = (pPeer->clothing[clothing::HAND] == 5480/*Rayman's Fist*/) ? 8.0f : 6.0f;
+            if (std::abs(gamePacket.punch.x - standing.x) > reach || std::abs(gamePacket.punch.y - standing.y) > reach) return;
+        }
 
         ::block &block = world->blocks[cord(gamePacket.punch.x, gamePacket.punch.y)];
 
@@ -455,7 +465,8 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
 
                         if (gamePacket.punch == _p->pos.by_32(true))
                         {
-                            _p->state |= S_DUCT_TAPE; // @todo add a 10 minute timer that will remove it.
+                            _p->state |= S_DUCT_TAPE;
+                            _p->duct_tape_until = std::time(nullptr) + 10 * 60; // @note falls off after 10 minutes, checked when they next talk
                             on::SetClothing(peer);
                         }
                     });
@@ -533,6 +544,16 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
 
                     if (pPeer->user_id == world->owner)
                     {
+                        std::string access_rows{};
+                        for (const int uid : world->access)
+                        {
+                            if (uid <= 0) continue;
+                            ::peer member{}; // @note offline "fake" peer, only used to read the name
+                            member.user_id = uid;
+                            access_rows += std::format("add_checkbox|checkbox_access_{}|`w{}``|1\n", uid, member.mysql_select<std::string>("growid", "", true));
+                        }
+                        if (access_rows.empty()) access_rows = "add_label|small|Currently, you're the only one with access.``|left\n";
+
                         send_varlist(event.peer, {
                             "OnDialogRequest",
                             std::format(
@@ -543,7 +564,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                                 "embed_data|tilex|{}\n"
                                 "embed_data|tiley|{}\n"
                                 "add_spacer|small|\n"
-                                "add_label|small|Currently, you're the only one with access.``|left\n"
+                                "{}"
                                 "add_spacer|small|\n"
                                 "add_player_picker|playerNetID|`wAdd``|\n"
                                 "add_checkbox|checkbox_public|Allow anyone to Build and Break|{}\n"
@@ -558,7 +579,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                                 "add_button|changecat|`wCategory: None``|noflags|0|0|\n"
                                 "add_button|getKey|Get World Key|noflags|0|0|\n"
                                 "end_dialog|lock_edit|Cancel|OK|\n",
-                                item.raw_name, item.id, gamePacket.punch.x, gamePacket.punch.y, to_char(world->is_public), (world->lock_state & DISABLE_MUSIC) ? "1" : "0", world->minimum_entry_level
+                                item.raw_name, item.id, gamePacket.punch.x, gamePacket.punch.y, access_rows, to_char(world->is_public), (world->lock_state & DISABLE_MUSIC) ? "1" : "0", static_cast<int>(world->minimum_entry_level)
                             )
                         });
                     }

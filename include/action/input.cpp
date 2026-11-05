@@ -1,13 +1,28 @@
 #include "pch.hpp"
 
 #include "commands/__command.hpp"
+#include "commands/moderation.hpp"
 #include "onVariant/ConsoleMessage.hpp"
+#include "onVariant/SetClothing.hpp"
 #include "tools/time.hpp"
 #include "tools/random.hpp"
 
 #include "input.hpp"
 
 #include <algorithm>
+#include <ctime>
+
+namespace
+{
+    /* @return true (after telling them) while this peer is muted */
+    bool muted(ENetEvent &event, ::peer &peer)
+    {
+        const long long now = std::time(nullptr);
+        if (peer.muted_until <= now) return false;
+        on::ConsoleMessage(event.peer, std::format("`4You are muted for {} more.``", moderation::duration(peer.muted_until - now)));
+        return true;
+    }
+}
 
 void action::input(ENetEvent& event, const std::string& header)
 {
@@ -39,13 +54,23 @@ void action::input(ENetEvent& event, const std::string& header)
         std::string_view command = text;
         command = command.substr(0, command.find(' '));
 
-        if (auto it = cmd_pool.find(command); it != cmd_pool.end())
-            it->second(event, std::move(text));
-        else 
+        const bool talking = (command == "/sb" || command == "/msg" || command == "/me");
+        if (auto it = cmd_pool.find(command); it == cmd_pool.end() || !can_use(*pPeer, command, it->second))
             send_gameMessage(event.peer, {.message = "action|log\nmsg|`4Unknown command.`` Enter `$/?`` for a list of valid commands."});
+        else if (talking && muted(event, *pPeer)) return;
+        else
+            it->second.run(event, std::move(text));
     }
     else 
     {
+        if (muted(event, *pPeer)) return;
+        if ((pPeer->state & S_DUCT_TAPE) && pPeer->duct_tape_until != 0 && std::time(nullptr) >= pPeer->duct_tape_until)
+        {
+            pPeer->state &= ~S_DUCT_TAPE; // @note duct tape falls off after a while
+            pPeer->duct_tape_until = 0;
+            on::ConsoleMessage(event.peer, "`2The duct tape fell off, you can talk again!``");
+            on::SetClothing(event.peer);
+        }
         if (pPeer->state & S_DUCT_TAPE)
         {
             for (char &c : text)
