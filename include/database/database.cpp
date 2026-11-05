@@ -5,6 +5,7 @@
 #include <fstream>
 
 #include "database.hpp"
+#include "platform.hpp"
 
 ::mysql_gateway db;
 
@@ -92,8 +93,12 @@ void mysql_gateway::mysql_connect()
     }
     print(std::format("using database {}", this->database));
 
-    create_table_if_not_exist();
-    integrity();
+    if (!platform::gateway) // @note the gateway has no players or worlds of its own
+    {
+        create_table_if_not_exist();
+        integrity();
+    }
+    platform::create_tables();
 }
 
 void mysql_gateway::load_login()

@@ -11,6 +11,7 @@
 #include "include/database/database.hpp"
 #include "include/automate/holiday.hpp"
 #include "include/tools/terminal.hpp"
+#include "include/database/platform.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -46,6 +47,12 @@ static void print_help()
         "  --max-players N     most players online at once (default: 50)\n"
         "  --https-port N      port for the game's login request (default: 443)\n"
         "  --no-https          don't answer the login request. use for a 2nd server on the same PC\n"
+        "\n"
+        "  many servers behind one IP:\n"
+        "  --platform-db NAME  database that lists the servers (e.g. gurotopia_platform)\n"
+        "  --gateway           only handle logins, then send each player to the server they typed\n"
+        "  --default-server N  gateway: where to send players who typed no server name\n"
+        "  --name NAME         this server's name in the platform database (what players type)\n"
         "  --help              show this"
     );
 }
@@ -62,6 +69,11 @@ static bool parse_options(int argc, char *argv[])
         }
         catch (const std::logic_error &) { return false; }
     };
+    const auto database_name = [](const std::string &name) -> bool
+    {
+        return !name.empty() && name.size() <= 64 &&
+            std::ranges::all_of(name, [](unsigned char c) { return std::isalnum(c) || c == '_'; });
+    };
     for (int i = 1; i < argc; ++i)
     {
         const std::string option = argv[i];
@@ -73,6 +85,11 @@ static bool parse_options(int argc, char *argv[])
         if (option == "--no-https")
         {
             gServer_data.https_port = 0;
+            continue;
+        }
+        if (option == "--gateway")
+        {
+            platform::gateway = true;
             continue;
         }
         if (i + 1 >= argc)
@@ -100,10 +117,18 @@ static bool parse_options(int argc, char *argv[])
         }
         else if (option == "--database")
         {
-            const bool valid = !value.empty() && value.size() <= 64 &&
-                std::ranges::all_of(value, [](unsigned char c) { return std::isalnum(c) || c == '_'; });
-            if (!valid) { print("--database may only use letters, digits and _ (at most 64)"); return false; }
+            if (!database_name(value)) { print("--database may only use letters, digits and _ (at most 64)"); return false; }
             db.database = value;
+        }
+        else if (option == "--platform-db")
+        {
+            if (!database_name(value)) { print("--platform-db may only use letters, digits and _ (at most 64)"); return false; }
+            platform::database = value;
+        }
+        else if (option == "--name" || option == "--default-server")
+        {
+            if (!platform::valid_name(value)) { print(std::format("{} may only use letters and digits (at most 24)", option)); return false; }
+            (option == "--name" ? platform::server_name : platform::default_server) = value;
         }
         else if (option == "--server-data") gServer_data.config_file = value;
         else if (option == "--mysql-login") db.login_file = value;
@@ -113,7 +138,30 @@ static bool parse_options(int argc, char *argv[])
             return false;
         }
     }
+    if ((platform::gateway || !platform::server_name.empty()) && !platform::enabled())
+    {
+        print("--gateway and --name need --platform-db too");
+        return false;
+    }
+    if (platform::gateway && !platform::server_name.empty())
+    {
+        print("a gateway has no --name, it sends players to the named servers");
+        return false;
+    }
+    if (platform::gateway) db.database = platform::database; // @note the gateway only reads the server list
     return true;
+}
+
+/* @note how many players are logged in here */
+static int count_online()
+{
+    int online = 0;
+    peers("", PeerSearch::EVERYONE, [&online](ENetPeer *peer)
+    {
+        const ::peer *pPeer = static_cast<::peer*>(peer->data);
+        if (pPeer != nullptr && pPeer->authenticated) ++online;
+    });
+    return online;
 }
 
 int main(int argc, char *argv[])
@@ -161,6 +209,13 @@ int main(int argc, char *argv[])
         decode_items_dat();
         parse_store();
         check_for_holiday();
+
+        if (platform::gateway) print(std::format("gateway mode: sending players to the servers listed in {}.servers", platform::database));
+        else if (!platform::server_name.empty())
+        {
+            platform::report("running", 0);
+            print(std::format("running as server {} in {}", platform::server_name, platform::database));
+        }
     }
     catch (const std::exception &exc)
     {
@@ -181,12 +236,14 @@ int main(int argc, char *argv[])
         if (clock::now() - last_save >= std::chrono::seconds(60)) // @note so a crash or force stop loses at most a minute
         {
             save_everything();
+            platform::report("running", count_online()); // @note also tells the gateway this server is still alive
             last_save = clock::now();
         }
     }
 
     safe_disconnect_peers(gSignal);
     save_everything();
+    platform::report("stopped", 0);
     worlds.clear(); // @note before the database connection closes
     enet_host_destroy(host);
     if (host != nullptr) host = nullptr;

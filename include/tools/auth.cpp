@@ -7,6 +7,9 @@
 #include <chrono>
 #include <unordered_map>
 
+#include "database/database.hpp"
+#include "database/platform.hpp"
+
 #include "auth.hpp"
 
 namespace
@@ -127,7 +130,58 @@ bool auth::verify_password(const std::string &password, const std::string &store
     return CRYPTO_memcmp(hash, expected.data(), HASH_SIZE) == 0;
 }
 
-auth::ticket auth::issue_ticket(int user_id)
+namespace
+{
+    bool ticket_matches(const auth::ticket &expected, int token, const std::string &uuid)
+    {
+        const bool token_ok = (token != 0 && token == expected.token);
+        const bool uuid_ok  = (uuid.size() == expected.uuid.size() && !uuid.empty() &&
+                               CRYPTO_memcmp(uuid.data(), expected.uuid.data(), uuid.size()) == 0);
+        return token_ok || uuid_ok;
+    }
+
+    void store_ticket_in_platform(const std::string &server, int user_id, const auth::ticket &ticket)
+    {
+        ::hStmt hStmt{ std::format(
+            "REPLACE INTO `{}`.login_tickets (server_name, uid, token, uuid, expires_at) "
+            "VALUES (?, ?, ?, ?, NOW() + INTERVAL {} SECOND)", platform::database, TICKET_LIFETIME.count()) };
+        MYSQL_BIND params[4] = { make_bind_in(server), make_bind_in(user_id), make_bind_in(ticket.token), make_bind_in(ticket.uuid) };
+        hStmt.bind_param(params);
+        hStmt.execute();
+
+        mysql_query(db.mysql, std::format("DELETE FROM `{}`.login_tickets WHERE expires_at < NOW()", platform::database).c_str());
+    }
+
+    bool redeem_platform_ticket(int user_id, int token, const std::string &uuid)
+    {
+        auth::ticket stored{};
+        {
+            ::hStmt hStmt{ std::format(
+                "SELECT token, uuid FROM `{}`.login_tickets WHERE server_name = ? AND uid = ? AND expires_at >= NOW() LIMIT 1",
+                platform::database) };
+            MYSQL_BIND params[2] = { make_bind_in(platform::server_name), make_bind_in(user_id) };
+            hStmt.bind_param(params);
+
+            u_long length = 0;
+            MYSQL_BIND results[2] = { make_bind_out(stored.token), make_bind_out(stored.uuid) };
+            results[1].length = &length;
+            if (hStmt.pStmt == nullptr || mysql_stmt_bind_result(hStmt.pStmt, results)) return false;
+
+            hStmt.execute();
+            if (mysql_stmt_fetch(hStmt.pStmt) != 0) return false; // @note no ticket for this player here
+            stored.uuid.resize(length);
+        }
+        if (!ticket_matches(stored, token, uuid)) return false;
+
+        ::hStmt hStmt{ std::format("DELETE FROM `{}`.login_tickets WHERE server_name = ? AND uid = ?", platform::database) };
+        MYSQL_BIND params[2] = { make_bind_in(platform::server_name), make_bind_in(user_id) };
+        hStmt.bind_param(params);
+        hStmt.execute();
+        return hStmt.pStmt != nullptr && mysql_stmt_affected_rows(hStmt.pStmt) == 1; // @note a ticket works once, even if two logins race
+    }
+}
+
+auth::ticket auth::issue_ticket(int user_id, const std::string &target_server)
 {
     const clock::time_point now = clock::now();
     std::erase_if(tickets, [now](const auto &pair) { return pair.second.expires < now; }); // @note forget expired tickets
@@ -141,12 +195,19 @@ auth::ticket auth::issue_ticket(int user_id)
     if (ticket.token == 0) ticket.token = 1;
     ticket.uuid = to_hex(raw + 4, 16);
 
+    if (platform::enabled() && !target_server.empty())
+    {
+        store_ticket_in_platform(target_server, user_id, ticket);
+        return ticket;
+    }
     tickets[user_id] = { ticket, now + TICKET_LIFETIME };
     return ticket;
 }
 
 bool auth::redeem_ticket(int user_id, int token, const std::string &uuid)
 {
+    if (platform::enabled() && !platform::server_name.empty() && redeem_platform_ticket(user_id, token, uuid)) return true;
+
     auto it = tickets.find(user_id);
     if (it == tickets.end()) return false;
 
@@ -157,10 +218,7 @@ bool auth::redeem_ticket(int user_id, int token, const std::string &uuid)
         return false;
     }
 
-    const bool token_ok = (token != 0 && token == pending.ticket.token);
-    const bool uuid_ok  = (uuid.size() == pending.ticket.uuid.size() &&
-                           CRYPTO_memcmp(uuid.data(), pending.ticket.uuid.data(), uuid.size()) == 0);
-    if (!token_ok && !uuid_ok) return false; // @note a wrong guess doesn't burn the real player's ticket. guessing is rate limited per IP.
+    if (!ticket_matches(pending.ticket, token, uuid)) return false; // @note a wrong guess doesn't burn the real player's ticket. guessing is rate limited per IP.
 
     tickets.erase(it); // @note a ticket works once
     return true;

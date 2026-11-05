@@ -3,6 +3,7 @@
 #include "automate/holiday.hpp"
 #include "tools/auth.hpp"
 #include "tools/terminal.hpp"
+#include "database/platform.hpp"
 
 #include "tankIDName.hpp"
 
@@ -11,6 +12,11 @@
 void action::tankIDName(ENetEvent& event, const std::string& header)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    if (platform::gateway) // @note players only log in at the gateway, they play on the server it sends them to
+    {
+        send_gameMessage(event.peer, {.message = "action|logon_fail\n"});
+        return;
+    }
 
     std::vector<std::string> pipes = readch(header, '|');
     if (pipes.empty() || pipes.size() < 10ull) {

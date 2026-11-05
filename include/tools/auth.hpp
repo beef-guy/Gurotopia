@@ -22,7 +22,8 @@
             int token{};
             std::string uuid{};
         };
-        extern ticket issue_ticket(int user_id);
+        /* @note target_server: the server the player is going to. with a platform database the ticket is kept there, so another process can check it */
+        extern ticket issue_ticket(int user_id, const std::string &target_server = "");
         extern bool redeem_ticket(int user_id, int token, const std::string &uuid);
 
         /* @note limits wrong passwords per IP address */
