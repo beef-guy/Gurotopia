@@ -24,7 +24,7 @@ void on::RequestWorldSelectMenu(ENetEvent& event)
 
     std::vector<std::string> popular_names{};
     for (const ::world &world : worlds)
-        if (world.visitors > 0) popular_names.emplace_back(world.name); // @todo only fetch top 10 worlds, instead of all the worlds with people.
+        if (world.visitors > 0 && !world.jammed()) popular_names.emplace_back(world.name); // @note Signal Jammer hides a world // @todo only fetch top 10 worlds, instead of all the worlds with people.
 
     send_varlist(event.peer, { 
         "OnRequestWorldSelectMenu", 

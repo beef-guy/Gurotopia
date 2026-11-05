@@ -101,6 +101,10 @@ public:
     int user_id{}; // @note unqiue user id.
     std::string growid{""}, password{""};
     std::time_t created_at{}; // @note when inserted in SQL (account age)
+    long long playtime{}; // @note seconds played before this session
+    std::time_t login_at{}; // @note when this session started
+    /* @return seconds played, including this session */
+    long long total_playtime() const { return this->playtime + ((this->login_at > 0) ? std::time(nullptr) - this->login_at : 0); }
     u_char role{};
     std::array<float, 10ull> clothing{}; // @note peer's clothing {id, clothing::}
     u_char punch_effect{}; // @note last equipped clothing that has a effect. supporting 0-255 effects.
@@ -120,6 +124,7 @@ public:
 
     ::pos pos{}; // @note position 1D {x, y}
     ::pos rest_pos{}; // @note respawn position {x, y}
+    std::string door_target{}; // @note door ID to appear at in the next world (doors set to WORLD:ID)
     bool facing_left{}; // @note peer is directed towards the left direction
     short pain_hp{ 10 };
 
@@ -135,6 +140,10 @@ public:
     * @return slot count (0 if not exist)
     */
     u_short have_slot(::slot slot);
+    /* @return empty backpack slots */
+    int free_slots() const;
+    /* @return true if `count` of `id` fits in the backpack */
+    bool can_hold(short id, int count);
     ::blob serialize_inventory() const;
 
     std::vector<short> fav{};

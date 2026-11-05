@@ -14,11 +14,48 @@
 #include "item_activate_object.hpp"
 #include "item_activate.hpp"
 
+#include "action/dialog_return/tile_extras.hpp"
+
 #include "tile_change.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <ctime>
+
+namespace
+{
+    std::vector<int> tiles_of_lock(const ::world &world, const ::pos &lock_pos)
+    {
+        const int lock_index = cord(lock_pos.x_int(), lock_pos.y_int());
+        std::vector<int> tiles{lock_index};
+        for (int i = 0; i < static_cast<int>(world.blocks.size()); ++i)
+        {
+            const ::block &block = world.blocks[i];
+            if ((block.state[2] & S_PARENT) && (block.state[0] | (block.state[1] << 8)) == lock_index) tiles.push_back(i);
+        }
+        return tiles;
+    }
+    void send_tiles(ENetEvent &event, ::world &world, const std::vector<int> &tiles)
+    {
+        for (const int i : tiles)
+            send_tile_update(event, ::gamePacket{.id = world.blocks[i].fg, .punch = ::pos{i % 100, i / 100}}, world.blocks[i], world);
+    }
+}
+
+/* @brief tell everyone in the world which tiles an area lock now holds */
+void refresh_lock_tiles(ENetEvent &event, ::world &world, const ::pos &lock_pos)
+{
+    send_tiles(event, world, tiles_of_lock(world, lock_pos));
+}
+
+/* @brief the lock was broken: free its tiles */
+void remove_area_lock(ENetEvent &event, ::world &world, const ::pos &lock_pos)
+{
+    const std::vector<int> tiles = tiles_of_lock(world, lock_pos);
+    world.release_area_lock(lock_pos);
+    std::erase_if(world.area_locks, [&](const ::area_lock &lock) { return lock.pos == lock_pos; });
+    send_tiles(event, world, std::vector<int>(tiles.begin() + 1, tiles.end())); // @note the lock's own tile is updated by the break
+}
 
 void tile_change(ENetEvent& event, ::gamePacket gamePacket) 
 {
@@ -53,12 +90,13 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 return; // @note avoid hitting the block
             }
 
-        if (!(item.cat & CAT_PUBLIC)) // @note if block is public skip validating if peer is owner or access
-            if ((world->owner && !world->is_public && !pPeer->role) &&
-                (pPeer->user_id != world->owner && std::ranges::find(world->access, pPeer->user_id) == world->access.end())) return;
+        /* @note wrenching is checked per block below (anyone may wrench a vending machine to buy from it) */
+        if (gamePacket.id != 32 && !(item.cat & CAT_PUBLIC)) // @note if block is public skip validating if peer is owner or access
+            if (!world->can_edit(*pPeer, gamePacket.punch, gamePacket.id == 18)) return;
 
         bool tile_update{};
         bool lock_visuals{}; // @todo this looks sloppy
+        bool place_area_lock{};
         
         if (gamePacket.id == 18) // @note punching a block
         {
@@ -139,7 +177,17 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 case type::MAIN_DOOR: throw std::runtime_error("(stand over and punch to use)");
                 case type::LOCK:
                 {
-                    if (is_tile_lock(item.id)) break; // @todo seperate area for 'range_lock'
+                    if (is_tile_lock(item.id))
+                    {
+                        const ::area_lock *lock = world->lock_at(gamePacket.punch);
+                        if (lock != nullptr && lock->owner != pPeer->user_id && pPeer->role < MODERATOR)
+                        {
+                            ::peer owner{};
+                            owner.user_id = lock->owner;
+                            throw std::runtime_error(std::format("`w{}``'s `${}``", owner.mysql_select<std::string>("growid", "", true), item.raw_name));
+                        }
+                        break;
+                    }
 
                     if (world->owner != pPeer->user_id)
                     {
@@ -228,6 +276,33 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 case type::CHEST:
                 {
                     block.state[2] ^= S_TOGGLE;
+                    if (item.id == 226/*Signal Jammer*/)
+                    {
+                        const std::string message = (block.state[2] & S_TOGGLE) ?
+                            "Signal Jammer enabled. This world is now `4hidden`` from the universe." :
+                            "Signal Jammer disabled.  This world is `2visible`` to the universe.";
+                        peers(world->name, PeerSearch::WORLD, [&](ENetPeer *peer) { on::ConsoleMessage(peer, message); });
+                        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, message, 0u, 1u });
+                    }
+                    break;
+                }
+                case type::VENDING_MACHINE:
+                {
+                    auto vend = std::ranges::find(world->vendings, gamePacket.punch, &::vending::pos);
+                    if (vend != world->vendings.end() && (vend->count > 0 || vend->earned > 0)) 
+                        throw std::runtime_error("Empty the machine before you break it!");
+                    break;
+                }
+                case type::STORAGE_BOX:
+                {
+                    auto box = std::ranges::find(world->storages, gamePacket.punch, &::storage::pos);
+                    if (box != world->storages.end() && !box->items.empty()) throw std::runtime_error("Empty the box first!");
+                    break;
+                }
+                case type::DISPLAY_BLOCK:
+                {
+                    auto display = std::ranges::find(world->displays, gamePacket.punch, &::display::pos);
+                    if (display != world->displays.end() && display->id != 0) throw std::runtime_error("Remove the item from the Display Block first!");
                     break;
                 }
                 case type::RANDOM:
@@ -256,10 +331,14 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 std::erase_if(world->doors, [&](const ::door &door) { return door.pos == gamePacket.punch; });
                 std::erase_if(world->signs, [&](const ::sign &sign) { return sign.pos == gamePacket.punch; });
                 std::erase_if(world->trees, [&](const ::tree &tree) { return tree.pos == gamePacket.punch; });
+                std::erase_if(world->vendings, [&](const ::vending &vend) { return vend.pos == gamePacket.punch; });
+                std::erase_if(world->storages, [&](const ::storage &box) { return box.pos == gamePacket.punch; });
+                std::erase_if(world->displays, [&](const ::display &display) { return display.pos == gamePacket.punch; });
+                if (is_tile_lock(item.id)) remove_area_lock(event, *world, gamePacket.punch);
             }
 
             /* @todo update these changes with tile_update() */
-            block.state[2] = 0x00; // @note reset tile direction
+            block.state[2] &= S_PARENT; // @note reset tile direction, but the tile stays inside its area lock
             block.state[3] &= ~S_VANISH; // @note remove paint
             
             if (item.id == 392/*Heartstone*/ || item.id == 3402/*GBC*/ || item.id == 9350/*Super GBC*/)
@@ -519,6 +598,73 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     block.state[3] &= ~S_VANISH;
                     color = bgra::BLUE | bgra::GREEN | bgra::RED, particle = 0xa8; // @todo get exact color. I just guessed T-T
                 }
+                case 228:  // @note Grow Spray Fertilizer: 1 hour
+                case 1778: // @note Deluxe Grow Spray: 24 hours
+                case 1062: // @note Ultra Grow Spray: fully grown
+                {
+                    const ::item &seed = id_to_item(block.fg);
+                    auto tree = std::ranges::find(world->trees, gamePacket.punch, &::tree::pos);
+                    if (seed.type != type::SEED || tree == world->trees.end()) throw std::runtime_error("Use this on a growing tree!");
+
+                    const u_int grown = ticks() - tree->tick;
+                    if (grown >= static_cast<u_int>(seed.tick)) throw std::runtime_error("This tree is already fully grown!");
+
+                    const u_int boost = (item.id == 228) ? 3600u : (item.id == 1778) ? 86400u : static_cast<u_int>(seed.tick);
+                    const u_int left = static_cast<u_int>(seed.tick) - grown;
+                    tree->tick -= std::min(boost, left);
+
+                    const std::string tree_name = seed.raw_name.substr(0, seed.raw_name.length() - 5/* Seed*/);
+                    send_varlist(event.peer, { "OnTalkBubble", pPeer->netid,
+                        (item.id == 1062 || boost >= left) ?
+                            std::format("`w{} Tree`` is now fully grown!", tree_name) :
+                            std::format("`w{} Tree`` aged `${}``!", tree_name, (item.id == 228) ? "1 hour" : "24 hours"),
+                        0u, 1u });
+                    color = bgra::GREEN | bgra::ALPHA, particle = 0x2c;
+                    break;
+                }
+                case 5706: // @note Small Seed Pack: 5 random seeds, one of them rare. source: https://growtopia.fandom.com/wiki/Small_Seed_Pack
+                case 8970: // @note Bountiful Seed Pack: 5 random bountiful seeds, one of them rare
+                {
+                    std::vector<short> common{}, rare{};
+                    for (const ::item &seed : items)
+                    {
+                        if (seed.type != type::SEED || (seed.cat & CAT_UNTRADEABLE) || seed.rarity >= 999 || seed.rarity < 1) continue;
+                        if (seed.raw_name.starts_with("null_item") || (id_to_item(seed.id - 1).cat & CAT_UNTRADEABLE)) continue; // @note unused ids and untradeable blocks
+                        if (item.id == 8970 && seed.raw_name.find("Bountiful") == std::string::npos) continue;
+                        if (item.id == 5706 && seed.raw_name.find("Bountiful") != std::string::npos) continue;
+                        (seed.rarity >= 13 && seed.rarity <= 60) ? rare.push_back(seed.id) : (seed.rarity < 13) ? common.push_back(seed.id) : void();
+                    }
+                    if (common.empty()) common = rare;
+                    if (rare.empty()) rare = common;
+                    if (common.empty()) return;
+
+                    std::vector<short> picked{};
+                    for (int i = 0; i < 4; ++i) picked.push_back(common[RandomRange(0, static_cast<int>(common.size()))]); // @note RandomRange's top is exclusive
+                    picked.push_back(rare[RandomRange(0, static_cast<int>(rare.size()))]);
+
+                    {
+                        std::vector<short> unique = picked;
+                        std::ranges::sort(unique);
+                        unique.erase(std::unique(unique.begin(), unique.end()), unique.end());
+                        int new_slots = 0;
+                        for (const short id : unique)
+                        {
+                            if (pPeer->have_slot(::slot(id, 0)) == 0) ++new_slots;
+                            else if (pPeer->have_slot(::slot(id, 0)) + std::ranges::count(picked, id) > 200) throw std::runtime_error("You don't have enough room in your backpack!");
+                        }
+                        if (pPeer->free_slots() < new_slots) throw std::runtime_error("You don't have enough room in your backpack!");
+                    }
+
+                    std::string received{};
+                    for (const short id : picked)
+                    {
+                        modify_item_inventory(event, ::slot(id, 1));
+                        received += std::format("{}`w{}``", received.empty() ? "" : ", ", id_to_item(id).raw_name);
+                    }
+                    on::ConsoleMessage(event.peer, std::format("You opened the `w{}`` and received: {}", item.raw_name, received));
+                    send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, std::format("You opened the `w{}``!", item.raw_name), 0u, 1u });
+                    break;
+                }
                 case 3822: break; // Red Hair Dye
                 case 3824: break; // Green Hair Dye
                 case 3826: break; // Blue Hair Dye
@@ -540,7 +686,57 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
             {
                 case type::LOCK:
                 {
-                    if (is_tile_lock(item.id)) break; // @todo seperate area for 'range_lock'
+                    if (is_tile_lock(item.id))
+                    {
+                        const ::area_lock *lock = world->lock_at(gamePacket.punch);
+                        if (lock == nullptr) break;
+                        ::peer owner{};
+                        owner.user_id = lock->owner;
+                        if (lock->owner != pPeer->user_id && pPeer->role < MODERATOR)
+                            throw std::runtime_error(std::format("`w{}``'s `${}``", owner.mysql_select<std::string>("growid", "", true), item.raw_name));
+
+                        std::string access_rows{};
+                        for (const int uid : lock->access)
+                        {
+                            ::peer member{};
+                            member.user_id = uid;
+                            access_rows += std::format("add_checkbox|checkbox_access_{}|`w{}``|1\n", uid, member.mysql_select<std::string>("growid", "", true));
+                        }
+                        if (access_rows.empty()) access_rows = "add_label|small|Currently, you're the only one with access.``|left\n";
+
+                        std::string builder_rows{};
+                        if (item.id == 4994/*Builder's Lock*/)
+                            builder_rows = std::format(
+                                "add_spacer|small|\n"
+                                "add_label|small|`wPeople with access may only:``|left\n"
+                                "add_checkbox|checkbox_buildonly|Build|{}\n"
+                                "add_checkbox|checkbox_breakonly|Break|{}\n",
+                                lock->builder_mode == 1 ? "1" : "0", lock->builder_mode == 2 ? "1" : "0");
+
+                        send_varlist(event.peer, {
+                            "OnDialogRequest",
+                            std::format(
+                                "set_default_color|`o\n"
+                                "add_label_with_icon|big|`wEdit {}``|left|{}|\n"
+                                "add_popup_name|LockEdit|\n"
+                                "add_label|small|`wAccess list:``|left\n"
+                                "embed_data|tilex|{}\n"
+                                "embed_data|tiley|{}\n"
+                                "add_spacer|small|\n"
+                                "{}"
+                                "add_spacer|small|\n"
+                                "add_player_picker|playerNetID|`wAdd``|\n"
+                                "add_checkbox|checkbox_public|Allow anyone to Build and Break|{}\n"
+                                "add_checkbox|checkbox_ignore|Ignore empty air|{}\n"
+                                "{}"
+                                "add_button|recalcLock|`wRe-apply lock``|noflags|0|0|\n"
+                                "end_dialog|lock_edit|Cancel|OK|\n",
+                                item.raw_name, item.id, gamePacket.punch.x, gamePacket.punch.y, access_rows,
+                                lock->is_public ? "1" : "0", lock->ignore_air ? "1" : "0", builder_rows
+                            )
+                        });
+                        break;
+                    }
 
                     if (pPeer->user_id == world->owner)
                     {
@@ -588,9 +784,11 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 case type::DOOR:
                 case type::PORTAL:
                 {
+                    if (!world->can_edit(*pPeer, gamePacket.punch, false)) break; // @note only people who can build here
                     std::string label, dest, id{};
+                    bool is_public = true;
                     for (::door& door : world->doors)
-                        if (door.pos == gamePacket.punch) { label = door.label, dest = door.dest, id = door.id; break; }
+                        if (door.pos == gamePacket.punch) { label = door.label, dest = door.dest, id = door.id, is_public = door.is_public; break; }
                         
                     send_varlist(event.peer, {
                         "OnDialogRequest",
@@ -604,17 +802,18 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                             "add_smalltext|Leave `2WORLDNAME`` blank (:ID) to go to the door with `2ID`` in the `2Current World``.|left|\n"
                             "add_text_input|door_id|ID|{}|11|\n"
                             "add_smalltext|Set a unique `2ID`` to target this door as a Destination from another!|left|\n"
-                            "add_checkbox|checkbox_locked|Is open to public|1\n"
+                            "add_checkbox|checkbox_locked|Is open to public|{}\n"
                             "embed_data|tilex|{}\n"
                             "embed_data|tiley|{}\n"
                             "end_dialog|door_edit|Cancel|OK|", 
-                            item.raw_name, item.id, label, dest, id, gamePacket.punch.x, gamePacket.punch.y
+                            item.raw_name, item.id, label, dest, id, is_public ? "1" : "0", gamePacket.punch.x, gamePacket.punch.y
                         )
                     });
                     break;
                 }
                 case type::SIGN:
                 {
+                    if (!world->can_edit(*pPeer, gamePacket.punch, false)) break; // @note only people who can build here
                     std::string label{};
                     for (::sign& sign : world->signs)
                         if (sign.pos == gamePacket.punch) { label = sign.label; break; }
@@ -637,6 +836,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 }
                 case type::ENTRANCE:
                 {
+                    if (!world->can_edit(*pPeer, gamePacket.punch, false)) break; // @note only people who can build here
                     send_varlist(event.peer, {
                         "OnDialogRequest",
                         std::format(
@@ -653,26 +853,17 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 }
                 case type::DISPLAY_BLOCK:
                 {
-                    // @todo
+                    display_wrench(event, *world, gamePacket.punch);
                     break;
                 }
                 case type::VENDING_MACHINE:
                 {
-                    send_varlist(event.peer, {
-                        "OnDialogRequest",
-                        ::create_dialog()
-                            .set_default_color("`o")
-                            .add_label_with_icon("big", std::format("`w{}``", item.raw_name), item.id)
-                            .add_spacer("small")
-                            .embed_data("tilex", gamePacket.punch.x)
-                            .embed_data("tiley", gamePacket.punch.y)
-                            .add_textbox("This machine is empty.")
-                            .add_item_picker("stockitem", "`wPut an item in``", "Choose an item to put in the machine!")
-                            .add_smalltext("Upgrade to a DigiVend Machine for `44,000 Gems``.")
-                            .add_button("upgradedigital", "Upgrade to DigiVend")
-                            .add_spacer("small")
-                            .end_dialog("vending", "Close", "")
-                    });
+                    vending_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
+                case type::STORAGE_BOX:
+                {
+                    storage_wrench(event, *world, gamePacket.punch);
                     break;
                 }
             }
@@ -690,7 +881,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                         if (item.type != type::SEED) break; // @note only allow another seed to be placed ontop
 
                         auto tree = std::ranges::find(world->trees, gamePacket.punch, &::tree::pos);
-                        if (block.state[2] == S_SPLICED) throw std::runtime_error("It would be too dangerous to try to mix three seeds.");
+                        if ((block.state[2] & ~S_PARENT) == S_SPLICED) throw std::runtime_error("It would be too dangerous to try to mix three seeds.");
                         for (::item &item : items)
                         {
                             if ((item.splice[0] == gamePacket.id && item.splice[1] == block.fg) ||
@@ -707,14 +898,14 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                                     0u, 1u
                                 });
                                 if (tree != world->trees.end()) tree->tick = ticks();
-                                block.state[2] = S_SPLICED; // @todo handle for multiple flags
+                                block.state[2] = (block.state[2] & S_PARENT) | S_SPLICED; // @todo handle for multiple flags
 
                                 block.fg = item.id;
                                 update_tile = true;
                                 break;
                             }
                         }
-                        if (block.state[2] != S_SPLICED) throw std::runtime_error(std::format("Hmm, it looks like `w{}`` and `w{}`` can't be spliced.", id_to_item(block.fg).raw_name, id_to_item(gamePacket.id).raw_name));
+                        if ((block.state[2] & ~S_PARENT) != S_SPLICED) throw std::runtime_error(std::format("Hmm, it looks like `w{}`` and `w{}`` can't be spliced.", id_to_item(block.fg).raw_name, id_to_item(gamePacket.id).raw_name));
                         break;
                     }
                 }
@@ -748,7 +939,12 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 }
                 case type::LOCK:
                 {
-                    if (is_tile_lock(item.id)) break; // @note seperate area for 'range_lock'
+                    if (is_tile_lock(item.id))
+                    {
+                        if (block.state[2] & S_PARENT) throw std::runtime_error("You can't place a lock inside someone else's locked area!");
+                        place_area_lock = true;
+                        break;
+                    }
 
                     if (!world->owner)
                     {
@@ -775,7 +971,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 case type::SEED:
                 {
                     world->trees.emplace_back(ticks(), RandomRange(1, 3), gamePacket.punch);
-                    block.state[2] = 0x11; // @todo
+                    block.state[2] = (block.state[2] & S_PARENT) | 0x11; // @todo
                     tile_update = true;
                     break;
                 }
@@ -790,10 +986,27 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     //block.tick = ticks();
                     break;
                 }
+                case type::VENDING_MACHINE:
+                case type::STORAGE_BOX:
+                case type::DISPLAY_BLOCK:
+                {
+                    tile_update = true; // @note these carry data the client needs (empty at first)
+                    break;
+                }
             }
             block.state[2] |= (pPeer->facing_left) ? S_LEFT : S_RIGHT;
             (item.type == type::BACKGROUND) ? block.bg = gamePacket.id : block.fg = gamePacket.id;
             pPeer->emplace(::slot(item.id, -1));
+            if (place_area_lock)
+            {
+                ::area_lock &lock = world->area_locks.emplace_back(::area_lock{.pos = gamePacket.punch, .owner = pPeer->user_id});
+                world->apply_area_lock(lock, item.id);
+                gamePacket.netid = pPeer->netid;
+                send_gamePacket(*event.peer, gamePacket);
+                refresh_lock_tiles(event, *world, gamePacket.punch);
+                send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, std::format("`5[```w{}`` area locked by {}`5]``", item.raw_name, pPeer->growid), 0u, 1u });
+                return;
+            }
         }
         gamePacket.netid = pPeer->netid; // @todo sometimes rgt has this as 0
         send_gamePacket(*event.peer, gamePacket); // finished.

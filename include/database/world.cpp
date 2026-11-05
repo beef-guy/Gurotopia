@@ -19,6 +19,7 @@ char get_type(const ::item &item)
         case type::PROVIDER: return '\x09';
         case type::DISPLAY_BLOCK: return '\x17';
         case type::VENDING_MACHINE: return '\x18';
+        case type::STORAGE_BOX: return '\x36';
     }
     return '\x00';
 }
@@ -84,6 +85,113 @@ void block::reset()
     return blob;
 }
 
+::blob world::tile_blob(int i)
+{
+    ::blob blob;
+    const ::block &block = this->blocks[i];
+    const int x = 100;
+    const ::pos block_pos{i % x, i / x};
+    const ::item &item = id_to_item(block.fg);
+    const char type = (block.fg != 0) ? get_type(item) : '\x00';
+
+    ::block copy = block;
+    copy.state[2] &= ~S_EXTRA;
+    if (type > '\x00') copy.state[2] |= S_EXTRA; // @note real servers flag every tile that carries extra data
+    if (!(copy.state[2] & S_PARENT)) copy.state[0] = copy.state[1] = 0;
+    blob.push_back(copy.to_blob());
+
+    if (copy.state[2] & S_PARENT) blob.i16(static_cast<short>(copy.state[0] | (copy.state[1] << 8))); // @note the lock that owns this tile
+
+    if (type == '\x00') return blob;
+    blob.u8(type);
+    switch (type)
+    {
+        case '\x01': /* doors, portal */
+        {
+            if (block.fg == 6/*Main Door*/) this->spawn = block_pos.by_32(false);
+
+            auto door = std::ranges::find(this->doors, block_pos, &::door::pos);
+            blob.push_back((door != this->doors.end()) ? door->to_blob() : ::door("", "", "", block_pos).to_blob()); // @note data must always follow this tile type
+            break;
+        }
+        case '\x02': /* sign */
+        {
+            auto sign = std::ranges::find(this->signs, block_pos, &::sign::pos);
+            blob.push_back((sign != this->signs.end()) ? sign->to_blob() : ::sign("", block_pos).to_blob());
+            break;
+        }
+        case '\x03': /* lock: settings, owner, access count, access, minimum level, 7 unknown */
+        {
+            if (is_tile_lock(block.fg))
+            {
+                auto lock = std::ranges::find(this->area_locks, block_pos, &::area_lock::pos);
+                if (lock != this->area_locks.end())
+                {
+                    blob.u8(lock->ignore_air ? 0x01 : 0x00);
+                    blob.i32(lock->owner);
+                    blob.i32(static_cast<int>(lock->access.size()));
+                    for (const int uid : lock->access) blob.i32(uid);
+                }
+                else
+                {
+                    blob.u8(0x00);
+                    blob.i32(0);
+                    blob.i32(0);
+                }
+                blob.u8(0x00);
+            }
+            else
+            {
+                this->is_public = (block.state[2] & S_PUBLIC);
+                blob.u8(this->lock_state);
+                blob.i32(this->owner);
+                blob.i32(static_cast<int>(std::ranges::count_if(this->access, [](int uid) { return uid > 0; })));
+                for (const int uid : this->access) if (uid > 0) blob.i32(uid); // @note the access list follows its count
+                blob.u8(this->minimum_entry_level);
+            }
+            for (int pad = 0; pad < 7; ++pad) blob.u8(0x00);
+            break;
+        }
+        case '\x04': /* seed */
+        {
+            auto tree = std::ranges::find(this->trees, block_pos, &::tree::pos);
+            blob.push_back((tree != this->trees.end()) ? tree->to_blob(true) : ::tree(ticks(), 0, block_pos).to_blob(true));
+            break;
+        }
+        case '\x08': /* dice */
+        {
+            auto random = std::ranges::find(this->random_blocks, block_pos, &::random_block::pos);
+            blob.u8((random != this->random_blocks.end()) ? random->value : 0);
+            break;
+        }
+        case '\x09': /* provider: seconds since it was last collected */
+        {
+            blob.u32(static_cast<u_int>(item.tick)); // @note always ready
+            break;
+        }
+        case '\x17': /* display block */
+        {
+            auto display = std::ranges::find(this->displays, block_pos, &::display::pos);
+            blob.u32((display != this->displays.end()) ? display->id : 0);
+            break;
+        }
+        case '\x18': /* vending machine */
+        {
+            auto vend = std::ranges::find(this->vendings, block_pos, &::vending::pos);
+            const bool stocked = vend != this->vendings.end() && vend->count > 0;
+            blob.u32(stocked ? static_cast<u_int>(vend->id) : 0);
+            blob.i32(stocked ? vend->price : 0);
+            break;
+        }
+        case '\x36': /* storage box: the client only needs to know it exists */
+        {
+            blob.i16(0);
+            break;
+        }
+    }
+    return blob;
+}
+
 ::blob world::serialize()
 {
     blob blob;
@@ -103,46 +211,9 @@ void block::reset()
     blob.i16(0x00);
     blob.u8(0x00);
 
-    for (u_short i = 0; const ::block &block : this->blocks)
-    {
-        blob.push_back(block.to_blob());
+    for (int i = 0; i < static_cast<int>(this->blocks.size()); ++i)
+        blob.push_back(this->tile_blob(i));
 
-        if (block.fg != 0 || block.fg!=2||block.fg!=4||block.fg!=8||block.fg!=14) // @note so we can save time
-        if (char type = get_type(id_to_item(block.fg)); type > '\x00')
-        {
-            blob.u8(type);
-
-            const ::pos block_pos{i % x, i / x};
-            if (type == '\x01'/*doors, portal*/)
-            {
-                if (block.fg == 6/*Main Door*/) this->spawn = block_pos.by_32(false);
-
-                auto door = std::ranges::find(this->doors, block_pos, &::door::pos);
-                blob.push_back((door != this->doors.end()) ? door->to_blob() : ::door("", "", "", block_pos).to_blob()); // @note data must always follow this tile type
-            }
-            else if (type == '\x02'/*sign*/)
-            {
-                auto sign = std::ranges::find(this->signs, block_pos, &::sign::pos);
-                blob.push_back((sign != this->signs.end()) ? sign->to_blob() : ::sign("", block_pos).to_blob());
-            }
-            else if (type == '\x03'/*lock*/)
-            {
-                if (!is_tile_lock(block.fg)) this->is_public = (block.state[2] & S_PUBLIC); // @note check if world lock has S_PUBLIC flag, i will change this later
-                int access = std::ranges::count_if(this->access, std::identity{});
-                
-                blob.u8(this->lock_state);
-                blob.i32(this->owner);
-                blob.i32(access);
-                for (const int uid : this->access) if (uid > 0) blob.i32(uid); // @note the access list follows its count
-            }
-            else if (type == '\x04'/*seed*/)
-            {
-                auto tree = std::ranges::find(this->trees, block_pos, &::tree::pos);
-                blob.push_back((tree != this->trees.end()) ? tree->to_blob(true) : ::tree(ticks(), 0, block_pos).to_blob(true));
-            }
-        }
-        ++i;
-    }
     /*@todo*/
     blob.i32(0x00);
     blob.i32(0x00);
@@ -310,6 +381,10 @@ void world::mysql_select_all()
             blob.read_u32(object.uid, pos);
         }
     } // @note delete blob, pos
+    {
+        ::blob blob = this->mysql_select<::blob>("extras");
+        this->load_extras(blob);
+    }
 }
 
 world::world(const std::string &name) : name(name)/*DEFAULT*/
@@ -383,6 +458,230 @@ void world::save()
         }
         this->mysql_update("objects", blob.data());
     }
+    this->mysql_update("extras", this->extras_blob());
+}
+
+namespace
+{
+    void write_string(::blob &blob, const std::string &text)
+    {
+        blob.i16(static_cast<short>(std::min<std::size_t>(text.size(), 0x7fff)));
+        for (std::size_t i = 0; i < text.size() && i < 0x7fff; ++i) blob.u8(text[i]);
+    }
+    bool read_string(::blob &blob, int &pos, std::string &text)
+    {
+        short len{};
+        if (!blob.read_i16(len, pos) || len < 0 || pos + len > static_cast<int>(blob.size())) return false;
+        text.resize(len);
+        for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
+        return true;
+    }
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5 };
+}
+
+/* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
+::blob world::extras_blob() const
+{
+    ::blob blob;
+    blob.u8(0x01); // @note format version
+    for (const ::door &door : this->doors)
+    {
+        if (door.dest.empty() && door.id.empty() && door.is_public) continue;
+        blob.u8(EX_DOOR); blob.i16(door.pos.x_int()); blob.i16(door.pos.y_int());
+        write_string(blob, door.dest);
+        write_string(blob, door.id);
+        blob.u8(door.is_public);
+    }
+    for (const ::area_lock &lock : this->area_locks)
+    {
+        blob.u8(EX_AREA_LOCK); blob.i16(lock.pos.x_int()); blob.i16(lock.pos.y_int());
+        blob.i32(lock.owner);
+        blob.u8(lock.is_public); blob.u8(lock.ignore_air); blob.u8(lock.builder_mode);
+        blob.i32(static_cast<int>(lock.access.size()));
+        for (const int uid : lock.access) blob.i32(uid);
+    }
+    for (const ::vending &vend : this->vendings)
+    {
+        blob.u8(EX_VENDING); blob.i16(vend.pos.x_int()); blob.i16(vend.pos.y_int());
+        blob.i16(vend.id); blob.i32(vend.count); blob.i32(vend.price); blob.i32(vend.earned);
+    }
+    for (const ::storage &box : this->storages)
+    {
+        blob.u8(EX_STORAGE); blob.i16(box.pos.x_int()); blob.i16(box.pos.y_int());
+        blob.i32(static_cast<int>(box.items.size()));
+        for (const ::slot &slot : box.items) { blob.i16(slot.id); blob.i16(slot.count); }
+    }
+    for (const ::display &display : this->displays)
+    {
+        blob.u8(EX_DISPLAY); blob.i16(display.pos.x_int()); blob.i16(display.pos.y_int());
+        blob.u32(display.id);
+    }
+    return blob;
+}
+
+void world::load_extras(::blob &blob)
+{
+    int pos{};
+    u_char version{};
+    if (!blob.read_u8(version, pos) || version != 0x01) return;
+
+    u_char kind{};
+    while (blob.read_u8(kind, pos))
+    {
+        short x{}, y{};
+        if (!blob.read_i16(x, pos) || !blob.read_i16(y, pos)) return;
+        const ::pos tile{static_cast<int>(x), static_cast<int>(y)};
+        switch (kind)
+        {
+            case EX_DOOR:
+            {
+                std::string dest{}, id{};
+                u_char is_public{1};
+                if (!read_string(blob, pos, dest) || !read_string(blob, pos, id) || !blob.read_u8(is_public, pos)) return;
+                auto door = std::ranges::find(this->doors, tile, &::door::pos);
+                if (door == this->doors.end()) break; // @note the door is gone
+                door->dest = dest, door->id = id, door->is_public = is_public;
+                break;
+            }
+            case EX_AREA_LOCK:
+            {
+                ::area_lock lock{.pos = tile};
+                u_char is_public{}, ignore_air{}, mode{};
+                int count{};
+                if (!blob.read_i32(lock.owner, pos) || !blob.read_u8(is_public, pos) || !blob.read_u8(ignore_air, pos) || 
+                    !blob.read_u8(mode, pos) || !blob.read_i32(count, pos) || count < 0 || count > 1000) return;
+                for (int i = 0; i < count; ++i)
+                {
+                    int uid{};
+                    if (!blob.read_i32(uid, pos)) return;
+                    lock.access.push_back(uid);
+                }
+                lock.is_public = is_public, lock.ignore_air = ignore_air, lock.builder_mode = mode;
+                if (valid_tile(*this, tile) && is_tile_lock(this->blocks[cord(x, y)].fg)) this->area_locks.push_back(std::move(lock));
+                break;
+            }
+            case EX_VENDING:
+            {
+                ::vending vend{.pos = tile};
+                if (!blob.read_i16(vend.id, pos) || !blob.read_i32(vend.count, pos) || !blob.read_i32(vend.price, pos) || !blob.read_i32(vend.earned, pos)) return;
+                this->vendings.push_back(vend);
+                break;
+            }
+            case EX_STORAGE:
+            {
+                ::storage box{.pos = tile};
+                int count{};
+                if (!blob.read_i32(count, pos) || count < 0 || count > 1000) return;
+                for (int i = 0; i < count; ++i)
+                {
+                    ::slot slot{};
+                    if (!blob.read_i16(slot.id, pos) || !blob.read_i16(slot.count, pos)) return;
+                    box.items.push_back(slot);
+                }
+                this->storages.push_back(std::move(box));
+                break;
+            }
+            case EX_DISPLAY:
+            {
+                u_int id{};
+                if (!blob.read_u32(id, pos)) return;
+                this->displays.emplace_back(id, tile);
+                break;
+            }
+            default: return; // @note unknown record, stop rather than misread the rest
+        }
+    }
+}
+
+::area_lock *world::lock_at(const ::pos &pos)
+{
+    if (!valid_tile(*this, pos)) return nullptr;
+    const ::block &block = this->blocks[cord(pos.x_int(), pos.y_int())];
+
+    ::pos lock_pos = pos;
+    if (!is_tile_lock(block.fg)) // @note the lock's own tile belongs to it too
+    {
+        if (!(block.state[2] & S_PARENT)) return nullptr;
+        const int index = block.state[0] | (block.state[1] << 8);
+        lock_pos = ::pos{index % 100, index / 100};
+    }
+    auto lock = std::ranges::find(this->area_locks, lock_pos, &::area_lock::pos);
+    return (lock != this->area_locks.end()) ? &*lock : nullptr;
+}
+
+void world::release_area_lock(const ::pos &lock_pos)
+{
+    const int index = cord(lock_pos.x_int(), lock_pos.y_int());
+    for (::block &block : this->blocks)
+    {
+        if ((block.state[2] & S_PARENT) && (block.state[0] | (block.state[1] << 8)) == index)
+        {
+            block.state[2] &= ~S_PARENT;
+            block.state[0] = block.state[1] = 0;
+        }
+    }
+}
+
+/* @note spreads out from the lock one step at a time (like real Growtopia), skipping tiles another lock already holds */
+void world::apply_area_lock(::area_lock &lock, u_short lock_id)
+{
+    this->release_area_lock(lock.pos);
+
+    const int lock_index = cord(lock.pos.x_int(), lock.pos.y_int());
+    const int limit = tile_lock_size(lock_id);
+    const int height = static_cast<int>(this->blocks.size()) / 100;
+
+    std::vector<bool> seen(this->blocks.size(), false);
+    std::vector<int> queue{lock_index};
+    seen[lock_index] = true;
+    int claimed = 0;
+    for (std::size_t head = 0; head < queue.size() && claimed < limit; ++head)
+    {
+        const int at = queue[head];
+        const int ax = at % 100, ay = at / 100;
+        const int next[4][2] = {{ax, ay - 1}, {ax - 1, ay}, {ax + 1, ay}, {ax, ay + 1}};
+        for (const auto &n : next)
+        {
+            if (n[0] < 0 || n[0] >= 100 || n[1] < 0 || n[1] >= height) continue;
+            const int i = cord(n[0], n[1]);
+            if (seen[i]) continue;
+            seen[i] = true;
+
+            ::block &block = this->blocks[i];
+            if (block.state[2] & S_PARENT) continue; // @note another lock's tile
+            if (id_to_item(block.fg).type == type::LOCK) continue; // @note never lock a lock
+            if (lock.ignore_air && block.fg == 0 && block.bg == 0) continue;
+            if (claimed >= limit) break;
+
+            block.state[2] |= S_PARENT;
+            block.state[0] = static_cast<u_char>(lock_index & 0xff);
+            block.state[1] = static_cast<u_char>((lock_index >> 8) & 0xff);
+            ++claimed;
+            queue.push_back(i);
+        }
+    }
+}
+
+bool world::can_edit(const ::peer &peer, const ::pos &pos, bool breaking)
+{
+    if (peer.role >= MODERATOR) return true;
+    if (peer.user_id == this->owner && this->owner != 0) return true;
+
+    if (const ::area_lock *lock = this->lock_at(pos))
+    {
+        if (peer.user_id == lock->owner || lock->is_public) return true;
+        if (std::ranges::find(lock->access, peer.user_id) == lock->access.end()) return false;
+        if (lock->builder_mode == 1 && breaking) return false;  // @note Builder's Lock: only building
+        if (lock->builder_mode == 2 && !breaking) return false; // @note Builder's Lock: only breaking
+        return true;
+    }
+    if (this->owner == 0 || this->is_public) return true;
+    return std::ranges::find(this->access, peer.user_id) != this->access.end();
+}
+
+bool world::jammed() const
+{
+    return std::ranges::any_of(this->blocks, [](const ::block &block) { return block.fg == 226/*Signal Jammer*/ && (block.state[2] & S_TOGGLE); });
 }
 
 std::vector<world> worlds;
@@ -505,47 +804,11 @@ void send_tile_update(ENetEvent &event, ::gamePacket gamePacket, ::block &block,
     gamePacket.state = (int)gamePacketState::EXTENDED;
     ::blob blob = compress_state(gamePacket);
 
-    blob.push_back(block.to_blob());
+    const int index = static_cast<int>(&block - world.blocks.data());
+    if (index >= 0 && index < static_cast<int>(world.blocks.size()))
+        blob.push_back(world.tile_blob(index));
+    else return;
 
-    const ::item &item = id_to_item(block.fg);
-    blob.u8(get_type(id_to_item(block.fg)));
-    switch (item.type)
-    {
-        case type::DOOR:
-        case type::MAIN_DOOR:
-        case type::PORTAL:
-        {
-            auto door = std::ranges::find(world.doors, gamePacket.punch, &::door::pos);
-            blob.push_back((door != world.doors.end()) ? door->to_blob() : ::door("", "", "", gamePacket.punch).to_blob());
-            break;
-        }
-        case type::SIGN:
-        {
-            auto sign = std::ranges::find(world.signs, gamePacket.punch, &::sign::pos);
-            blob.push_back((sign != world.signs.end()) ? sign->to_blob() : ::sign("", gamePacket.punch).to_blob());
-            break;
-        }
-        case type::LOCK:
-        {
-            if (!is_tile_lock(block.fg)) world.is_public = (block.state[2] & S_PUBLIC); // @note check if world lock has S_PUBLIC flag, i will change this later
-            int access = std::ranges::count_if(world.access, std::identity{});
-
-            blob.u8(world.lock_state);
-            blob.i32(world.owner);
-            blob.i32(access);
-            for (const int uid : world.access) if (uid > 0) blob.i32(uid);
-            break;
-        }
-        case type::SEED:
-        {
-            auto tree = std::ranges::find(world.trees, gamePacket.punch, &::tree::pos);
-            if (tree != world.trees.end())
-            {
-                blob.push_back(tree->to_blob(true));
-            }
-            break;
-        }
-    }
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
     peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [&blob](ENetPeer *peer) 
     {

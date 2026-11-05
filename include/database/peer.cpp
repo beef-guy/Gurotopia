@@ -103,6 +103,8 @@ void peer::mysql_select_all(bool by_user_id)
     this->banned_until = this->mysql_select<long long>("banned_until", "", by_user_id);
     this->ban_reason   = this->mysql_select<std::string>("ban_reason", "", by_user_id);
     this->muted_until  = this->mysql_select<long long>("muted_until", "", by_user_id);
+    this->playtime     = this->mysql_select<long long>("playtime", "", by_user_id);
+    this->login_at     = std::time(nullptr);
     this->skin_color   = static_cast<u_int>(this->mysql_select<long long>("skin_color", "", by_user_id));
     const std::string clothing = this->mysql_select<std::string>("clothing", "", by_user_id);
     auto inventory   = this->mysql_select<::blob>("inventory", "", by_user_id);
@@ -176,13 +178,14 @@ void peer::mysql_update_all()
 {
     if (this->growid.empty()) return;
 
-    ::hStmt hStmt{ "UPDATE peer SET inventory = ?, gems = ?, level = ?, xp = ?, wl_storage = ?, clothing = ?, skin_color = ? WHERE growid = ?" };
+    ::hStmt hStmt{ "UPDATE peer SET inventory = ?, gems = ?, level = ?, xp = ?, wl_storage = ?, clothing = ?, skin_color = ?, playtime = ? WHERE growid = ?" };
     const ::blob inventory = this->serialize_inventory();
     const int level_value = this->level[0], xp_value = this->level[1];
     const std::string clothing = this->serialize_clothing();
     const long long skin = this->skin_color;
+    const long long played = this->total_playtime();
 
-    MYSQL_BIND params[8] = {
+    MYSQL_BIND params[9] = {
         make_bind_in(inventory),
         make_bind_in(this->gems),
         make_bind_in(level_value),
@@ -190,6 +193,7 @@ void peer::mysql_update_all()
         make_bind_in(this->wl_storage),
         make_bind_in(clothing),
         make_bind_in(skin),
+        make_bind_in(played),
         make_bind_in(this->growid)
     };
     hStmt.bind_param(params);
@@ -281,6 +285,19 @@ u_short peer::have_slot(::slot slot)
     if (it != this->slots.end())
         return it->count;
     return 0;
+}
+
+int peer::free_slots() const
+{
+    const int used = static_cast<int>(std::ranges::count_if(this->slots, [](const ::slot &slot) { return slot.count > 0; }));
+    return this->slot_size - used;
+}
+
+bool peer::can_hold(short id, int count)
+{
+    const int have = this->have_slot(::slot(id, 0));
+    if (have + count > 200) return false;
+    return have > 0 || this->free_slots() > 0;
 }
 
 void peer::add_xp(ENetEvent &event, u_short value) 

@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "gamePacket/tile_change.hpp"
 
 #include "onVariant/ConsoleMessage.hpp"
 
@@ -13,12 +14,59 @@ void lock_edit(ENetEvent& event, const ::hPipe &hPipe)
     auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
     if (world == worlds.end()) return;
 
-    if (world->owner != pPeer->user_id) return; // @note only the owner can change the lock
-
     ::pos pos{};
     pos.x = atoi(hPipe["tilex"].c_str());
     pos.y = atoi(hPipe["tiley"].c_str());
     if (pos.x < 0 || pos.x >= 100 || pos.y < 0 || cord(pos.x, pos.y) >= world->blocks.size()) return;
+
+    if (const short fg = world->blocks[cord(pos.x, pos.y)].fg; is_tile_lock(fg))
+    {
+        ::area_lock *lock = world->lock_at(pos);
+        if (lock == nullptr || (lock->owner != pPeer->user_id && pPeer->role < MODERATOR)) return;
+
+        lock->is_public = atoi(hPipe["checkbox_public"].c_str());
+        const bool ignore_air = atoi(hPipe["checkbox_ignore"].c_str());
+        if (fg == 4994/*Builder's Lock*/)
+            lock->builder_mode = atoi(hPipe["checkbox_buildonly"].c_str()) ? 1 : atoi(hPipe["checkbox_breakonly"].c_str()) ? 2 : 0;
+
+        std::erase_if(lock->access, [&](int uid) { return hPipe[std::format("checkbox_access_{}", uid)] == "0"; });
+        if (const std::string picked = hPipe["playerNetID"]; !picked.empty())
+        {
+            const int netid = atoi(picked.c_str());
+            peers(world->name, PeerSearch::WORLD, [&](ENetPeer *peer)
+            {
+                ::peer *pOthers = static_cast<::peer*>(peer->data);
+                if (pOthers->netid != netid || pOthers->user_id == lock->owner) return;
+                if (std::ranges::find(lock->access, pOthers->user_id) != lock->access.end()) return;
+                if (lock->access.size() >= 20) { on::ConsoleMessage(event.peer, "`4The access list is full.``"); return; }
+
+                lock->access.push_back(pOthers->user_id);
+                on::ConsoleMessage(event.peer, std::format("`w{}`` was added to the access list.", pOthers->growid));
+                on::ConsoleMessage(peer, std::format("`2You got access to a `w{}`` from {}.``", id_to_item(fg).raw_name, pPeer->growid));
+            });
+        }
+        if (hPipe["buttonClicked"] == "recalcLock" || ignore_air != lock->ignore_air)
+        {
+            lock->ignore_air = ignore_air;
+            const std::vector<int> before = [&]{
+                std::vector<int> tiles{};
+                const int lock_index = cord(pos.x, pos.y);
+                for (int i = 0; i < static_cast<int>(world->blocks.size()); ++i)
+                    if ((world->blocks[i].state[2] & S_PARENT) && (world->blocks[i].state[0] | (world->blocks[i].state[1] << 8)) == lock_index) tiles.push_back(i);
+                return tiles;
+            }();
+            world->apply_area_lock(*lock, fg);
+            for (const int i : before) // @note tiles the lock let go of
+                if (!(world->blocks[i].state[2] & S_PARENT))
+                    send_tile_update(event, {.id = world->blocks[i].fg, .punch = ::pos{i % 100, i / 100}}, world->blocks[i], *world);
+            refresh_lock_tiles(event, *world, pos);
+            on::ConsoleMessage(event.peer, std::format("`wThe `${}`` was re-applied.``", id_to_item(fg).raw_name));
+        }
+        else send_tile_update(event, {.id = fg, .punch = pos}, world->blocks[cord(pos.x, pos.y)], *world);
+        return;
+    }
+
+    if (world->owner != pPeer->user_id) return; // @note only the owner can change the lock
     if (id_to_item(world->blocks[cord(pos.x, pos.y)].fg).type != type::LOCK) return;
     
     world->is_public = atoi(hPipe["checkbox_public"].c_str());

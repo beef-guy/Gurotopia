@@ -13,7 +13,7 @@ void gateway_edit(ENetEvent& event, const ::hPipe &hPipe)
     if (world == worlds.end()) return;
 
     if (tilex < 0 || tilex >= 100 || tiley < 0 || cord(tilex, tiley) >= world->blocks.size()) return;
-    if (world->owner != 0 && world->owner != pPeer->user_id && std::ranges::find(world->access, pPeer->user_id) == world->access.end()) return; // @note same rule as building here
+    if (!world->can_edit(*pPeer, ::pos{tilex, tiley}, false)) return; // @note same rule as building here
 
     block &block = world->blocks[cord(tilex, tiley)];
 
@@ -34,20 +34,16 @@ void gateway_edit(ENetEvent& event, const ::hPipe &hPipe)
         if (door != world->doors.end())
         {
             door->label = hPipe["door_name"];
-            if (!hPipe["dialog_name"].empty())
-            {
-                door->dest = hPipe["door_target"];
-                door->id = hPipe["door_id"];
-            }
+            door->dest = hPipe["door_target"];
+            door->id = hPipe["door_id"];
         }
-        else {
-            world->doors.emplace_back(::door(
-                hPipe["door_name"],
-                hPipe["door_target"],
-                hPipe["door_id"],
-                { tilex, tiley }
-            ));
-        }
+        else door = world->doors.emplace(world->doors.end(), ::door(hPipe["door_name"], hPipe["door_target"], hPipe["door_id"], { tilex, tiley }));
+
+        for (char &c : door->dest) c = std::toupper(c); // @note WORLD:ID, world names are upper case
+        for (char &c : door->id) c = std::toupper(c);
+        if (door->dest.size() > 24 + 1 + 11) door->dest.resize(24 + 1 + 11);
+        if (door->id.size() > 11) door->id.resize(11);
+        door->is_public = hPipe["checkbox_locked"] != "0";
     }
     else if (hPipe["dialog_name"] == "gateway_edit") 
     {

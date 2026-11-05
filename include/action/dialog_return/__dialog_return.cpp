@@ -16,6 +16,7 @@
 #include "create_blast.hpp"
 #include "socialportal.hpp"
 #include "megaphone.hpp"
+#include "tile_extras.hpp"
 
 #include "__dialog_return.hpp"
 
@@ -38,5 +39,12 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
 
     {"create_blast", std::bind(&create_blast, std::placeholders::_1, std::placeholders::_2)},
     {"socialportal", std::bind(&socialportal, std::placeholders::_1, std::placeholders::_2)},
-    {"megaphone", std::bind(&megaphone, std::placeholders::_1, std::placeholders::_2)}
+    {"megaphone", std::bind(&megaphone, std::placeholders::_1, std::placeholders::_2)},
+
+    {"vending", std::bind(&vending_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"vending_buy", std::bind(&vending_buy, std::placeholders::_1, std::placeholders::_2)},
+    {"storage", std::bind(&storage_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"storage_deposit", std::bind(&storage_deposit, std::placeholders::_1, std::placeholders::_2)},
+    {"storage_withdraw", std::bind(&storage_withdraw, std::placeholders::_1, std::placeholders::_2)},
+    {"display", std::bind(&display_edit, std::placeholders::_1, std::placeholders::_2)}
 };
