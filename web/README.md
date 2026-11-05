@@ -16,7 +16,7 @@ Node.js with Express, plain server-rendered HTML (EJS templates), and MariaDB th
 ## How it fits with the game
 
 ```
-players ──► nginx :443 ─┬─ panel.example.com ──► panel :3000 ──► supervisor :3001 ──► main.out per server
+players ──► nginx :443 ─┬─ panel.flareps.xyz ──► panel :3000 ──► supervisor :3001 ──► main.out per server
                         └─ the game's request ─► gateway :8443        (UDP 17100-17999)
 players ──► gateway UDP 17091 ──(server name)──► that server's UDP port
                      all of them share one MariaDB: gurotopia_platform + srv_<id> per server
@@ -67,7 +67,7 @@ It starts the real panel and supervisor, with `test/fake-game.js` standing in fo
 
 ## Setting up the VPS (Ubuntu 24.04)
 
-Run these as root, or with `sudo`. Replace `panel.example.com` with your domain everywhere, including in `deploy/nginx.conf`.
+Run these as root, or with `sudo`. The files are set up for `panel.flareps.xyz`. First add a DNS A record for `panel` on flareps.xyz pointing at the VPS IP. To use another name, replace `panel.flareps.xyz` in `deploy/nginx.conf` and `panel.env`.
 
 1. **Packages**
    ```
@@ -106,7 +106,7 @@ Run these as root, or with `sudo`. Replace `panel.example.com` with your domain 
    systemctl daemon-reload
    systemctl enable --now gurotopia-gateway gurotopia-supervisor gurotopia-panel
    ```
-7. **HTTPS.** Point `panel.example.com` at the VPS, run `certbot certonly --webroot -w /var/www/html -d panel.example.com`, copy `deploy/nginx.conf` to `/etc/nginx/sites-available/gurotopia`, link it into `sites-enabled`, remove the `default` site, and run `nginx -t && systemctl reload nginx`. nginx answers on 443 for both the website and the game's login request, and sends each to the right place.
+7. **HTTPS.** Point `panel.flareps.xyz` at the VPS, run `certbot certonly --webroot -w /var/www/html -d panel.flareps.xyz`, copy `deploy/nginx.conf` to `/etc/nginx/sites-available/gurotopia`, link it into `sites-enabled`, remove the `default` site, and run `nginx -t && systemctl reload nginx`. nginx answers on 443 for both the website and the game's login request, and sends each to the right place.
 8. **Firewall**
    ```
    ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp
