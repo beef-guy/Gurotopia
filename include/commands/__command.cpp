@@ -19,6 +19,7 @@
 #include "action/growpass.hpp"
 #include "action/radiation.hpp"
 #include "action/carnival.hpp"
+#include "world_io.hpp"
 #include "https/server_data.hpp"
 
 #include <algorithm>
@@ -87,6 +88,8 @@ const std::unordered_map<std::string_view, ::cmd_entry> cmd_pool
     {"/mailrewards", {mailrewards, DEVELOPER}},
     {"/fossil", {fossil_command, DEVELOPER}}, // @note a Fossil Rock appears in this world now
     {"/ready", {ready_command, DEVELOPER}},
+    {"/export", {export_command, DEVELOPER}}, // @note worlds/<world>.dat
+    {"/import", {import_command, DEVELOPER}}, // @note a new world from worlds/<file>.dat
     {"/passpoints", {passpoints_command, DEVELOPER}}, // @note give yourself Grow Pass points (for testing)
     {"/geiger", {geiger_command, DEVELOPER}}, // @note where the radiation source is (for testing)   // @note finish every Fossil Prep Station and Geiger Charger here
     {"/playermode", {playermode, PLAYER}}, // @note can_use() lets only developers, or someone already in player mode, use it
