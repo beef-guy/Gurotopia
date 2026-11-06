@@ -25,6 +25,7 @@
 #include "action/growpass.hpp"
 #include "action/profile.hpp"
 #include "action/gauntlet.hpp"
+#include "action/special_items.hpp"
 #include "database/playmods.hpp"
 
 #include "tile_change.hpp"
@@ -94,6 +95,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         if (fishing_tile_change(event, *world, gamePacket)) return; // @note casting bait, or punching to reel in
         if (radiation_tile_change(event, *world, gamePacket)) return; // @note Geiger Charger
         if (fossil_tile_change(event, *world, gamePacket)) return; // @note Rock Hammer, Fossil Brush, Fossil Prep Station
+        if (special_tile_change(event, *world, gamePacket, block)) return; // @note wands on players, Game Blocks during a game
 
         /* @note the MAGPLANT 5000 Remote builds with whatever its linked MAGPLANT 5000 holds */
         ::magplant *remote_from = nullptr;
@@ -155,6 +157,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         bool tile_update{};
         bool lock_visuals{}; // @todo this looks sloppy
         bool place_area_lock{};
+        bool no_place_echo{}; // @note Kranken's blocks: the game crashes on the placing echo, so only the tile update is sent
         
         if (gamePacket.id == 18) // @note punching a block
         {
@@ -231,6 +234,8 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     break;
                 }
             }
+            if (const std::string why = special_break_blocked(*world, gamePacket.punch, id_to_item(block.fg)); block.fg != 0 && !why.empty())
+                throw std::runtime_error(why); // @note a Safe Vault with items inside
             switch (item.type)
             {
                 case type::STRONG: throw std::runtime_error("It's too strong to break.");
@@ -502,6 +507,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 std::erase_if(world->lobster_traps, [&](const ::lobster_trap &trap) { return trap.pos == gamePacket.punch; });
                 std::erase_if(world->auto_machines, [&](const ::auto_machine &m) { return m.pos == gamePacket.punch; });
                 std::erase_if(world->timed_machines, [&](const ::timed_machine &m) { return m.pos == gamePacket.punch; });
+                special_broken(*world, gamePacket.punch);
                 if (is_tile_lock(item.id)) remove_area_lock(event, *world, gamePacket.punch);
                 if (item.type == type::XENONITE && world->xenonite != 0)
                 {
@@ -876,6 +882,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         }
         else if (gamePacket.id == 32)
         {
+            if (special_wrench(event, *world, gamePacket.punch, id_to_item(block.fg))) return; // @note Safe Vault, Game Generator, Challenge Timer, ...
             switch (item.type)
             {
                 case type::LOCK:
@@ -1322,6 +1329,12 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     tile_update = true;
                     break;
                 }
+                case type::KRANKEN_GALACTIC:
+                {
+                    no_place_echo = true;
+                    tile_update = true;
+                    break;
+                }
                 case type::MAILBOX:
                 case type::BULLETIN:
                 case type::DONATION_BOX:
@@ -1336,6 +1349,19 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
             block.state[2] |= (pPeer->facing_left) ? S_LEFT : S_RIGHT;
             if (item.type != type::BACKGROUND && get_type(item) != '\x00') tile_update = true; // @note send the block's data right away, the game may crash on it without
             (item.type == type::BACKGROUND) ? block.bg = gamePacket.id : block.fg = gamePacket.id;
+            if (item.type != type::BACKGROUND) special_placed(*world, gamePacket.punch, item);
+            if (no_place_echo)
+            {
+                /*
+                * @note the 5.60 client's Tile::SetFG (0x15afcc8) copies a Kranken pattern and tint from a world pointer
+                * (world+0x480 -> +0x78 -> +0x11c/+0x118) when a placing echo (0x03) sets a type 141 block. that pointer is
+                * empty in our worlds, so the game crashed. a tile update (0x05) reads the tile without that path.
+                */
+                if (remote_from != nullptr) --remote_from->count, gamePacket.idk = 1.0f;
+                else modify_item_inventory(event, ::slot(item.id, -1));
+                send_tile_update(event, std::move(gamePacket), block, *world);
+                return;
+            }
             use_one(item.id);
             if (place_area_lock)
             {

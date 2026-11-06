@@ -25,6 +25,7 @@
 #include "action/event_buttons.hpp"
 #include "action/profile.hpp"
 #include "action/growpass.hpp"
+#include "action/special_items.hpp"
 
 #include "__dialog_return.hpp"
 
@@ -55,6 +56,11 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
 
     {"vending", std::bind(&vending_edit, std::placeholders::_1, std::placeholders::_2)},
     {"vending_buy", std::bind(&vending_buy, std::placeholders::_1, std::placeholders::_2)},
+    {"kranken", std::bind(&kranken_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"vault", std::bind(&vault_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"game_rules", std::bind(&game_rules_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"game_tile", std::bind(&game_tile_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"challenge", std::bind(&challenge_edit, std::placeholders::_1, std::placeholders::_2)},
     {"storage", std::bind(&storage_edit, std::placeholders::_1, std::placeholders::_2)},
     {"storage_deposit", std::bind(&storage_deposit, std::placeholders::_1, std::placeholders::_2)},
     {"storage_withdraw", std::bind(&storage_withdraw, std::placeholders::_1, std::placeholders::_2)},

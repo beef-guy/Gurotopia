@@ -447,6 +447,19 @@ static void write_default_extra(::blob &blob, char type, const ::item &item)
             blob.u32(value);
             break;
         }
+        case '\x10': /* game blocks: the team (4 = none) */
+        {
+            auto t = std::ranges::find(this->game_tiles, block_pos, &::game_tile::pos);
+            blob.u8((t != this->game_tiles.end()) ? t->team : 4);
+            break;
+        }
+        case '\x50': /* kranken's blocks: value (0 when placed), tint */
+        {
+            auto k = std::ranges::find(this->krankens, block_pos, &::kranken::pos);
+            blob.u32(0);
+            blob.u32((k != this->krankens.end()) ? k->color : 0xffffffff);
+            break;
+        }
         case '\x36': /* storage box: the client only needs to know it exists */
         {
             blob.i16(0);
@@ -742,7 +755,7 @@ namespace
         for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
         return true;
     }
-    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17, EX_AUTO = 18, EX_BASE_WEATHER = 19, EX_TIMED = 20 };
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17, EX_AUTO = 18, EX_BASE_WEATHER = 19, EX_TIMED = 20, EX_KRANKEN = 21, EX_VAULT = 22, EX_GAME_TILE = 23, EX_GAME_RULES = 24, EX_CHALLENGE = 25, EX_WORLD_BAN = 26 };
 }
 
 /* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
@@ -874,6 +887,42 @@ namespace
         if (m.item == 0) continue;
         blob.u8(EX_TIMED); blob.i16(m.pos.x_int()); blob.i16(m.pos.y_int());
         blob.i16(m.item); blob.i64(m.start); blob.i64(m.ready);
+    }
+    for (const ::kranken &k : this->krankens)
+    {
+        if (k.color == 0xffffffff) continue;
+        blob.u8(EX_KRANKEN); blob.i16(k.pos.x_int()); blob.i16(k.pos.y_int());
+        blob.u32(k.color);
+    }
+    for (const ::safe_vault &vault : this->vaults)
+    {
+        blob.u8(EX_VAULT); blob.i16(vault.pos.x_int()); blob.i16(vault.pos.y_int());
+        write_string(blob, vault.password);
+        blob.i32(static_cast<int>(vault.items.size()));
+        for (const ::slot &slot : vault.items) { blob.i16(slot.id); blob.i16(slot.count); }
+    }
+    for (const ::game_tile &t : this->game_tiles)
+    {
+        if (t.team == 4) continue;
+        blob.u8(EX_GAME_TILE); blob.i16(t.pos.x_int()); blob.i16(t.pos.y_int());
+        blob.u8(t.team);
+    }
+    for (const ::game_rules &r : this->game_generators)
+    {
+        blob.u8(EX_GAME_RULES); blob.i16(r.pos.x_int()); blob.i16(r.pos.y_int());
+        blob.u8(r.mode); blob.u8(r.teams); blob.u8(r.minutes); blob.u8(r.goal);
+    }
+    for (const ::challenge_timer &t : this->challenge_timers)
+    {
+        blob.u8(EX_CHALLENGE); blob.i16(t.pos.x_int()); blob.i16(t.pos.y_int());
+        blob.i32(t.seconds); blob.i32(t.best_ms);
+        write_string(blob, t.best_name);
+    }
+    for (const ::world_ban &ban : this->world_bans)
+    {
+        if (ban.until <= std::time(nullptr)) continue;
+        blob.u8(EX_WORLD_BAN); blob.i16(0); blob.i16(0);
+        blob.i32(ban.uid); blob.i64(ban.until);
     }
     if (this->base_weather != 0)
     {
@@ -1102,6 +1151,55 @@ void world::load_extras(::blob &blob)
                     box.gifts.push_back(std::move(gift));
                 }
                 this->donation_boxes.push_back(std::move(box));
+                break;
+            }
+            case EX_KRANKEN:
+            {
+                ::kranken k{.pos = tile};
+                if (!blob.read_u32(k.color, pos)) return;
+                if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::KRANKEN_GALACTIC) this->krankens.push_back(k);
+                break;
+            }
+            case EX_VAULT:
+            {
+                ::safe_vault vault{.pos = tile};
+                int count{};
+                if (!read_string(blob, pos, vault.password) || !blob.read_i32(count, pos) || count < 0 || count > 1000) return;
+                for (int i = 0; i < count; ++i)
+                {
+                    ::slot slot{};
+                    if (!blob.read_i16(slot.id, pos) || !blob.read_i16(slot.count, pos)) return;
+                    vault.items.push_back(slot);
+                }
+                if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::SAFE_VAULT) this->vaults.push_back(std::move(vault));
+                break;
+            }
+            case EX_GAME_TILE:
+            {
+                ::game_tile t{.pos = tile};
+                if (!blob.read_u8(t.team, pos)) return;
+                if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::GAME_BLOCK) this->game_tiles.push_back(t);
+                break;
+            }
+            case EX_GAME_RULES:
+            {
+                ::game_rules r{.pos = tile};
+                if (!blob.read_u8(r.mode, pos) || !blob.read_u8(r.teams, pos) || !blob.read_u8(r.minutes, pos) || !blob.read_u8(r.goal, pos)) return;
+                if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::GAME_GENERATOR) this->game_generators.push_back(r);
+                break;
+            }
+            case EX_CHALLENGE:
+            {
+                ::challenge_timer t{.pos = tile};
+                if (!blob.read_i32(t.seconds, pos) || !blob.read_i32(t.best_ms, pos) || !read_string(blob, pos, t.best_name)) return;
+                if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::CHALLENGE_TIMER) this->challenge_timers.push_back(std::move(t));
+                break;
+            }
+            case EX_WORLD_BAN:
+            {
+                ::world_ban ban{};
+                if (!blob.read_i32(ban.uid, pos) || !blob.read_i64(ban.until, pos)) return;
+                if (ban.until > std::time(nullptr)) this->world_bans.push_back(ban);
                 break;
             }
             default: return; // @note unknown record, stop rather than misread the rest

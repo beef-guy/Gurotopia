@@ -1,11 +1,13 @@
 #include "pch.hpp"
 #include "tools/sound.hpp"
+#include "action/special_items.hpp"
 
 #include "respawn.hpp"
 
 void action::respawn(ENetEvent& event, const std::string& header) 
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    special_respawn(event); // @note a carried Game Flag goes back, a challenge fails
 
     send_varlist(event.peer, { "OnSetFreezeState", 2u }, pPeer->netid);
     send_varlist(event.peer, { "OnKilled"}, pPeer->netid);

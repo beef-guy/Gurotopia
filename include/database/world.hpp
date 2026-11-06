@@ -306,6 +306,69 @@ struct storage
     std::vector<::slot> items{};
 };
 
+/* @brief Kranken's Galactic Block: the tint picked in its wrench menu (packed like Proton's MAKE_RGBA, 0xffffffff = no tint) */
+struct kranken
+{
+    ::pos pos{};
+    u_int color{0xffffffff};
+};
+
+/* @brief Safe Vault: a password-protected store of items (the password is kept hashed) */
+struct safe_vault
+{
+    ::pos pos{};
+    std::string password{}; // @note auth::hash_password(); empty = no password set yet
+    std::vector<::slot> items{};
+};
+
+/* @brief Staging Platform, Game Block, Game Flag, Game Grave, Game Goal: which team the block belongs to (4 = no team) */
+struct game_tile
+{
+    ::pos pos{};
+    u_char team{4};
+};
+
+/* @brief a Game Generator's rules */
+struct game_rules
+{
+    ::pos pos{};
+    u_char mode{0};    // @note 0 Capture the Flag, 1 Reach the Goal
+    u_char teams{2};   // @note 2-4
+    u_char minutes{5}; // @note game length
+    u_char goal{3};    // @note points a team needs to win
+};
+
+/* @brief a Challenge Timer: how long players get from the Start Flag to the End Flag, and the world's best time */
+struct challenge_timer
+{
+    ::pos pos{};
+    int seconds{60};
+    int best_ms{};
+    std::string best_name{};
+};
+
+/* @brief someone hit with a Ban Wand can't come back until `until` (unix seconds) */
+struct world_ban
+{
+    int uid{};
+    long long until{};
+};
+
+/* @brief a running Game Generator game (not saved: a game ends when the world empties) */
+struct battle
+{
+    bool active{};
+    ::pos generator{};
+    u_char mode{}, teams{2};
+    int goal{3};
+    long long ends{}; // @note unix seconds
+    std::array<int, 4> scores{};
+    std::vector<std::pair<int, u_char>> members{}; // @note user id, team
+    struct carry { int uid{}; ::pos flag{}; u_char team{}; };
+    std::vector<carry> carried{}; // @note flags being carried, and the tile each came from
+    std::vector<std::pair<::pos, short>> changed{}; // @note busted Game Blocks and taken flags: the tile and what was there, rebuilt when the game ends
+};
+
 class world 
 {
 public:
@@ -360,6 +423,13 @@ public:
     std::vector<::lobster_trap> lobster_traps{};
     std::vector<::auto_machine> auto_machines{};
     std::vector<::timed_machine> timed_machines{}; // @note Fossil Prep Stations and Geiger Chargers
+    std::vector<::kranken> krankens{};
+    std::vector<::safe_vault> vaults{};
+    std::vector<::game_tile> game_tiles{};
+    std::vector<::game_rules> game_generators{};
+    std::vector<::challenge_timer> challenge_timers{};
+    std::vector<::world_ban> world_bans{};
+    ::battle battle{}; // @note not saved
     ::pos geiger{-1, -1}; // @note not saved: the hidden radiation source Geiger Counters look for
     std::vector<std::pair<::pos, int>> fossil_life{}; // @note not saved: Rock Hammer taps a Fossil Rock still needs
     std::vector<u_int> fresh_fossils{}; // @note not saved: dropped Fossils nobody picked up yet (a Fossil Brush can polish them)

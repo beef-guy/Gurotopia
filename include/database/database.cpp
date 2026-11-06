@@ -89,6 +89,7 @@ void mysql_gateway::integrity()
     if (!column_found("peer", "online_status"))  alter_table("peer", "online_status INT DEFAULT 0"); // @note 0 online, 1 busy, 2 away
     if (!column_found("peer", "geiger_charge"))    alter_table("peer", "geiger_charge INT DEFAULT 0");      // @note seconds a Dead Geiger Counter charged
     if (!column_found("peer", "irradiated_until")) alter_table("peer", "irradiated_until BIGINT DEFAULT 0"); // @note unix seconds
+    if (!column_found("peer", "cursed_until")) alter_table("peer", "cursed_until BIGINT DEFAULT 0"); // @note unix seconds: Curse Wand
     if (!column_found("peer", "piggy_bank"))   alter_table("peer", "piggy_bank BIGINT DEFAULT 0"); // @note gems in the Piggy Bank
 
     mail_create_table();             // @note Growmail
