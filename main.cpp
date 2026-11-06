@@ -12,6 +12,7 @@
 #include "include/automate/holiday.hpp"
 #include "include/tools/terminal.hpp"
 #include "include/database/platform.hpp"
+#include "include/action/fishing.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -243,8 +244,9 @@ int main(int argc, char *argv[])
     ENetEvent event{};
     while (!gSignal)
     {
-        if (enet_host_service(host, &event, 1000/*ms*/) > 0 && event.type < eventType_pool.size())
+        if (enet_host_service(host, &event, 100/*ms*/) > 0 && event.type < eventType_pool.size())
             eventType_pool[event.type](event);
+        fishing_tick(); // @note fish bites
 
         if (clock::now() - last_save >= std::chrono::seconds(60)) // @note so a crash or force stop loses at most a minute
         {

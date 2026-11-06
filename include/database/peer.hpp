@@ -115,6 +115,16 @@ public:
     int daily_quest{}; // @note day (yyyymmdd, UTC) Crazy Jim's daily quest was last done
     ::pos magplant{-1, -1}; // @note the MAGPLANT 5000 this player's remote builds from (not saved)
     std::string magplant_world{};
+    struct
+    {
+        bool active{};
+        std::string world{};
+        ::pos tile{};       // @note the water tile the line is in
+        ::pos start{};      // @note where the player stood when casting (pixels)
+        short bait{};
+        long long next_bite{}; // @note steady clock ms
+        long long bite{};      // @note when the last bite happened, 0 = none yet
+    } fishing{}; // @note not saved
     std::vector<int> friends{}; // @note user ids of friends (loaded on log in)
     std::vector<int> friend_requests{}; // @note user ids who asked to be friends this session
     u_char punch_range{}, build_range{}; // @note extra reach in tiles from clothing (set in on::SetClothing)
