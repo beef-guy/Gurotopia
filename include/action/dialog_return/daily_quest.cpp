@@ -46,6 +46,8 @@ namespace
     }
 }
 
+bool daily_quest_done(const ::peer &peer) { return peer.daily_quest == today(); }
+
 void show_daily_quest(ENetEvent& event, const ::pos *phone)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);

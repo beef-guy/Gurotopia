@@ -7,6 +7,7 @@
 #include "action/profile.hpp"
 #include "onVariant/ConsoleMessage.hpp"
 #include "tools/create_dialog.hpp"
+#include "action/carnival.hpp"
 #include <algorithm>
 #include <unordered_map>
 
@@ -117,8 +118,24 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
     }
     else if (hPipe["buttonClicked"] == "goals") // @note the "Goals & Quests" button in the wrench menu
     {
-        show_daily_quest(event);
+        const bool jim_done = daily_quest_done(*pPeer);
+        send_varlist(event.peer, { "OnDialogRequest", ::create_dialog()
+            .set_default_color("`o")
+            .add_label_with_icon("big", "`wGoals & Quests``", 1900)
+            .add_spacer("small")
+            .add_label_with_icon("small", "`wCrazy Jim's Daily Quest``", 3898)
+            .add_smalltext(jim_done ? "`2Done for today!`` A new one comes at midnight." : "Bring Crazy Jim what he wants today for a Growtoken.")
+            .add_button("goal_daily", "View Daily Quest")
+            .add_spacer("small")
+            .add_label_with_icon("small", "`9Quest For The Ring``", 1900)
+            .add_smalltext(carnival_goal_line(*pPeer))
+            .add_button("goal_ring", "View Quest For The Ring")
+            .add_spacer("small")
+            .add_quick_exit()
+            .end_dialog("popup", "Close", "") });
     }
+    else if (hPipe["buttonClicked"] == "goal_daily") show_daily_quest(event);
+    else if (hPipe["buttonClicked"] == "goal_ring") carnival_goal_dialog(event.peer);
     else if (hPipe["buttonClicked"] == "show_clothes") // @note View worn clothes
     {
         ENetPeer *other = wrenched(event, hPipe);

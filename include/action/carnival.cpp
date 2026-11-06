@@ -841,12 +841,35 @@ namespace
         return 0;
     }
 
-    void ringmaster_dialog(ENetPeer *p)
+    /* @param from_goals opened from Goals & Quests in the wrench menu: only shows the quest, handing in is done at the Ringmaster */
+    void ringmaster_dialog(ENetPeer *p, bool from_goals = false)
     {
         ::peer *pp = peer_of(p);
         const auto &c = pp->carnival;
         ::create_dialog d{};
         d.set_default_color("`o");
+        if (from_goals)
+        {
+            d.add_label_with_icon("big", "`9Quest For The Ring``", THE_RINGMASTER);
+            if (c.step <= 0)
+                d.add_textbox("You're not on the Ringmaster's quest. When the Carnival is in town, visit `wCARNIVAL`` and give the Ringmaster 10 Golden Tickets to start it.");
+            else
+            {
+                const long long have = is_delivery(c.task) ? std::min<long long>(delivery_have(*pp), c.goal) : std::min<long long>(c.progress, c.goal);
+                d.add_smalltext(std::format("(Step {}/{})", c.step, QUEST_STEPS))
+                 .add_spacer("small")
+                 .add_textbox(task_text(*pp))
+                 .add_smalltext(std::format("({} {}/{})", is_delivery(c.task) ? "You have" : "Current progress", have, c.goal))
+                 .add_spacer("small")
+                 .add_textbox(have >= c.goal ? "`2Done!`` Go back to the Ringmaster at the Carnival for your next task."
+                                             : "When it's done, go back to the Ringmaster at the Carnival.");
+            }
+            d.add_spacer("small")
+             .add_textbox(carnival_open() ? "`2The Carnival is in town!`` Go to `wCARNIVAL``." : "`4The Carnival isn't in town right now.`` It comes for 3 days from the first Friday of each month.")
+             .add_button("goals", "Back");
+            dialog(p, d.end_dialog("popup", "Close", ""));
+            return;
+        }
         if (c.step <= 0)
         {
             d.add_label_with_icon("big", "`wThe Ringmaster``", THE_RINGMASTER)
@@ -1090,6 +1113,18 @@ void carnival_tick()
         for (std::size_t i = 0; i < ROOM_COUNT; ++i) room_tick(*world, i, now);
     }
 }
+
+/* ---------------- Goals & Quests ---------------- */
+
+std::string carnival_goal_line(const ::peer &peer)
+{
+    const auto &c = peer.carnival;
+    if (c.step <= 0) return "Not started. Visit the Ringmaster at the Carnival.";
+    const long long have = is_delivery(c.task) ? std::min<long long>(delivery_have(peer), c.goal) : std::min<long long>(c.progress, c.goal);
+    return std::format("Step {}/{}: {} ({}/{})", c.step, QUEST_STEPS, have >= c.goal ? "`2done, see the Ringmaster``" : "in progress", have, c.goal);
+}
+
+void carnival_goal_dialog(ENetPeer *peer) { ringmaster_dialog(peer, true); }
 
 /* ---------------- Ringmaster tasks ---------------- */
 
