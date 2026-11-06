@@ -26,6 +26,7 @@
 #include "action/profile.hpp"
 #include "action/growpass.hpp"
 #include "action/special_items.hpp"
+#include "action/cooking.hpp"
 
 #include "__dialog_return.hpp"
 
@@ -56,6 +57,7 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
 
     {"vending", std::bind(&vending_edit, std::placeholders::_1, std::placeholders::_2)},
     {"vending_buy", std::bind(&vending_buy, std::placeholders::_1, std::placeholders::_2)},
+    {"oven_heat", std::bind(&oven_heat, std::placeholders::_1, std::placeholders::_2)},
     {"kranken", std::bind(&kranken_edit, std::placeholders::_1, std::placeholders::_2)},
     {"vault", std::bind(&vault_edit, std::placeholders::_1, std::placeholders::_2)},
     {"game_rules", std::bind(&game_rules_edit, std::placeholders::_1, std::placeholders::_2)},

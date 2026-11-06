@@ -26,6 +26,7 @@
 #include "action/profile.hpp"
 #include "action/gauntlet.hpp"
 #include "action/special_items.hpp"
+#include "action/cooking.hpp"
 #include "database/playmods.hpp"
 
 #include "tile_change.hpp"
@@ -96,6 +97,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         if (radiation_tile_change(event, *world, gamePacket)) return; // @note Geiger Charger
         if (fossil_tile_change(event, *world, gamePacket)) return; // @note Rock Hammer, Fossil Brush, Fossil Prep Station
         if (special_tile_change(event, *world, gamePacket, block)) return; // @note wands on players, Game Blocks during a game
+        if (cooking_tile_change(event, *world, gamePacket, block)) return; // @note ovens, and punching an open Chemical Combiner with a recipe in it
 
         /* @note the MAGPLANT 5000 Remote builds with whatever its linked MAGPLANT 5000 holds */
         ::magplant *remote_from = nullptr;
@@ -300,12 +302,10 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                             }
                             case 928:/*science station*/ // @note source: https://growtopia.fandom.com/wiki/Science_Station
                             {
-                                short chemcial = 
-                                    (!RandomRange(0, 16)) ? chemcial = 918/*P*/ : 
-                                    (!RandomRange(0, 8))  ? chemcial = 920/*B*/ : 
-                                    (!RandomRange(0, 6))  ? chemcial = 924/*Y*/ : 
-                                    (!RandomRange(0, 4))  ? chemcial = 916/*R*/ : chemcial = 914/*G*/;
-                                add_drop(event, {chemcial, 1}, gamePacket.punch.by_32(), *world);
+                                /* @note one basic chemical, weighted like the wiki's odds: G 1/3, R 1/4.75, Y 1/7.5, B 1/8.75, P 1/17 */
+                                const int roll = RandomRange(1, 72);
+                                const short chemical = (roll <= 28) ? 914/*G*/ : (roll <= 46) ? 916/*R*/ : (roll <= 57) ? 924/*Y*/ : (roll <= 67) ? 920/*B*/ : 918/*P*/;
+                                add_drop(event, {chemical, 1}, gamePacket.punch.by_32(), *world);
                                 break;
                             }
                         }
@@ -354,6 +354,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 case type::TOGGLEABLE_BLOCK:
                 case type::TOGGLEABLE_ANIMATED_BLOCK:
                 case type::CHEST:
+                case type::CHEMICAL_COMBINER: // @note "can be punched to be opened or closed"
                 {
                     block.state[2] ^= S_TOGGLE;
                     if (item.id == 226/*Signal Jammer*/)
@@ -508,6 +509,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 std::erase_if(world->auto_machines, [&](const ::auto_machine &m) { return m.pos == gamePacket.punch; });
                 std::erase_if(world->timed_machines, [&](const ::timed_machine &m) { return m.pos == gamePacket.punch; });
                 special_broken(*world, gamePacket.punch);
+                cooking_broken(*world, gamePacket.punch);
                 if (is_tile_lock(item.id)) remove_area_lock(event, *world, gamePacket.punch);
                 if (item.type == type::XENONITE && world->xenonite != 0)
                 {
@@ -1350,6 +1352,8 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
             if (item.type != type::BACKGROUND && get_type(item) != '\x00') tile_update = true; // @note send the block's data right away, the game may crash on it without
             (item.type == type::BACKGROUND) ? block.bg = gamePacket.id : block.fg = gamePacket.id;
             if (item.type != type::BACKGROUND) special_placed(*world, gamePacket.punch, item);
+            if (item.type != type::BACKGROUND) cooking_placed(*world, gamePacket.punch, item);
+            if (item.type == type::CHEMICAL_COMBINER) tile_update = true; // @note it stands open: tell the game
             if (no_place_echo)
             {
                 /*

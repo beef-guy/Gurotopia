@@ -1,0 +1,31 @@
+# Cooking Oven recipes (Home Oven, Commercial Oven, Master Chef's Oven, Replicator, Taco Truck Oven).
+# Source: Growtopia wiki, Cooking (update)/Cooking Recipes. The timings there are for Low heat; you don't
+# need them here, each ingredient's cook time comes from items.dat (an ingredient is Perfect at 95-104%).
+# result|ingredients (item ids, the order doesn't matter)|salt|pepper|sugar|kind|name
+# kind: food, gingerbread (95% or more makes a Gingerbread Man), magnifico (Bueno 60-84%, Sabroso 85-95%,
+#       Perfecto 96-100%), butter_lamb (2-3 Sugar makes a Detective Butter Lamb, less a Failed Butter Lamb)
+4594|676,3836,956,874|1|0|2|food|Apple Strudel
+4604|3472,4602,4588,962|1|2|0|food|Arroz Con Pollo
+4598|4580,956,4586,962,4564|1|1|1|food|BBQ Bacon Burger
+4600|540,4562,3428,3468|1|1|0|food|Beer-Battered Fish And Chips
+4596|4562,874,868,196|0|0|2|food|Berry Crepes
+4674|4560,822,4670,4666,4672|2|0|0|food|Chips And Guacamole
+5984|874,4610,5376,4624|0|0|2|food|Chocolate Bunny
+9456|8064,4610,5376,4624|0|0|2|food|Chocolate Easter Bilby
+7056|4562,3472,7054,4610,4766|0|0|0|food|Coconut Tart
+6906|4562,3836,6958,5376,4766|0|0|2|food|Composer's Cookie
+6316|4764,4984,868,196,6314|0|0|2|food|Deep-Fried Tropical Ice Cream
+1474|956,874,4586,868|1|0|0|food|Eggs Benedict
+7466|7054,874,868,7462,6314|0|0|2|food|Eggnog
+6916|874,7004,868,962|1|1|0|food|Flashback Flan
+6914|822,4984,4666,7000|0|0|3|food|Gemonade
+5452|5416,3836,874,4610,5376|0|0|2|gingerbread|Gingerbread Cookie
+6908|6990,4602,962,4666|0|1|1|food|Glutton's Gazpacho
+6910|4562,6974,4764,196,4766|0|0|3|food|Growlectables
+4592|4560,956,3468,664,4564|1|1|0|food|Homemade Fish Taco
+3240|822,4610,3836,868,4624|0|0|3|food|Hot Chocolate
+6046|4580,4586,962,4674,4666|1|1|0|magnifico|Magnifico Carne Guacamole
+4768|4764,956,3622,4766|0|0|2|food|Pineapple Turnover
+7464|5416,874,868,1198,7462|1|0|1|food|Pumpkin Pie
+6912|7014,3472,4602,868,962|0|0|0|food|Skill Spice
+10744|7054,4670,4586,868,712|0|0|2|butter_lamb|Detective Butter Lamb
