@@ -17,6 +17,7 @@
 
 #include "action/dialog_return/tile_extras.hpp"
 #include "action/dialog_return/wrenchables.hpp"
+#include "action/fishing.hpp"
 
 #include "tile_change.hpp"
 
@@ -81,6 +82,8 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         ::block &block = world->blocks[cord(gamePacket.punch.x, gamePacket.punch.y)];
 
         if (gamePacket.id != 18 && gamePacket.id != 32 && pPeer->have_slot(::slot(gamePacket.id, 0)) == 0) return; // @note can only use items peer has
+
+        if (fishing_tile_change(event, *world, gamePacket)) return; // @note casting bait, or punching to reel in
 
         /* @note the MAGPLANT 5000 Remote builds with whatever its linked MAGPLANT 5000 holds */
         ::magplant *remote_from = nullptr;
@@ -387,6 +390,17 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     }
                     break;
                 }
+                case type::LOBSTER_TRAP:
+                {
+                    if (lobster_trap_punch(event, *world, gamePacket.punch)) return; // @note a baited trap is checked, not broken
+                    break;
+                }
+                case type::FISH_TANK_PORT:
+                {
+                    auto tank = std::ranges::find(world->fish_tanks, gamePacket.punch, &::fish_tank::pos);
+                    if (tank != world->fish_tanks.end() && !tank->fish.empty()) throw std::runtime_error("Take the fish out of the tank first!");
+                    break;
+                }
                 case type::DONATION_BOX:
                 {
                     auto box = std::ranges::find(world->donation_boxes, gamePacket.punch, &::donation_box::pos);
@@ -442,6 +456,9 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 std::erase_if(world->mannequins, [&](const ::mannequin &dummy) { return dummy.pos == gamePacket.punch; });
                 std::erase_if(world->weather_settings, [&](const ::weather_setting &w) { return w.pos == gamePacket.punch; });
                 std::erase_if(world->magplants, [&](const ::magplant &mag) { return mag.pos == gamePacket.punch; });
+                std::erase_if(world->fish_tanks, [&](const ::fish_tank &tank) { return tank.pos == gamePacket.punch; });
+                std::erase_if(world->fish_mounts, [&](const ::fish_mount &mount) { return mount.pos == gamePacket.punch; });
+                std::erase_if(world->lobster_traps, [&](const ::lobster_trap &trap) { return trap.pos == gamePacket.punch; });
                 if (is_tile_lock(item.id)) remove_area_lock(event, *world, gamePacket.punch);
                 if (item.type == type::XENONITE && world->xenonite != 0)
                 {
@@ -1032,6 +1049,21 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     growscan_wrench(event, *world, gamePacket.punch);
                     break;
                 }
+                case type::FISH_TANK_PORT:
+                {
+                    fish_tank_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
+                case type::FISH_MOUNT:
+                {
+                    fish_mount_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
+                case type::LOBSTER_TRAP:
+                {
+                    lobster_trap_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
                 case type::FOREGROUND:
                 {
                     if (item.id == 3898/*Telephone*/) telephone_wrench(event, *world, gamePacket.punch);
@@ -1186,6 +1218,25 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 {
                     std::erase_if(world->mannequins, [&](const ::mannequin &dummy) { return dummy.pos == gamePacket.punch; });
                     tile_update = true;
+                    break;
+                }
+                case type::FISH_TANK_PORT:
+                {
+                    if (block.bg != 3004/*Fish Tank*/) throw std::runtime_error("You can only place this on a fish tank.");
+                    std::erase_if(world->fish_tanks, [&](const ::fish_tank &tank) { return tank.pos == gamePacket.punch; });
+                    break;
+                }
+                case type::FISH_MOUNT:
+                {
+                    std::erase_if(world->fish_mounts, [&](const ::fish_mount &mount) { return mount.pos == gamePacket.punch; });
+                    break;
+                }
+                case type::LOBSTER_TRAP:
+                {
+                    const bool deep = (block.state[3] & S_WATER) && gamePacket.punch.y_int() > 0 &&
+                        (world->blocks[cord(gamePacket.punch.x_int(), gamePacket.punch.y_int() - 1)].state[3] & S_WATER);
+                    if (!deep) throw std::runtime_error("Put this in deep water!");
+                    std::erase_if(world->lobster_traps, [&](const ::lobster_trap &trap) { return trap.pos == gamePacket.punch; });
                     break;
                 }
                 case type::MAGPLANT:

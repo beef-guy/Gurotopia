@@ -380,6 +380,26 @@ static void write_default_extra(::blob &blob, char type, const ::item &item)
             for (int i = 0; i < 4; ++i) blob.u32((shelf != this->shelves.end()) ? shelf->items[i] : 0);
             break;
         }
+        case '\x19': /* fish tank port: flags, then (fish, pounds) pairs */
+        {
+            auto tank = std::ranges::find(this->fish_tanks, block_pos, &::fish_tank::pos);
+            const std::size_t n = (tank != this->fish_tanks.end()) ? tank->fish.size() : 0;
+            blob.u8(0);
+            blob.u32(static_cast<u_int>(n * 2));
+            for (std::size_t i = 0; i < n; ++i) { blob.u32(static_cast<u_int>(tank->fish[i].first)); blob.u32(static_cast<u_int>(tank->fish[i].second)); }
+            break;
+        }
+        case '\x2f': /* fish wall mount: label, fish, pounds */
+        {
+            auto mount = std::ranges::find(this->fish_mounts, block_pos, &::fish_mount::pos);
+            const bool found = mount != this->fish_mounts.end();
+            const std::string label = found ? mount->label : "";
+            blob.i16(static_cast<short>(label.length()));
+            for (char c : label) blob.u8(c);
+            blob.u32(found ? static_cast<u_int>(mount->fish) : 0);
+            blob.u8(found ? static_cast<u_char>(std::clamp(mount->lbs, 0, 255)) : 0);
+            break;
+        }
         case '\x42': /* growscan 9000: usable by public */
         {
             blob.u8((block.state[2] & S_PUBLIC) ? 1 : 0);
@@ -691,7 +711,7 @@ namespace
         for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
         return true;
     }
-    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14 };
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17 };
 }
 
 /* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
@@ -791,6 +811,26 @@ namespace
         if (mag.item == 0) continue;
         blob.u8(EX_MAGPLANT); blob.i16(mag.pos.x_int()); blob.i16(mag.pos.y_int());
         blob.i16(mag.item); blob.i32(mag.count); blob.u8(mag.collect); blob.u8(mag.remote);
+    }
+    for (const ::fish_tank &tank : this->fish_tanks)
+    {
+        if (tank.fish.empty()) continue;
+        blob.u8(EX_FISH_TANK); blob.i16(tank.pos.x_int()); blob.i16(tank.pos.y_int());
+        blob.i32(static_cast<int>(tank.fish.size()));
+        for (const auto &[fish, lbs] : tank.fish) { blob.i16(fish); blob.i32(lbs); }
+    }
+    for (const ::fish_mount &mount : this->fish_mounts)
+    {
+        if (mount.fish == 0) continue;
+        blob.u8(EX_FISH_MOUNT); blob.i16(mount.pos.x_int()); blob.i16(mount.pos.y_int());
+        blob.i16(mount.fish); blob.i32(mount.lbs);
+        write_string(blob, mount.label);
+    }
+    for (const ::lobster_trap &trap : this->lobster_traps)
+    {
+        if (trap.count <= 0) continue;
+        blob.u8(EX_LOBSTER_TRAP); blob.i16(trap.pos.x_int()); blob.i16(trap.pos.y_int());
+        blob.i16(trap.bait); blob.i32(trap.count); blob.u32(trap.checked);
     }
     if (this->xenonite != 0)
     {
@@ -932,6 +972,34 @@ void world::load_extras(::blob &blob)
                 mag.collect = collect, mag.remote = remote;
                 if (mag.count < 0) mag.count = 0;
                 if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::MAGPLANT) this->magplants.push_back(mag);
+                break;
+            }
+            case EX_FISH_TANK:
+            {
+                ::fish_tank tank{.pos = tile};
+                int count{};
+                if (!blob.read_i32(count, pos) || count < 0 || count > 100) return;
+                for (int i = 0; i < count; ++i)
+                {
+                    short fish{}; int lbs{};
+                    if (!blob.read_i16(fish, pos) || !blob.read_i32(lbs, pos)) return;
+                    tank.fish.emplace_back(fish, lbs);
+                }
+                if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::FISH_TANK_PORT) this->fish_tanks.push_back(std::move(tank));
+                break;
+            }
+            case EX_FISH_MOUNT:
+            {
+                ::fish_mount mount{.pos = tile};
+                if (!blob.read_i16(mount.fish, pos) || !blob.read_i32(mount.lbs, pos) || !read_string(blob, pos, mount.label)) return;
+                if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::FISH_MOUNT) this->fish_mounts.push_back(std::move(mount));
+                break;
+            }
+            case EX_LOBSTER_TRAP:
+            {
+                ::lobster_trap trap{.pos = tile};
+                if (!blob.read_i16(trap.bait, pos) || !blob.read_i32(trap.count, pos) || !blob.read_u32(trap.checked, pos)) return;
+                if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::LOBSTER_TRAP) this->lobster_traps.push_back(trap);
                 break;
             }
             case EX_SHELF:

@@ -254,6 +254,29 @@ struct magplant
 /* @return how many items this machine holds at most */
 extern int magplant_limit(short machine);
 
+/* @brief Fish Tank Port: the fish swimming in its tank (item id, pounds) */
+struct fish_tank
+{
+    ::pos pos{};
+    std::vector<std::pair<short, int>> fish{};
+};
+/* @brief Fish Wall Mount: the mounted fish, for good */
+struct fish_mount
+{
+    ::pos pos{};
+    short fish{};
+    int lbs{};
+    std::string label{};
+};
+/* @brief Lobster Trap: the bait inside and when it was last checked */
+struct lobster_trap
+{
+    ::pos pos{};
+    short bait{};
+    int count{};
+    u_int checked{}; // @note ticks()
+};
+
 /* @brief Storage Box Xtreme contents */
 struct storage
 {
@@ -310,6 +333,9 @@ public:
     std::vector<::mannequin> mannequins{};
     std::vector<::weather_setting> weather_settings{};
     std::vector<::magplant> magplants{};
+    std::vector<::fish_tank> fish_tanks{};
+    std::vector<::fish_mount> fish_mounts{};
+    std::vector<::lobster_trap> lobster_traps{};
     u_int xenonite{}; // @note the Xenonite Crystal's settings (xenonite:: in playmods.hpp). only one crystal per world
 
     /* @return the area lock that covers this tile, or nullptr */
