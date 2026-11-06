@@ -395,6 +395,7 @@ void world::mysql_select_all()
     {
         ::blob blob = this->mysql_select<::blob>("extras");
         this->load_extras(blob);
+        if (std::ranges::find(this->blocks, 2072/*Xenonite Crystal*/, &::block::fg) == this->blocks.end()) this->xenonite = 0;
     }
 }
 
@@ -487,7 +488,7 @@ namespace
         for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
         return true;
     }
-    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5 };
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6 };
 }
 
 /* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
@@ -526,6 +527,11 @@ namespace
     {
         blob.u8(EX_DISPLAY); blob.i16(display.pos.x_int()); blob.i16(display.pos.y_int());
         blob.u32(display.id);
+    }
+    if (this->xenonite != 0)
+    {
+        blob.u8(EX_XENONITE); blob.i16(0); blob.i16(0); // @note one per world, the tile doesn't matter
+        blob.u32(this->xenonite);
     }
     return blob;
 }
@@ -600,6 +606,11 @@ void world::load_extras(::blob &blob)
                 u_int id{};
                 if (!blob.read_u32(id, pos)) return;
                 this->displays.emplace_back(id, tile);
+                break;
+            }
+            case EX_XENONITE:
+            {
+                if (!blob.read_u32(this->xenonite, pos)) return;
                 break;
             }
             default: return; // @note unknown record, stop rather than misread the rest

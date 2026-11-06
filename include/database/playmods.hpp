@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <string>
 
 /* @note powers that clothing gives the wearer, like the real game's playmods ("Double Jump", "Speedy", ...) */
 enum mod : u_short {
@@ -17,6 +18,18 @@ enum mod : u_short {
     M_ENHANCED_DIGGING = 0x0400, // @note message only for now
     M_SLOW             = 0x0800  // @note "Putt Putt Putt"
 };
+
+/* @note Xenonite Crystal settings, one force and one block bit per power (stored in the world) */
+enum xenonite : u_int {
+    X_FORCE_DOUBLE_JUMP  = 1 << 0,  X_BLOCK_DOUBLE_JUMP  = 1 << 1,
+    X_FORCE_HIGH_JUMP    = 1 << 2,  X_BLOCK_HIGH_JUMP    = 1 << 3,
+    X_FORCE_HEAT_RESIST  = 1 << 4,  X_BLOCK_HEAT_RESIST  = 1 << 5,
+    X_FORCE_STRONG_PUNCH = 1 << 6,  X_BLOCK_STRONG_PUNCH = 1 << 7,
+    X_FORCE_SPEEDY       = 1 << 8,  X_BLOCK_SPEEDY       = 1 << 9,
+    X_FORCE_LONG_BUILD   = 1 << 10, X_BLOCK_LONG_BUILD   = 1 << 11,
+    X_FORCE_LONG_PUNCH   = 1 << 12, X_BLOCK_LONG_PUNCH   = 1 << 13
+};
+constexpr u_short XENONITE_CRYSTAL = 2072;
 
 struct playmod {
     u_short item{};
@@ -37,7 +50,11 @@ struct cloth_effects {
     float punch_strength{ 200.0f };
     float water_speed{ 125.0f };
 };
-extern ::cloth_effects get_cloth_effects(const std::array<float, 10ull> &clothing);
+/* @param xenonite the world's Xenonite Crystal settings (xenonite::), 0 if none */
+extern ::cloth_effects get_cloth_effects(const std::array<float, 10ull> &clothing, u_int xenonite = 0);
+
+/* @return the "Active effects" lines of the wrench menu (add_label_with_icon|small|...) */
+extern std::string active_effects(const std::array<float, 10ull> &clothing, u_int xenonite = 0);
 
 /* @note "`oYou can double jump! (`$Double Jump `omod added)``" in the console, like the real game */
 extern void playmod_message(ENetPeer *peer, u_short item_id, bool added);

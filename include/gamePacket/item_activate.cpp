@@ -33,7 +33,7 @@ void item_activate(ENetEvent& event, ::gamePacket gamePacket)
             pPeer->punch_effect = punch_id;
 
         send_varlist(event.peer, { "OnEquipNewItem", gamePacket.id }, pPeer->netid);
-        on::SetClothing(event.peer); // @todo
+        on::SetClothing(event.peer, true);
     }
     else 
     {

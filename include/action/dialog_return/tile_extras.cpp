@@ -3,6 +3,8 @@
 #include "onVariant/ConsoleMessage.hpp"
 #include "tools/create_dialog.hpp"
 #include "tools/sound.hpp"
+#include "onVariant/SetClothing.hpp"
+#include "database/playmods.hpp"
 
 #include "tile_extras.hpp"
 
@@ -483,4 +485,68 @@ void display_edit(ENetEvent &event, const ::hPipe &hPipe)
     else display->id = static_cast<u_int>(id);
     update_tile(event, *world, pos);
     play_in_world(world->name, pPeer->netid, "audio/blorb.wav");
+}
+
+
+namespace
+{
+    /* @note checkbox name, label, bit. same order as the real game's Xenonite menu */
+    struct xenonite_option { const char *id; const char *label; u_int bit; };
+    constexpr xenonite_option xenonite_options[] {
+        {"force_dj",    "Force Double Jump",  X_FORCE_DOUBLE_JUMP},  {"block_dj",    "Block Double Jump",  X_BLOCK_DOUBLE_JUMP},
+        {"force_hj",    "Force High Jump",    X_FORCE_HIGH_JUMP},    {"block_hj",    "Block High Jump",    X_BLOCK_HIGH_JUMP},
+        {"force_heat",  "Force Heat Resist",  X_FORCE_HEAT_RESIST},  {"block_heat",  "Block Heat Resist",  X_BLOCK_HEAT_RESIST},
+        {"force_punch", "Force Strong Punch", X_FORCE_STRONG_PUNCH}, {"block_punch", "Block Strong Punch", X_BLOCK_STRONG_PUNCH},
+        {"force_speed", "Force Speedy",       X_FORCE_SPEEDY},       {"block_speed", "Block Speedy",       X_BLOCK_SPEEDY},
+        {"force_build", "Force Long Build",   X_FORCE_LONG_BUILD},   {"block_build", "Block Long Build",   X_BLOCK_LONG_BUILD},
+        {"force_reach", "Force Long Punch",   X_FORCE_LONG_PUNCH},   {"block_reach", "Block Long Punch",   X_BLOCK_LONG_PUNCH}
+    };
+}
+
+void refresh_world_powers(const std::string &world_name)
+{
+    peers(world_name, PeerSearch::WORLD, [](ENetPeer *p) { on::SetClothing(p); });
+}
+
+void xenonite_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    if (!pPeer->owns(world.owner) && pPeer->role < MODERATOR) throw std::runtime_error("Only the world's owner can change the Xenonite Crystal.");
+
+    ::create_dialog dialog = ::create_dialog()
+        .set_default_color("`o")
+        .add_label_with_icon("big", "`wXenonite Crystal``", XENONITE_CRYSTAL)
+        .add_spacer("small")
+        .embed_data("tilex", pos.x_int())
+        .embed_data("tiley", pos.y_int())
+        .add_textbox("This crystal changes the powers of everyone in this world. Force a power to give it to every player, or block it to take it away, even from their clothes.")
+        .add_spacer("small");
+    for (const auto &option : xenonite_options)
+        dialog.add_checkbox(option.id, option.label, (world.xenonite & option.bit) != 0);
+
+    send_varlist(event.peer, { "OnDialogRequest", dialog.add_spacer("small").end_dialog("xenonite_edit", "Cancel", "Update") });
+}
+
+void xenonite_edit(ENetEvent &event, const ::hPipe &hPipe)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    ::world *world = peer_world(pPeer);
+    ::pos pos{};
+    if (world == nullptr || !read_tile(hPipe, *world, type::XENONITE, pos)) return;
+    if (!pPeer->owns(world->owner) && pPeer->role < MODERATOR) return;
+
+    u_int flags{};
+    for (const auto &option : xenonite_options)
+        if (hPipe[option.id] == "1") flags |= option.bit;
+    for (u_int force = X_FORCE_DOUBLE_JUMP; force <= X_FORCE_LONG_PUNCH; force <<= 2)
+        if ((flags & force) && (flags & (force << 1))) flags &= ~(force << 1); // @note can't force and block the same power, force wins
+
+    if (flags == world->xenonite) return;
+    world->xenonite = flags;
+    refresh_world_powers(world->name);
+    peers(world->name, PeerSearch::WORLD, [](ENetPeer *p)
+    {
+        on::ConsoleMessage(p, "`oThe `wXenonite Crystal`` hums... your powers have changed!``");
+        play_sfx(p, "audio/secret.wav");
+    });
 }

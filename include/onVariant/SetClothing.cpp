@@ -4,7 +4,7 @@
 
 #include "SetClothing.hpp"
 
-void on::SetClothing(ENetPeer *peer)
+void on::SetClothing(ENetPeer *peer, bool sound)
 {
     ::peer *pPeer = static_cast<::peer*>(peer->data);
 
@@ -14,11 +14,17 @@ void on::SetClothing(ENetPeer *peer)
         CL_Vec3f{pPeer->clothing[clothing::FEET], pPeer->clothing[clothing::FACE], pPeer->clothing[clothing::HAND]}, 
         CL_Vec3f{pPeer->clothing[clothing::BACK], pPeer->clothing[clothing::HEAD], pPeer->clothing[clothing::CHARM]}, 
         (pPeer->state & S_GHOST) ? -140 : pPeer->skin_color,
-        CL_Vec3f{pPeer->clothing[clothing::ANCES], 0.0f, 0.0f}
+        CL_Vec3f{pPeer->clothing[clothing::ANCES], sound ? 1.0f : 0.0f, 0.0f} // @note y != 0: the client plays audio/change_clothes.wav
     }, pPeer->netid);
 
     /* @note powers from worn clothing (double jump, speedy, ...). @todo playmods from consumables */
-    const ::cloth_effects fx = get_cloth_effects(pPeer->clothing);
+    u_int xenonite{};
+    if (pPeer->netid != 0)
+    {
+        auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
+        if (world != worlds.end()) xenonite = world->xenonite; // @note a Xenonite Crystal forces or blocks powers for everyone here
+    }
+    const ::cloth_effects fx = get_cloth_effects(pPeer->clothing, xenonite);
     pPeer->punch_range = fx.punch_range;
     pPeer->build_range = fx.build_range;
 
