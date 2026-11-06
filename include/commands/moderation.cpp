@@ -6,6 +6,7 @@
 #include "tools/sound.hpp"
 #include "action/join_request.hpp"
 #include "action/quit_to_exit.hpp"
+#include "database/mail.hpp"
 
 #include "moderation.hpp"
 
@@ -455,4 +456,49 @@ void playermode(ENetEvent& event, const std::string_view text)
         pPeer->player_mode = false;
         reply(event, "`2Player mode is OFF.`` Your owner and staff powers are back.");
     }
+}
+
+void mail(ENetEvent& event, const std::string_view text)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    const std::vector<std::string> list = words(text);
+    if (list.size() < 3ull) return reply(event, "Usage: /mail <`$name``> <`$item id`` or `$gems``> <`$count``> [message]  (count 0 sends just the message)");
+
+    std::string target_name = list[0];
+    int uid{};
+    if (ENetPeer *target = moderation::find_online(list[0]); target != nullptr)
+    {
+        const ::peer *pTarget = static_cast<::peer*>(target->data);
+        uid = pTarget->user_id;
+        target_name = pTarget->growid;
+    }
+    else
+    {
+        ::peer offline{};
+        if (!offline.exists(target_name)) return reply(event, std::format("`4No account called {}.``", target_name));
+        offline.growid = target_name;
+        uid = offline.mysql_select<signed>("uid");
+    }
+
+    const int id = (lower(list[1]) == "gems") ? MAIL_GEMS : atoi(list[1].c_str());
+    if (id <= 0 || static_cast<std::size_t>(id) >= items.size()) return reply(event, "`4That item doesn't exist.``");
+    const int count = std::clamp(atoi(list[2].c_str()), 0, (id == MAIL_GEMS) ? 1'000'000'000 : 10'000);
+
+    std::vector<std::pair<int, int>> rewards{};
+    if (count > 0) rewards.emplace_back(id, count);
+    const std::string message = (list.size() > 3ull) ? rest(list, 3) : std::format("A gift from {}.", pPeer->growid);
+
+    mail_send(uid, std::format("Mail from {}", pPeer->growid), message, rewards, (count > 0) ? id : 0);
+    moderation::log(*pPeer, "mail", target_name, (count > 0) ? std::format("{} x{}", id, count) : message.substr(0, 200));
+    reply(event, std::format("`2Mail sent to {}.``", target_name));
+}
+
+void maillayout(ENetEvent& event, const std::string_view text)
+{
+    const std::vector<std::string> list = words(text);
+    if (list.empty())
+        return reply(event, std::format("Mail layout: `w{}``. Usage: /maillayout <six names from id, status, icon, expires, left or a number, comma separated>. Default: id,status,icon,0,expires,0", mail_layout));
+    if (readch(list[0], ',').size() != 6ull) return reply(event, "`4Give exactly six names, comma separated.``");
+    mail_layout = list[0];
+    reply(event, std::format("`2Mail layout is now {}.`` Close and open your mailbox to see it.", mail_layout));
 }

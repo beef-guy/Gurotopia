@@ -8,6 +8,8 @@
 #include "automate/holiday.hpp"
 #include "database/friends.hpp"
 
+#include "action/event_buttons.hpp"
+
 #include "enter_game.hpp"
 
 void action::enter_game(ENetEvent& event, const std::string& header) 
@@ -27,6 +29,7 @@ void action::enter_game(ENetEvent& event, const std::string& header)
         )
     );
     friends_alert(event.peer, true);
+    daily_challenge_settle(); // @note mail yesterday's Daily Challenge prizes, if nobody has yet
     heart_monitors_refresh(static_cast<::peer*>(event.peer->data)->user_id); // @note their Heart Monitors start beating
     on::ConsoleMessage(event.peer, holiday_greeting().second);
     if (active_holiday == holiday::HALLOWEEN)

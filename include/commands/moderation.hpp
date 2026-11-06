@@ -15,6 +15,8 @@ extern void setrole(ENetEvent& event, const std::string_view text);
 extern void givegems(ENetEvent& event, const std::string_view text);
 extern void trashall(ENetEvent& event, const std::string_view text);
 extern void playermode(ENetEvent& event, const std::string_view text);
+extern void mail(ENetEvent& event, const std::string_view text);
+extern void maillayout(ENetEvent& event, const std::string_view text);
 
 namespace moderation
 {

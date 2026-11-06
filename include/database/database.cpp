@@ -6,6 +6,8 @@
 
 #include "database.hpp"
 #include "platform.hpp"
+#include "mail.hpp"
+#include "action/event_buttons.hpp"
 
 ::mysql_gateway db;
 
@@ -73,6 +75,10 @@ void mysql_gateway::integrity()
     if (!column_found("world", "extras"))      alter_table("world", "extras MEDIUMBLOB"); // @note door targets, area locks, vending machines, storage boxes
     if (!column_found("peer", "daily_quest"))  alter_table("peer", "daily_quest INT DEFAULT 0"); // @note day (yyyymmdd) the daily quest was last done
     if (!column_found("peer", "playtime"))     alter_table("peer", "playtime BIGINT DEFAULT 0"); // @note seconds played
+    if (!column_found("peer", "piggy_bank"))   alter_table("peer", "piggy_bank BIGINT DEFAULT 0"); // @note gems in the Piggy Bank
+
+    mail_create_table();             // @note Growmail
+    daily_challenge_create_tables(); // @note scores and which days have been paid
 
     /* @note moderation: IP bans and a log of every staff action */
     mysql_query(mysql,

@@ -170,6 +170,10 @@ public:
     std::vector<short> fav{};
 
     long long gems{0};
+    long long piggy_bank{0}; // @note gems saved in the Piggy Bank (the button on the left of the world screen)
+    std::string piggy_label{}; // @note what the Piggy Bank button shows now, so it's only resent when it changes
+    bool mail_page_sent{}; // @note the mailbox got its page this session
+    int mail_page{};       // @note the page index it asked for then
     int wl_storage{0};
     std::array<u_int, 2ull> level{ 1, 0 }; // {level, xp} XP formula credits: https://www.growtopiagame.com/forums/member/553046-kasete
     /*

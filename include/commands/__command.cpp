@@ -77,6 +77,8 @@ const std::unordered_map<std::string_view, ::cmd_entry> cmd_pool
     {"/setrole", {setrole, DEVELOPER}},
     {"/givegems", {givegems, DEVELOPER}},
     {"/trashall", {trashall, DEVELOPER}},
+    {"/mail", {mail, DEVELOPER}},
+    {"/maillayout", {maillayout, DEVELOPER}},
     {"/playermode", {playermode, PLAYER}}, // @note can_use() lets only developers, or someone already in player mode, use it
 
     {"/wave", {on::Action}}, {"/dance", {on::Action}}, {"/love", {on::Action}}, {"/sleep", {on::Action}}, {"/facepalm", {on::Action}}, {"/fp", {on::Action}},
