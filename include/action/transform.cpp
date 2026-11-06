@@ -1,0 +1,182 @@
+#include "pch.hpp"
+#include <algorithm>
+
+#include "onVariant/ConsoleMessage.hpp"
+#include "tools/sound.hpp"
+
+#include "transform.hpp"
+
+namespace
+{
+    /* @note one wrench menu button. `image` is interface/large/gui_wrench_<image>.rttex (the picture already says "Transform") */
+    struct transform_set
+    {
+        const char *image;
+        std::array<u_short, 5> items; // @note 0 = unused
+    };
+
+    /*
+    * @note which worn item gets which Transform button. matched by item name/info ("Wrench yourself and choose Transform")
+    *       and the button pictures in the game folder.
+    */
+    constexpr transform_set sets[] {
+        { "space_animals_transform", { 10952/*Space Badger*/, 10954/*Space Mouse*/, 10956/*Space Dog*/, 10958/*Space Pig*/, 10960/*Space Rabbit*/ } },
+        { "space_cat",               { 15992/*Space Cat*/ } },
+        { "st_ani",                  { 12866/*Street Dog*/, 12868/*Street Rabbit*/ } },
+        { "st_transform",            { 12014/*Dal's Phasers*/, 12016/*Gwyn's Heirloom*/, 12018/*Rok's Fists*/, 12020/*Jankom Pog's Multi-Mitt*/ } },
+        { "rpan",                    { 12872/*Red Panda Spirit*/, 12874/*Royal Red Panda Spirit*/ } },
+        { "mask_dragon_transform",   { 11506/*Mask of The Dragon*/, 11508/*Royal Mask of The Dragon*/ } },
+        { "msf_transform",           { 10426/*Mystic Snow Fox*/ } },
+        { "pps_transform",           { 10618/*Perilous Pirate Ship*/ } },
+        { "ggg_transform",           { 7384/*Go-Go-Growformer!*/ } },
+        { "dsf_transform",           { 9136/*Dueling Star Fighter - Rebel Raider*/, 9138/*Dueling Star Fighter - Imperial Enforcer*/ } },
+        { "tf",                      { 14068/*Beastformer!*/, 14070/*Royal Beastformer!*/ } },
+        { "maverick",                { 15840/*Maverick Armor*/, 15842/*Royal Maverick Armor*/ } },
+        { "swat_truck",              { 15286/*SWAT Truck*/ } },
+        { "bone_bike",               { 15694/*Bone Bike*/ } },
+        { "hugo",                    { 14710/*Misthios' Hugo*/ } },
+        { "uzxi",                    { 15596/*uzxi's Cultist Locket*/ } },
+        { "u_transform",             { 11560/*Ezio*/ } },
+        { "acv2",                    { 12646/*Altair*/, 12648/*Eivor*/, 12650/*Bayek*/ } },
+        { "a15",                     { 13892/*Basim*/, 13894/*Connor*/, 13896/*Kassandra*/ } },
+        { "acweek25_transform",      { 15290/*Yasuke*/ } },
+        { "u2_transform",            { 13196/*Rabbid Buddy*/, 13220/*Aurora and Igniculus*/ } },
+        { "u26",                     { 15674/*Battalion Chestplate*/, 15676/*Royal Battalion Chestplate*/ } }, // @note my best match for this button
+    };
+
+    /* @note "use on yourself" items that flip a worn item's form, and the item they need */
+    struct transform_key { short key; u_short needs; };
+    constexpr transform_key keys[] {
+        { 7480/*Growformer PowerKey*/, 7384/*Go-Go-Growformer!*/ },
+        { 10456/*Mystic Transform Crystal*/, 10426/*Mystic Snow Fox*/ },
+        { 10620/*Magical Captain's Compass*/, 10618/*Perilous Pirate Ship*/ },
+    };
+
+    /* @note Diamond Horn -> Diamond Horns -> Diamond Devil Horns -> Diamond Horn, each time it's taken off */
+    constexpr u_short diamond_horns[] { 4746, 4748, 4750 };
+
+    const transform_set *set_of(u_short id)
+    {
+        if (id == 0) return nullptr;
+        for (const transform_set &set : sets)
+            if (std::ranges::find(set.items, id) != set.items.end()) return &set;
+        return nullptr;
+    }
+
+    bool wears(const ::peer &peer, u_short id)
+    {
+        return id != 0 && std::ranges::find(peer.clothing, static_cast<float>(id)) != peer.clothing.end();
+    }
+
+    /* @brief tell everyone in the world (the player too) how this player looks now */
+    void broadcast(ENetPeer *peer)
+    {
+        ::peer *pPeer = static_cast<::peer*>(peer->data);
+        if (pPeer->netid == 0) return;
+        peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [pPeer](ENetPeer *p)
+        {
+            if (pPeer->transformed != 0) send_varlist(p, { "OnSetItemTransform", static_cast<int>(pPeer->transformed) }, pPeer->netid);
+            else send_varlist(p, { "OnClearItemTransforms" }, pPeer->netid);
+        });
+    }
+
+    /* @brief flip `id` between its normal and transformed look */
+    void toggle(ENetPeer *peer, u_short id)
+    {
+        ::peer *pPeer = static_cast<::peer*>(peer->data);
+        pPeer->transformed = (pPeer->transformed == id) ? 0 : id;
+        broadcast(peer);
+        if (pPeer->netid != 0) play_in_world(pPeer->recent_worlds.back(), pPeer->netid, "audio/transform.wav");
+    }
+}
+
+std::string transform_buttons(const ::peer &peer)
+{
+    std::string buttons{};
+    std::vector<const transform_set*> shown{};
+    for (const float cloth : peer.clothing)
+    {
+        const u_short id = static_cast<u_short>(cloth);
+        const transform_set *set = set_of(id);
+        if (set == nullptr || std::ranges::find(shown, set) != shown.end()) continue;
+        shown.push_back(set);
+        buttons.append(std::format(
+            "add_custom_button|transform_{}|image:interface/large/gui_wrench_{}.rttex;image_size:400,260;width:0.19;|\n",
+            id, set->image));
+    }
+    return buttons;
+}
+
+bool transform_button_clicked(ENetEvent &event, const std::string &button)
+{
+    if (!button.starts_with("transform_")) return false;
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+
+    const u_short id = static_cast<u_short>(atoi(button.c_str() + 10));
+    if (set_of(id) == nullptr) return true;
+    if (!wears(*pPeer, id))
+    {
+        on::ConsoleMessage(event.peer, std::format("You need to wear `2{}`` to transform!", id_to_item(id).raw_name));
+        return true;
+    }
+    toggle(event.peer, id);
+    return true;
+}
+
+bool transform_consumable(ENetEvent &event, short id)
+{
+    auto key = std::ranges::find(keys, id, &transform_key::key);
+    if (key == std::end(keys)) return false;
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+
+    if (!wears(*pPeer, key->needs))
+    {
+        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, std::format("You need to wear `2{}`` to use this!", id_to_item(key->needs).raw_name), 0u, 1u });
+        return true;
+    }
+    modify_item_inventory(event, ::slot(id, -1));
+    toggle(event.peer, key->needs);
+    return true;
+}
+
+void transform_clothes_changed(ENetEvent &event, u_short was_wearing, u_short now_wearing)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+
+    if (pPeer->transformed != 0 && !wears(*pPeer, pPeer->transformed))
+    {
+        pPeer->transformed = 0; // @note took the item off: back to normal
+        broadcast(event.peer);
+    }
+
+    /* @note "This amazing horn transforms each time you unequip it. Try all 3 flavors!" */
+    if (was_wearing != 0 && was_wearing != now_wearing)
+    {
+        auto horn = std::ranges::find(diamond_horns, was_wearing);
+        if (horn != std::end(diamond_horns) && pPeer->have_slot(::slot(was_wearing, 0)) > 0)
+        {
+            const u_short next = diamond_horns[(std::distance(std::begin(diamond_horns), horn) + 1) % std::size(diamond_horns)];
+            if (pPeer->can_hold(next, 1))
+            {
+                modify_item_inventory(event, ::slot(was_wearing, -1));
+                modify_item_inventory(event, ::slot(next, 1));
+                on::ConsoleMessage(event.peer, std::format("Your `2{}`` transformed into `2{}``!", id_to_item(was_wearing).raw_name, id_to_item(next).raw_name));
+            }
+        }
+    }
+}
+
+void transform_entered(ENetEvent &event)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    if (pPeer->transformed != 0 && !wears(*pPeer, pPeer->transformed)) pPeer->transformed = 0;
+
+    peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [&event, pPeer](ENetPeer *p)
+    {
+        const ::peer *pOthers = static_cast<::peer*>(p->data);
+        if (pOthers->transformed != 0 && p != event.peer)
+            send_varlist(event.peer, { "OnSetItemTransform", static_cast<int>(pOthers->transformed) }, pOthers->netid);
+        if (pPeer->transformed != 0)
+            send_varlist(p, { "OnSetItemTransform", static_cast<int>(pPeer->transformed) }, pPeer->netid);
+    });
+}

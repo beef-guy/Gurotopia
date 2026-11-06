@@ -152,6 +152,7 @@ public:
     long long geiger_charge_tick{}; // @note ms
     bool disguised{};             // @note the Great Chameleon blended them into a block
     long long disguise_ended{};   // @note ms: when the disguise last ended
+    u_short transformed{};        // @note action/transform.cpp: the worn item showing its transformed look (0 = none)
     /* @note the Carnival (action/carnival.cpp): Golden Ticket Booth credit, games won and the Ringmaster's quest (saved as one column) */
     struct carnival_data
     {

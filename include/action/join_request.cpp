@@ -12,6 +12,7 @@
 #include "quit_to_exit.hpp"
 #include "special_items.hpp"
 #include "carnival.hpp"
+#include "transform.hpp"
 
 #include "join_request.hpp"
 
@@ -146,6 +147,7 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
         world_lock_message(event, world);
         ++world.visitors;
         on::SetClothing(event.peer);
+        transform_entered(event); // @note everyone's Transform look (Space Badger, Mask of The Dragon...)
         on::CountryState(event);
         event_buttons_refresh(event.peer); // @note Daily Challenge, Piggy Bank and Mailbox on the left
         special_entered(event, world);
