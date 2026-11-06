@@ -4,7 +4,7 @@ libraries := -L./include/enet/lib -L./include/mysql/lib -lssl -lcrypto -lmariadb
 
 binary := main.out
 ifeq ($(OS),Windows_NT)
-libraries += -lenet_32 -lws2_32 -lwinmm
+libraries += -lenet_32 -lws2_32 -lwinmm -lcrypt32
 binary := main.exe
 else # linux
 libraries += -lenet
