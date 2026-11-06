@@ -731,7 +731,7 @@ namespace
         for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
         return true;
     }
-    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17, EX_AUTO = 18 };
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17, EX_AUTO = 18, EX_BASE_WEATHER = 19 };
 }
 
 /* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
@@ -857,6 +857,11 @@ namespace
         if (m.gems <= 0 && m.target == 0 && m.count <= 0) continue;
         blob.u8(EX_AUTO); blob.i16(m.pos.x_int()); blob.i16(m.pos.y_int());
         blob.i32(m.gems); blob.i16(m.target); blob.u8(m.on); blob.i16(m.item); blob.i32(m.count);
+    }
+    if (this->base_weather != 0)
+    {
+        blob.u8(EX_BASE_WEATHER); blob.i16(0); blob.i16(0);
+        blob.i16(static_cast<short>(this->base_weather));
     }
     if (this->xenonite != 0)
     {
@@ -1026,6 +1031,13 @@ void world::load_extras(::blob &blob)
                 ::lobster_trap trap{.pos = tile};
                 if (!blob.read_i16(trap.bait, pos) || !blob.read_i32(trap.count, pos) || !blob.read_u32(trap.checked, pos)) return;
                 if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::LOBSTER_TRAP) this->lobster_traps.push_back(trap);
+                break;
+            }
+            case EX_BASE_WEATHER:
+            {
+                short id{};
+                if (!blob.read_i16(id, pos)) return;
+                this->base_weather = static_cast<u_short>(std::max<short>(id, 0));
                 break;
             }
             case EX_AUTO:
@@ -1433,4 +1445,202 @@ void blast::thermonuclear(::world &world)
 
         block.reset();
     }
+}
+
+namespace
+{
+    /* @note ground starts at row 37 (main door row 36), lava 50-53, bedrock 54+ (see generate_world) */
+    constexpr int GROUND = 37, BEDROCK = 54;
+
+    bool keep(short fg) { return fg == 6/*main door*/ || fg == 8/*bedrock*/; }
+
+    /* @brief swap the dirt (and optionally the cave background) for a theme's blocks; top rows get `top` */
+    void reskin(::world &world, short top, int top_rows, short fill, short bg)
+    {
+        for (int i = cord(0, GROUND); i < cord(0, BEDROCK); ++i)
+        {
+            ::block &block = world.blocks[i];
+            if (keep(block.fg)) continue;
+            if (block.fg == 2/*dirt*/) block.fg = (i < cord(0, GROUND + top_rows)) ? top : fill;
+            if (bg != 0 && block.bg == 14/*cave background*/) block.bg = bg;
+        }
+    }
+    int main_door_x(const ::world &world)
+    {
+        for (int x = 0; x < 100; ++x) if (world.blocks[cord(x, GROUND - 1)].fg == 6) return x;
+        return -1;
+    }
+    /* @brief something standing on the ground (palm trees, cacti...) on random free surface tiles, away from the main door */
+    void decorate(::world &world, short id, int count)
+    {
+        const int door = main_door_x(world);
+        for (int tries = 0; count > 0 && tries < 400; ++tries)
+        {
+            const int x = RandomRange(1, 99);
+            if (std::abs(x - door) < 3) continue;
+            ::block &spot = world.blocks[cord(x, GROUND - 1)];
+            if (spot.fg != 0 || world.blocks[cord(x, GROUND)].fg == 0) continue;
+            spot.fg = id, --count;
+        }
+    }
+    /* @brief a stepped pyramid (Desert Blast's pyramid, Jungle Blast's ziggurat) standing on the ground */
+    void pyramid(::world &world, short block, int width)
+    {
+        const int door = main_door_x(world);
+        int left = (door < 50) ? 60 : 10; // @note on the other side of the world from the main door
+        for (int row = 0; width - row * 2 > 0; ++row)
+            for (int x = left + row; x < left + width - row; ++x)
+            {
+                ::block &b = world.blocks[cord(x, GROUND - 1 - row)];
+                if (b.fg == 0) b.fg = block;
+            }
+    }
+    /* @brief random common trees, all ready to harvest (Harvest Moon Blast) */
+    void grown_trees(::world &world)
+    {
+        std::vector<short> seeds{};
+        for (short id = 3; id < 4000 && seeds.size() < 60; id += 2)
+        {
+            const ::item &seed = id_to_item(id), &block = id_to_item(static_cast<short>(id - 1));
+            if (seed.type == type::SEED && block.type == type::FOREGROUND && block.rarity > 0 && block.rarity <= 30) seeds.push_back(id);
+        }
+        if (seeds.empty()) seeds.push_back(3);
+        const int door = main_door_x(world);
+        for (int x = 0; x < 100; ++x)
+        {
+            if (std::abs(x - door) < 2 || x % 2 == 1) continue; // @note every other tile, so they can be walked between
+            ::block &spot = world.blocks[cord(x, GROUND - 1)];
+            if (spot.fg != 0 || world.blocks[cord(x, GROUND)].fg == 0) continue;
+            const short seed = seeds[RandomRange(0, static_cast<int>(seeds.size()))];
+            spot.fg = seed;
+            world.trees.emplace_back(::tree(ticks() - static_cast<u_int>(id_to_item(seed).tick), static_cast<u_char>(RandomRange(1, 5)), ::pos{x, GROUND - 1}));
+        }
+    }
+}
+
+bool blast::is_world_blast(int id)
+{
+    switch (id)
+    {
+        case 1402: case 830: case 942: case 1060: case 1136: case 1532: case 3562: case 4774:
+        case 7380: case 7588: case 8556: case 8738: case 14896:
+            return true;
+    }
+    return false;
+}
+
+bool blast::themed(::world &world, int blast)
+{
+    switch (blast)
+    {
+        case 830: // @note Beach Blast: sand and sea
+        {
+            reskin(world, 442/*Sand*/, 4, 2, 0);
+            const int door = main_door_x(world);
+            const int sea_from = (door < 50) ? 65 : 0, sea_to = (door < 50) ? 100 : 35;
+            for (int x = sea_from; x < sea_to; ++x) // @note the sea: the shore dips 3 tiles and fills with water
+                for (int y = GROUND - 1; y < GROUND + 3; ++y)
+                {
+                    ::block &b = world.blocks[cord(x, y)];
+                    if (keep(b.fg)) continue;
+                    if (y >= GROUND) b.fg = 0;
+                    b.state[3] |= S_WATER;
+                }
+            for (int x = sea_from; x < sea_to; ++x) world.blocks[cord(x, GROUND + 3)].fg = 442;
+            decorate(world, 854/*Palm Tree*/, 5);
+            decorate(world, 848/*Beach Umbrella*/, 3);
+            world.base_weather = 1;
+            return true;
+        }
+        case 942: // @note Desert Blast: sand, sandstone, cacti and one free pyramid
+        {
+            reskin(world, 442/*Sand*/, 3, 332/*Sandstone*/, 434/*Sandstone Wall*/);
+            pyramid(world, 332/*Sandstone*/, 21);
+            decorate(world, 330/*Cactus*/, 6);
+            world.base_weather = 3;
+            return true;
+        }
+        case 1060: // @note Harvest Moon Blast: trees ready to harvest
+        {
+            grown_trees(world);
+            world.base_weather = 6;
+            return true;
+        }
+        case 1136: // @note Mars Blast
+        {
+            reskin(world, 1134/*Mars Rock*/, 0, 1134, 0);
+            world.base_weather = 7;
+            return true;
+        }
+        case 1532: // @note Undersea Blast: water everywhere above the sea floor
+        {
+            reskin(world, 1536/*Deep Sand*/, 3, 2, 0);
+            for (int i = 0; i < cord(0, GROUND); ++i) world.blocks[i].state[3] |= S_WATER;
+            decorate(world, 832/*Coral*/, 8);
+            decorate(world, 846/*Seaweed*/, 8);
+            world.base_weather = 14;
+            return true;
+        }
+        case 3562: // @note Cave Blast: solid cave dirt with tunnels, crystals and darkness
+        {
+            for (int i = cord(0, 4); i < cord(0, BEDROCK); ++i)
+            {
+                ::block &b = world.blocks[i];
+                if (keep(b.fg)) continue;
+                if (b.fg == 0 || b.fg == 2) b.fg = 3564/*Cave Dirt*/;
+                b.bg = 3556/*Dark Cave Background*/;
+            }
+            const int door = main_door_x(world);
+            for (int dx = -2; dx <= 2; ++dx) // @note a pocket of air around the main door
+                for (int y = GROUND - 4; y < GROUND; ++y)
+                    if (door + dx >= 0 && door + dx < 100 && world.blocks[cord(door + dx, y)].fg == 3564) world.blocks[cord(door + dx, y)].fg = 0;
+            for (int tunnel = 0; tunnel < 7; ++tunnel) // @note winding tunnels
+            {
+                int x = (tunnel == 0) ? door : RandomRange(2, 98), y = (tunnel == 0) ? GROUND - 2 : RandomRange(8, 48);
+                for (int step = 0; step < 90; ++step)
+                {
+                    for (int dy = 0; dy < 2; ++dy)
+                        if (x >= 0 && x < 100 && y + dy >= 4 && y + dy < 50 && world.blocks[cord(x, y + dy)].fg == 3564) world.blocks[cord(x, y + dy)].fg = 0;
+                    x = std::clamp(x + RandomRange(-1, 2), 0, 99);
+                    y = std::clamp(y + RandomRange(-1, 2), 5, 48);
+                }
+            }
+            for (int n = 0; n < 25; ++n) // @note crystals on tunnel floors
+            {
+                const int x = RandomRange(0, 100), y = RandomRange(6, 49);
+                if (world.blocks[cord(x, y)].fg == 0 && world.blocks[cord(x, y + 1)].fg == 3564)
+                    world.blocks[cord(x, y)].fg = static_cast<short>(3580 + 2 * RandomRange(0, 3));
+            }
+            return true;
+        }
+        case 4774: // @note Jungle Blast: ferns and one free ziggurat
+        {
+            pyramid(world, 4796/*Jungle Pillar*/, 17);
+            decorate(world, 4782/*Jungle Fern*/, 12);
+            world.base_weather = 32;
+            return true;
+        }
+        case 7380: // @note Monochrome Blast: blacks and whites only
+        {
+            reskin(world, 168/*White Block*/, 1, 166/*Black Block*/, 0);
+            for (int i = cord(0, GROUND); i < cord(0, BEDROCK); ++i)
+            {
+                ::block &b = world.blocks[i];
+                if (b.fg == 10/*rock*/ || b.fg == 4/*lava*/) b.fg = 168;
+                if (b.bg == 14) b.bg = 1158/*Black Wallpaper*/;
+            }
+            world.base_weather = 43;
+            return true;
+        }
+        case 7588: world.base_weather = 44; return true; // @note Treasure Blast
+        case 8556: world.base_weather = 45; return true; // @note SurgWorld Blast
+        case 8738: world.base_weather = 46; return true; // @note Bountiful Blast
+        case 14896: // @note Candyland Blast
+        {
+            reskin(world, 1358/*Candy Cane Block*/, 2, 2, 0);
+            world.base_weather = 78;
+            return true;
+        }
+    }
+    return false;
 }

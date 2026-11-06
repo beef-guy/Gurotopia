@@ -364,6 +364,7 @@ public:
 
     ::pos spawn{}; // @note position of main door
     ::pos weather{};
+    u_short base_weather{}; // @note the weather a blast world has when no weather machine runs (client WEATHER_TYPE id)
 
     ::blob serialize();
     /* @brief one tile as the client reads it: block, area lock parent, extra data */
@@ -425,4 +426,8 @@ extern bool door_mover(::world &world, const ::pos &pos);
 namespace blast
 {
     extern void thermonuclear(::world &world);
+    /* @brief Beach, Desert, Harvest Moon, Mars, Undersea, Cave, Jungle, Monochrome, Treasure, SurgWorld, Bountiful, Candyland: reshape a new world. @return false if this item isn't one of them */
+    extern bool themed(::world &world, int blast);
+    /* @return true if this item makes a world */
+    extern bool is_world_blast(int id);
 }

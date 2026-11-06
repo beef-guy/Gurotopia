@@ -145,6 +145,11 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
         on::CountryState(event);
         event_buttons_refresh(event.peer); // @note Daily Challenge, Piggy Bank and Mailbox on the left
 
+        if (world.base_weather != 0) // @note a blast world's own weather, unless a weather machine is running
+        {
+            const bool machine_on = valid_tile(world, world.weather) && (world.blocks[cord(world.weather.x_int(), world.weather.y_int())].state[2] & S_TOGGLE);
+            if (!machine_on) send_varlist(event.peer, { "OnSetCurrentWeather", static_cast<int>(world.base_weather) });
+        }
         send_varlist(event.peer, {
             "OnSetFeatureEnableFlags",
             "EA4PAgcGAQoDEAQRBQ0JCAw="

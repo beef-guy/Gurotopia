@@ -4,6 +4,8 @@
 
 #include "msg.hpp"
 
+#include <algorithm>
+
 void msg(ENetEvent& event, const std::string_view text)
 {
     std::vector<std::string> spaces = readch(std::string{ text }, ' ');
@@ -31,6 +33,7 @@ void msg(ENetEvent& event, const std::string_view text)
 
             online = true;
             send_gameMessage(event.peer, {.message = std::format("action|log\nmsg|CT:[MSG]_`6>> (Sent to `${}``)``", growid)});
+            if (std::ranges::find(pOthers->ignored, pPeer->user_id) != pOthers->ignored.end()) return; // @note they ignore you: it's dropped quietly
             send_gameMessage(peer, {.message = std::format("action|log\nmsg|CT:[MSG]_`6>> Private msg from `${}``: `${}``", pPeer->growid, msg)});
             play_sfx(peer, "audio/pay_time.wav");
         });
