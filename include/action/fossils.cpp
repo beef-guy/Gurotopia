@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "action/growpass.hpp"
 
 #include "onVariant/ConsoleMessage.hpp"
 #include "tools/sound.hpp"
@@ -168,6 +169,7 @@ namespace
             peers(world.name, PeerSearch::WORLD, [&news](ENetPeer *p) { on::ConsoleMessage(p, news); });
             bubble(event, std::format("It was a `2{}``!", id_to_item(prize).raw_name));
             play_sfx(event.peer, "audio/secret.wav");
+            grow_pass_points(event.peer, 15);
             world.save();
             return true;
         }

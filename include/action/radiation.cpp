@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "action/growpass.hpp"
 
 #include "onVariant/ConsoleMessage.hpp"
 #include "onVariant/SetClothing.hpp"
@@ -131,6 +132,7 @@ namespace
         on::ConsoleMessage(peer, "`oYou are aglow with radiation! (`$Irradiated`` mod added, `$30 mins`` left)``");
         on::SetClothing(peer); // @note the green glow
         pPeer->mysql_update_all();
+        grow_pass_points(peer, 15);
     }
 
     void geiger_tick(ENetPeer *peer, ::world &world, long long now)

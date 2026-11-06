@@ -22,6 +22,8 @@
 #include "action/automation.hpp"
 #include "action/radiation.hpp"
 #include "action/fossils.hpp"
+#include "action/growpass.hpp"
+#include "action/profile.hpp"
 
 #include "tile_change.hpp"
 
@@ -313,6 +315,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                         block.hits[0] = 99;
                         add_break_drop(event, ::slot(item.id - 1, RandomRange(1, tree->fruit*3)), gamePacket.punch.by_32(), *world); // @note fruit (from tree)
                         daily_challenge_harvest(event, static_cast<short>(item.id - 1));
+                        grow_pass_harvest(event.peer);
                     }
                     break;
                 }
@@ -572,6 +575,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 } /* ~gem drop */
 
                 pPeer->add_xp(event, std::trunc(1.0f + item.rarity / 5.0f));
+                if (item.type != type::SEED) grow_pass_break(event.peer);
             }
         } // @note delete im, id
         else if (item.cloth_type != clothing::NONE) 
@@ -583,6 +587,16 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         }
         else if (item.type == type::CONSUMEABLE) 
         {
+            if (item.id == ROYAL_GROW_PASS_TOKEN || is_growmoji_item(static_cast<short>(item.id)))
+            {
+                if (gamePacket.punch != pPeer->pos.by_32(true)) throw std::runtime_error("Use this on yourself!");
+                if (item.id == ROYAL_GROW_PASS_TOKEN)
+                {
+                    if (grow_pass_royal_token(event)) modify_item_inventory(event, ::slot(item.id, -1));
+                }
+                else growmoji_use(event, static_cast<short>(item.id));
+                return;
+            }
             if (blast::is_world_blast(item.id))
             {
                 if (item.id == 830/*Beach Blast*/ && pPeer->have_slot(::slot(834, 0)) < 100) throw std::runtime_error("You need 100 Fireworks to detonate this!");

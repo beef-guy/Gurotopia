@@ -112,6 +112,12 @@ void peer::mysql_select_all(bool by_user_id)
     this->daily_bonus    = this->mysql_select<signed>("daily_bonus", "", by_user_id);
     this->bonus_streak   = this->mysql_select<signed>("bonus_streak", "", by_user_id);
     this->online_status  = std::clamp(this->mysql_select<signed>("online_status", "", by_user_id), 0, 2);
+    this->growmojis         = this->mysql_select<std::string>("growmojis", "", by_user_id);
+    this->pass_season       = this->mysql_select<signed>("pass_season", "", by_user_id);
+    this->pass_points       = std::max(this->mysql_select<signed>("pass_points", "", by_user_id), 0);
+    this->pass_free         = this->mysql_select<signed>("pass_free", "", by_user_id);
+    this->pass_royal_claims = this->mysql_select<signed>("pass_royal_claims", "", by_user_id);
+    this->pass_royal        = this->mysql_select<signed>("pass_royal", "", by_user_id);
     this->geiger_charge    = std::max(this->mysql_select<signed>("geiger_charge", "", by_user_id), 0);
     this->irradiated_until = this->mysql_select<long long>("irradiated_until", "", by_user_id);
     this->login_at     = std::time(nullptr);
