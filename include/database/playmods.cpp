@@ -153,14 +153,27 @@ static constexpr ::playmod playmods[] {
     { 4990, 2, "Speedy" },
     { 5012, 2, "Speedy" },
     { 5018, 2, "Speedy" },
+    { 5020, 1, "Double Jump" },
     { 5210, 2, "Speedy" },
     { 5278, 8, "Slow Fall" },
+    { 5482, 8, "Slow Fall" },
+    { 5648, 3, "Speedy & Double Jump" },
+    { 5650, 3, "Speedy & Double Jump" },
     { 5738, 1, "Double Jump - Rainbow Crystal Cloak" },
     { 5754, 1, "Double Jump: Draconic Wings" },
+    { 6004, 1, "Double Jump" },
     { 6040, 2, "Speedy" },
+    { 6144, 1, "Double Jump" },
+    { 6284, 1, "Double Jump" },
+    { 6294, 2, "Speedy" },
     { 6334, 1, "Double Jump: Chimera Wings!" },
+    { 6372, 1, "Double Jump" },
     { 6670, 2, "Speedy" },
+    { 6694, 1, "Double Jump" },
+    { 6758, 1, "Double Jump" },
+    { 6818, 1, "Double Jump" },
     { 6830, 32, "Build Range: Exquisite Trowel" },
+    { 6842, 1, "Double Jump" },
     { 6966, 256, "Punch Damage: Bull" },
     { 6982, 2, "Speedy: Speedster" },
     { 6996, 2, "Speedy: Cruisin'" },
@@ -188,6 +201,7 @@ static constexpr ::playmod playmods[] {
     { 7384, 2, "Speedy: Go-Go!" },
     { 7392, 16, "Punch Range & Damage: Fire and Wind" },
     { 7406, 64, "Punch Power: Super Snowball" },
+    { 7412, 1, "Double Jump" },
     { 7414, 1, "Double Jump: Chipmunk" },
     { 7416, 1, "Double-Jump: Snow Leopard" },
     { 7432, 2, "Speedy: Husky Sledge" },
@@ -561,6 +575,7 @@ static constexpr ::playmod playmods[] {
     { 11504, 1, "Fairy Light Wings: Double Jump!" },
     { 11506, 17, "Double Jump & Punch Range: Mask of The Dragon" },
     { 11508, 17, "Double Jump & Punch Range: Royal Mask of The Dragon" },
+    { 11510, 1, "Double Jump" },
     { 11534, 16, "Growby: Punch Range" },
     { 11536, 256, "Beat Box Mask: Punch Damage" },
     { 11542, 16, "Neon Party Yo-Yo: Punch Range" },
@@ -822,6 +837,7 @@ static constexpr ::playmod playmods[] {
     { 13578, 16, "Punch Range: Pearl Sparkled Shield" },
     { 13580, 320, "Punch Damage + Punch Power: Pearl Shark Crown" },
     { 13606, 256, "Punch Damage: Ultraviolet Sword" },
+    { 13608, 1, "Double Jump" },
     { 13610, 8, "Slowfall: Leaf Propeller" },
     { 13680, 512, "Fireproof: Eldritch Flame Aura" },
     { 13682, 512, "Fireproof: Flare Fedora" },
@@ -854,7 +870,38 @@ static constexpr ::playmod playmods[] {
     { 13968, 513, "Double Jump + Fireproof: Scorched Wings" },
     { 13970, 256, "Punch Damage: Spooky Stained Glass Scepter" },
     { 14002, 2, "Speedy: Cereal Thriller" },
+    { 14004, 1, "Double Jump" },
+    { 14006, 1, "Double Jump" },
+    { 14232, 1, "Double Jump" },
+    { 14234, 1, "Double Jump" },
+    { 14390, 1, "Double Jump" },
+    { 14550, 1, "Double Jump" },
+    { 14604, 1, "Double Jump" },
+    { 14632, 1, "Double Jump" },
+    { 14866, 1, "Double Jump" },
+    { 14990, 1, "Double Jump" },
+    { 14992, 1, "Double Jump" },
+    { 15104, 1, "Double Jump" },
+    { 15106, 1, "Double Jump" },
+    { 15380, 1, "Double Jump" },
+    { 15416, 1, "Double Jump" },
+    { 15460, 1, "Double Jump" },
+    { 15466, 1, "Double Jump" },
+    { 15548, 1, "Double Jump" },
+    { 15550, 1, "Double Jump" },
+    { 15780, 1, "Double Jump" },
+    { 15800, 1, "Double Jump" },
+    { 15826, 1, "Double Jump" },
+    { 15850, 1, "Double Jump" },
+    { 15944, 1, "Double Jump" },
+    { 15946, 1, "Double Jump" },
+    { 15980, 1, "Double Jump" },
+    { 15982, 1, "Double Jump" },
+    { 15984, 1, "Double Jump" },
+    { 16012, 1, "Double Jump" },
+    { 16134, 1, "Double Jump" },
     { 16262, 9, "Double Jump + Slow Fall: Immortal Da Vinci Wings" },
+    { 16444, 1, "Double Jump" },
 };
 
 const ::playmod *get_playmod(u_short item_id)
@@ -863,7 +910,22 @@ const ::playmod *get_playmod(u_short item_id)
     return (it != std::ranges::end(playmods) && it->item == item_id) ? &*it : nullptr;
 }
 
-::cloth_effects get_cloth_effects(const std::array<float, 10ull> &clothing)
+/* @note what a Xenonite Crystal forces or blocks, as plain mods */
+static u_short xenonite_mods(u_int xenonite, bool force)
+{
+    const u_int shift = force ? 0 : 1; // @note X_FORCE_* is even, X_BLOCK_* is the bit after it
+    u_short mods{};
+    if (xenonite & (X_FORCE_DOUBLE_JUMP  << shift)) mods |= M_DOUBLE_JUMP;
+    if (xenonite & (X_FORCE_HIGH_JUMP    << shift)) mods |= M_HIGH_JUMP;
+    if (xenonite & (X_FORCE_HEAT_RESIST  << shift)) mods |= M_FIREPROOF;
+    if (xenonite & (X_FORCE_STRONG_PUNCH << shift)) mods |= M_PUNCH_POWER;
+    if (xenonite & (X_FORCE_SPEEDY       << shift)) mods |= M_SPEEDY;
+    if (xenonite & (X_FORCE_LONG_BUILD   << shift)) mods |= M_BUILD_RANGE;
+    if (xenonite & (X_FORCE_LONG_PUNCH   << shift)) mods |= M_PUNCH_RANGE;
+    return mods;
+}
+
+::cloth_effects get_cloth_effects(const std::array<float, 10ull> &clothing, u_int xenonite)
 {
     ::cloth_effects fx{};
     for (float cloth : clothing)
@@ -871,8 +933,11 @@ const ::playmod *get_playmod(u_short item_id)
         if (cloth <= 0.0f) continue;
         if (const ::playmod *mod = get_playmod(static_cast<u_short>(cloth))) fx.mods |= mod->mods;
     }
+    fx.mods |= xenonite_mods(xenonite, true);
+    fx.mods &= ~xenonite_mods(xenonite, false);
+
     /* @note each power counts once, even when two worn items give it (same as the real game) */
-    if (fx.mods & M_SPEEDY)      fx.speed += 150.0f;
+    if (fx.mods & M_SPEEDY)      fx.speed += 60.0f;
     if (fx.mods & M_SLOW)        fx.speed -= 80.0f;
     if (fx.mods & M_HIGH_JUMP)   fx.gravity -= 250.0f;
     if (fx.mods & M_SLOW_FALL)   fx.gravity -= 100.0f;
@@ -881,6 +946,28 @@ const ::playmod *get_playmod(u_short item_id)
     if (fx.mods & M_PUNCH_RANGE) fx.punch_range += 1;
     if (fx.mods & M_BUILD_RANGE) fx.build_range += 1;
     return fx;
+}
+
+std::string active_effects(const std::array<float, 10ull> &clothing, u_int xenonite)
+{
+    const u_short blocked = xenonite_mods(xenonite, false);
+    std::string list{};
+    for (float cloth : clothing)
+    {
+        if (cloth <= 0.0f) continue;
+        const ::playmod *mod = get_playmod(static_cast<u_short>(cloth));
+        if (mod == nullptr || (mod->mods & ~blocked) == 0) continue; // @note a Xenonite Crystal took every power it gives
+        list.append(std::format("add_label_with_icon|small|`w{}``|left|{}|\n", mod->name, mod->item));
+    }
+    static constexpr std::pair<u_short, const char*> forced[] {
+        {M_DOUBLE_JUMP, "Double Jump"}, {M_HIGH_JUMP, "High Jump"}, {M_FIREPROOF, "Heat Resist"}, {M_PUNCH_POWER, "Strong Punch"},
+        {M_SPEEDY, "Speedy"}, {M_BUILD_RANGE, "Long Build"}, {M_PUNCH_RANGE, "Long Punch"}
+    };
+    const u_short force = xenonite_mods(xenonite, true);
+    for (const auto &[bit, name] : forced)
+        if (force & bit) list.append(std::format("add_label_with_icon|small|`w{}`` `o(Xenonite Crystal)``|left|2072|\n", name));
+
+    return list.empty() ? "add_label_with_icon|small|`wNone!``|left|2|\n" : list;
 }
 
 void playmod_message(ENetPeer *peer, u_short item_id, bool added)

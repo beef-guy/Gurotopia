@@ -1,6 +1,7 @@
 #include "pch.hpp"
 
 #include "tools/create_dialog.hpp"
+#include "database/playmods.hpp"
 
 #include "wrench.hpp"
 
@@ -61,7 +62,7 @@ void action::wrench(ENetEvent& event, const std::string& header)
                             .add_textbox("Surgeon Level: 0")
                             .add_spacer("small")
                             .add_textbox("`wActive effects:``")
-                            /* @todo handle peer's effects */
+                            .add_raw(active_effects(pOthers->clothing, (here != worlds.end()) ? here->xenonite : 0))
                             .add_spacer("small")
                             .add_smalltext(std::format("Fires Put Out: {}", pOthers->fires_removed))
                             .add_spacer("small")

@@ -4,6 +4,10 @@
 extern void vending_wrench(ENetEvent &event, ::world &world, const ::pos &pos);
 extern void storage_wrench(ENetEvent &event, ::world &world, const ::pos &pos);
 extern void display_wrench(ENetEvent &event, ::world &world, const ::pos &pos);
+extern void xenonite_wrench(ENetEvent &event, ::world &world, const ::pos &pos);
+
+/* @brief resend everyone's powers in this world (after a Xenonite Crystal changes) */
+extern void refresh_world_powers(const std::string &world_name);
 
 /* @brief dialog_return handlers */
 extern void vending_edit(ENetEvent &event, const ::hPipe &hPipe);
@@ -12,3 +16,4 @@ extern void storage_edit(ENetEvent &event, const ::hPipe &hPipe);
 extern void storage_deposit(ENetEvent &event, const ::hPipe &hPipe);
 extern void storage_withdraw(ENetEvent &event, const ::hPipe &hPipe);
 extern void display_edit(ENetEvent &event, const ::hPipe &hPipe);
+extern void xenonite_edit(ENetEvent &event, const ::hPipe &hPipe);

@@ -214,6 +214,7 @@ public:
     std::vector<::vending> vendings{};
     std::vector<::storage> storages{};
     std::vector<::display> displays{};
+    u_int xenonite{}; // @note the Xenonite Crystal's settings (xenonite:: in playmods.hpp). only one crystal per world
 
     /* @return the area lock that covers this tile, or nullptr */
     ::area_lock *lock_at(const ::pos &pos);

@@ -342,6 +342,11 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 std::erase_if(world->storages, [&](const ::storage &box) { return box.pos == gamePacket.punch; });
                 std::erase_if(world->displays, [&](const ::display &display) { return display.pos == gamePacket.punch; });
                 if (is_tile_lock(item.id)) remove_area_lock(event, *world, gamePacket.punch);
+                if (item.type == type::XENONITE && world->xenonite != 0)
+                {
+                    world->xenonite = 0;
+                    refresh_world_powers(world->name); // @note powers go back to what clothes give
+                }
             }
 
             /* @todo update these changes with tile_update() */
@@ -865,6 +870,11 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     display_wrench(event, *world, gamePacket.punch);
                     break;
                 }
+                case type::XENONITE:
+                {
+                    xenonite_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
                 case type::VENDING_MACHINE:
                 {
                     vending_wrench(event, *world, gamePacket.punch);
@@ -976,6 +986,13 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                         });
                     }
                     else throw std::runtime_error("Only one `$World Lock`` can be placed in a world, you'd have to remove the other one first.");
+                    break;
+                }
+                case type::XENONITE:
+                {
+                    if (world->owner == 0 || !pPeer->owns(world->owner)) throw std::runtime_error("You can only place a Xenonite Crystal in a world you've locked.");
+                    if (std::ranges::find(world->blocks, item.id, &::block::fg) != world->blocks.end()) throw std::runtime_error("This world already has a Xenonite Crystal!");
+                    world->xenonite = 0; // @note a new crystal starts with nothing set
                     break;
                 }
                 case type::SEED:
