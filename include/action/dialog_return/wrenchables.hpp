@@ -41,3 +41,7 @@ extern void magplant_wrench(ENetEvent &event, ::world &world, const ::pos &pos);
 /* @brief give this player the MAGPLANT 5000 Remote, linked to the machine at pos */
 extern void magplant_give_remote(ENetEvent &event, ::world &world, const ::pos &pos);
 extern void magplant_edit(ENetEvent &event, const ::hPipe &hPipe);
+
+/* @brief GrowScan 9000: counts every block and floating item in the world */
+extern void growscan_wrench(ENetEvent &event, ::world &world, const ::pos &pos);
+extern void growscan_edit(ENetEvent &event, const ::hPipe &hPipe);

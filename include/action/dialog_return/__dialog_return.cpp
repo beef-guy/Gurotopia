@@ -64,5 +64,6 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
     {"mannequin_dress", std::bind(&mannequin_dress, std::placeholders::_1, std::placeholders::_2)},
     {"dice", std::bind(&dice_edit, std::placeholders::_1, std::placeholders::_2)},
     {"weather", std::bind(&weather_edit, std::placeholders::_1, std::placeholders::_2)},
-    {"magplant", std::bind(&magplant_edit, std::placeholders::_1, std::placeholders::_2)}
+    {"magplant", std::bind(&magplant_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"growscan", std::bind(&growscan_edit, std::placeholders::_1, std::placeholders::_2)}
 };

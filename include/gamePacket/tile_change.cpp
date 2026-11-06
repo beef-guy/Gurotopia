@@ -1027,6 +1027,11 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     magplant_wrench(event, *world, gamePacket.punch);
                     break;
                 }
+                case type::GROWSCAN:
+                {
+                    growscan_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
                 case type::FOREGROUND:
                 {
                     if (item.id == 3898/*Telephone*/) telephone_wrench(event, *world, gamePacket.punch);
