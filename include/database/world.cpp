@@ -557,7 +557,11 @@ void world::load_extras(::blob &blob)
                     lock.access.push_back(uid);
                 }
                 lock.is_public = is_public, lock.ignore_air = ignore_air, lock.builder_mode = mode;
-                if (valid_tile(*this, tile) && is_tile_lock(this->blocks[cord(x, y)].fg)) this->area_locks.push_back(std::move(lock));
+                if (valid_tile(*this, tile) && is_tile_lock(this->blocks[cord(x, y)].fg))
+                {
+                    if (lock.is_public) this->blocks[cord(x, y)].state[2] |= S_PUBLIC; // @note yellow border
+                    this->area_locks.push_back(std::move(lock));
+                }
                 break;
             }
             case EX_VENDING:
@@ -665,11 +669,11 @@ void world::apply_area_lock(::area_lock &lock, u_short lock_id)
 bool world::can_edit(const ::peer &peer, const ::pos &pos, bool breaking)
 {
     if (peer.role >= MODERATOR) return true;
-    if (peer.user_id == this->owner && this->owner != 0) return true;
+    if (peer.owns(this->owner)) return true;
 
     if (const ::area_lock *lock = this->lock_at(pos))
     {
-        if (peer.user_id == lock->owner || lock->is_public) return true;
+        if (peer.owns(lock->owner) || lock->is_public) return true;
         if (std::ranges::find(lock->access, peer.user_id) == lock->access.end()) return false;
         if (lock->builder_mode == 1 && breaking) return false;  // @note Builder's Lock: only building
         if (lock->builder_mode == 2 && !breaking) return false; // @note Builder's Lock: only breaking

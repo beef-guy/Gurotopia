@@ -24,6 +24,7 @@
 bool can_use(const ::peer &peer, std::string_view name, const ::cmd_entry &entry)
 {
     if (name == "/find" && gServer_data.sandbox) return true;
+    if (name == "/playermode") return peer.player_mode || peer.role >= DEVELOPER; // @note so it can be switched off again
     return peer.role >= entry.role;
 }
 
@@ -74,6 +75,9 @@ const std::unordered_map<std::string_view, ::cmd_entry> cmd_pool
     {"/give", {give, DEVELOPER}},
     {"/punch", {punch, DEVELOPER}},
     {"/setrole", {setrole, DEVELOPER}},
+    {"/givegems", {givegems, DEVELOPER}},
+    {"/trashall", {trashall, DEVELOPER}},
+    {"/playermode", {playermode, PLAYER}}, // @note can_use() lets only developers, or someone already in player mode, use it
 
     {"/wave", {on::Action}}, {"/dance", {on::Action}}, {"/love", {on::Action}}, {"/sleep", {on::Action}}, {"/facepalm", {on::Action}}, {"/fp", {on::Action}},
     {"/smh", {on::Action}}, {"/yes", {on::Action}}, {"/no", {on::Action}}, {"/omg", {on::Action}}, {"/idk", {on::Action}}, {"/shrug", {on::Action}},

@@ -2,6 +2,7 @@
 #include "gamePacket/tile_change.hpp"
 
 #include "onVariant/ConsoleMessage.hpp"
+#include "tools/sound.hpp"
 
 #include "lock_edit.hpp"
 
@@ -22,9 +23,12 @@ void lock_edit(ENetEvent& event, const ::hPipe &hPipe)
     if (const short fg = world->blocks[cord(pos.x, pos.y)].fg; is_tile_lock(fg))
     {
         ::area_lock *lock = world->lock_at(pos);
-        if (lock == nullptr || (lock->owner != pPeer->user_id && pPeer->role < MODERATOR)) return;
+        if (lock == nullptr || (!pPeer->owns(lock->owner) && pPeer->role < MODERATOR)) return;
 
         lock->is_public = atoi(hPipe["checkbox_public"].c_str());
+        if (lock->is_public) // @note the client draws a public lock's border yellow instead of green
+             world->blocks[cord(pos.x, pos.y)].state[2] |= S_PUBLIC;
+        else world->blocks[cord(pos.x, pos.y)].state[2] &= ~S_PUBLIC;
         const bool ignore_air = atoi(hPipe["checkbox_ignore"].c_str());
         if (fg == 4994/*Builder's Lock*/)
             lock->builder_mode = atoi(hPipe["checkbox_buildonly"].c_str()) ? 1 : atoi(hPipe["checkbox_breakonly"].c_str()) ? 2 : 0;
@@ -43,6 +47,7 @@ void lock_edit(ENetEvent& event, const ::hPipe &hPipe)
                 lock->access.push_back(pOthers->user_id);
                 on::ConsoleMessage(event.peer, std::format("`w{}`` was added to the access list.", pOthers->growid));
                 on::ConsoleMessage(peer, std::format("`2You got access to a `w{}`` from {}.``", id_to_item(fg).raw_name, pPeer->growid));
+                play_sfx(peer, "audio/secret.wav");
             });
         }
         if (hPipe["buttonClicked"] == "recalcLock" || ignore_air != lock->ignore_air)
@@ -66,7 +71,7 @@ void lock_edit(ENetEvent& event, const ::hPipe &hPipe)
         return;
     }
 
-    if (world->owner != pPeer->user_id) return; // @note only the owner can change the lock
+    if (!pPeer->owns(world->owner)) return; // @note only the owner can change the lock
     if (id_to_item(world->blocks[cord(pos.x, pos.y)].fg).type != type::LOCK) return;
     
     world->is_public = atoi(hPipe["checkbox_public"].c_str());

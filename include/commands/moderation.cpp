@@ -2,6 +2,8 @@
 
 #include "onVariant/ConsoleMessage.hpp"
 #include "onVariant/SetBux.hpp"
+#include "onVariant/SetClothing.hpp"
+#include "tools/sound.hpp"
 #include "action/join_request.hpp"
 #include "action/quit_to_exit.hpp"
 
@@ -340,6 +342,7 @@ void broadcast(ENetEvent& event, const std::string_view text)
         if (pOthers == nullptr || !pOthers->authenticated) return;
         on::ConsoleMessage(peer, std::format("CP:0_PL:0_OID:_CT:[SB]_ `#** Staff broadcast from {}``: `${}``", pPeer->growid, message));
         send_varlist(peer, { "OnTextOverlay", std::format("`#{}``", message) });
+        play_sfx(peer, "audio/beep.wav");
     });
     moderation::log(*pPeer, "broadcast", "", message);
 }
@@ -408,4 +411,48 @@ void setrole(ENetEvent& event, const std::string_view text)
     }
     moderation::log(*pPeer, "setrole", target_name, list[1]);
     reply(event, std::format("`2{} is now {}.``", target_name, list[1]));
+}
+
+void givegems(ENetEvent& event, const std::string_view text)
+{
+    const std::vector<std::string> list = words(text);
+    if (list.size() < 2ull) return reply(event, "Usage: /givegems <`$name``> <`$amount``>");
+    give(event, std::format("/give {} gems {}", list[0], list[1]));
+}
+
+void trashall(ENetEvent& event, const std::string_view text)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+
+    int trashed{};
+    const std::vector<::slot> slots = pPeer->slots; // @note copy: modify_item_inventory changes the list
+    for (const ::slot &slot : slots)
+    {
+        if (slot.count <= 0 || slot.id == 18/*Fist*/ || slot.id == 32/*Wrench*/) continue;
+        modify_item_inventory(event, ::slot(slot.id, static_cast<short>(-slot.count)));
+        ++trashed;
+    }
+    std::erase_if(pPeer->slots, [](const ::slot &slot) { return slot.count <= 0; });
+    on::SetClothing(event.peer);
+    if (trashed > 0) play_sfx(event.peer, "audio/trash.wav");
+    reply(event, std::format("`2Trashed {} kinds of items. Only your Fist and Wrench are left.``", trashed));
+}
+
+void playermode(ENetEvent& event, const std::string_view text)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+
+    if (!pPeer->player_mode)
+    {
+        pPeer->real_role = pPeer->role;
+        pPeer->role = PLAYER;
+        pPeer->player_mode = true;
+        reply(event, "`2Player mode is ON.`` You're treated like a normal player: no staff commands, and your worlds, locks and machines don't know you're the owner. Type `$/playermode`` again to get your powers back (they also come back when you log in again).");
+    }
+    else
+    {
+        pPeer->role = pPeer->real_role;
+        pPeer->player_mode = false;
+        reply(event, "`2Player mode is OFF.`` Your owner and staff powers are back.");
+    }
 }

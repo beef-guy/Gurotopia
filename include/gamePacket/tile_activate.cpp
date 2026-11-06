@@ -2,6 +2,7 @@
 
 #include "action/join_request.hpp"
 #include "action/quit_to_exit.hpp"
+#include "tools/sound.hpp"
 
 #include "tile_activate.hpp"
 
@@ -26,6 +27,7 @@ void tile_activate(ENetEvent& event, ::gamePacket gamePacket)
     {
         case type::MAIN_DOOR:
         {
+            play_sfx(event.peer, "audio/door_shut.wav");
             action::quit_to_exit(event, "", false);
             break;
         }
@@ -36,6 +38,7 @@ void tile_activate(ENetEvent& event, ::gamePacket gamePacket)
             if (door != world->doors.end() && !door->is_public && !world->can_edit(*pPeer, gamePacket.punch, false))
             {
                 send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "The door is locked.", 0u, 1u }); // @note not open to public
+                play_sfx(event.peer, "audio/punch_locked.wav");
                 send_varlist(event.peer, ::VariantList{ "OnSetFreezeState", 0u }, pPeer->netid);
                 break;
             }
@@ -49,6 +52,7 @@ void tile_activate(ENetEvent& event, ::gamePacket gamePacket)
             if (!dest_world.empty() && dest_world != world->name)
             {
                 pPeer->door_target = dest_id; // @note WORLD:ID appears at that door
+                play_sfx(event.peer, "audio/door_open.wav");
                 action::quit_to_exit(event, "", true); // @note leaving can delete this world, door goes with it
                 action::join_request(event, "", dest_world);
             }
@@ -58,6 +62,7 @@ void tile_activate(ENetEvent& event, ::gamePacket gamePacket)
                 const ::pos to = (target != world->doors.end()) ? target->pos.by_32(false) : world->spawn;
                 pPeer->pos = to;
                 send_varlist(event.peer, ::VariantList{ "OnSetPos", CL_Vec2f{to.x, to.y} }, pPeer->netid);
+                play_in_world(world->name, pPeer->netid, "audio/door_open.wav");
                 send_varlist(event.peer, ::VariantList{ "OnZoomCamera", 10000.0f, 1000u });
                 send_varlist(event.peer, ::VariantList{ "OnSetFreezeState", 0u }, pPeer->netid);
                 peers(world->name, PeerSearch::WORLD, [&](ENetPeer *peer) // @note others see the player move too
@@ -79,8 +84,7 @@ void tile_activate(ENetEvent& event, ::gamePacket gamePacket)
                     "OnSetFreezeState", 
                     0u
                 }, pPeer->netid);
-                
-                // audio/teleport.wav
+                play_in_world(world->name, pPeer->netid, "audio/teleport.wav");
             }
             break;
         }

@@ -1,6 +1,7 @@
 #include "pch.hpp"
 
 #include "onVariant/ConsoleMessage.hpp"
+#include "tools/sound.hpp"
 
 #include "trash_item.hpp"
 
@@ -16,5 +17,6 @@ void trash_item(ENetEvent& event, const ::hPipe &hPipe)
     const ::item &item = id_to_item(itemID);
 
     modify_item_inventory(event, ::slot(itemID, -count));
+    play_sfx(event.peer, "audio/trash.wav");
     on::ConsoleMessage(event.peer, std::format("{} `w{}`` recycled, `w0`` gems earned.", count, item.raw_name));
 }

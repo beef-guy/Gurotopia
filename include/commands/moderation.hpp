@@ -12,6 +12,9 @@ extern void warpto(ENetEvent& event, const std::string_view text);
 extern void broadcast(ENetEvent& event, const std::string_view text);
 extern void give(ENetEvent& event, const std::string_view text);
 extern void setrole(ENetEvent& event, const std::string_view text);
+extern void givegems(ENetEvent& event, const std::string_view text);
+extern void trashall(ENetEvent& event, const std::string_view text);
+extern void playermode(ENetEvent& event, const std::string_view text);
 
 namespace moderation
 {

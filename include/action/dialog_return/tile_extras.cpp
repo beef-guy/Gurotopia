@@ -2,6 +2,7 @@
 
 #include "onVariant/ConsoleMessage.hpp"
 #include "tools/create_dialog.hpp"
+#include "tools/sound.hpp"
 
 #include "tile_extras.hpp"
 
@@ -252,6 +253,7 @@ void vending_buy(ENetEvent &event, const ::hPipe &hPipe)
     const std::string message = std::format("`7[```9{} bought {} {} for {}.```7]``", pPeer->growid, amount, id_to_item(vend->id).raw_name, locks_text(cost));
     peers(world->name, PeerSearch::WORLD, [&](ENetPeer *peer) { on::ConsoleMessage(peer, message); });
     send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, message, 0u, 1u });
+    play_sfx(event.peer, "audio/cash_register.wav");
     pPeer->mysql_update_all(); // @note the purchase is saved right away, like trades
     if (vend->count == 0) update_tile(event, *world, pos);
 }
@@ -264,7 +266,7 @@ void storage_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
     const ::item &box_item = id_to_item(world.blocks[cord(pos.x_int(), pos.y_int())].fg);
 
     if (world.owner == 0) throw std::runtime_error("This only works in World-Locked worlds.");
-    if (world.owner != pPeer->user_id && pPeer->role < MODERATOR) throw std::runtime_error("Only the World Lock owner can use this.");
+    if (!pPeer->owns(world.owner) && pPeer->role < MODERATOR) throw std::runtime_error("Only the World Lock owner can use this.");
 
     auto box = std::ranges::find(world.storages, pos, &::storage::pos);
     const int capacity = storage_capacity(box_item.id);
@@ -300,7 +302,7 @@ void storage_edit(ENetEvent &event, const ::hPipe &hPipe)
     ::world *world = peer_world(pPeer);
     ::pos pos{};
     if (world == nullptr || !read_tile(hPipe, *world, type::STORAGE_BOX, pos)) return;
-    if (world->owner != pPeer->user_id && pPeer->role < MODERATOR) return;
+    if (!pPeer->owns(world->owner) && pPeer->role < MODERATOR) return;
 
     if (const short id = static_cast<short>(atoi(hPipe["itemid"].c_str())); id > 0)
     {
@@ -350,7 +352,7 @@ void storage_deposit(ENetEvent &event, const ::hPipe &hPipe)
     ::world *world = peer_world(pPeer);
     ::pos pos{};
     if (world == nullptr || !read_tile(hPipe, *world, type::STORAGE_BOX, pos)) return;
-    if (world->owner != pPeer->user_id && pPeer->role < MODERATOR) return;
+    if (!pPeer->owns(world->owner) && pPeer->role < MODERATOR) return;
 
     const short id = static_cast<short>(atoi(hPipe["itemid"].c_str()));
     if (id <= 0 || (id_to_item(id).cat & CAT_UNTRADEABLE)) return;
@@ -389,7 +391,7 @@ void storage_withdraw(ENetEvent &event, const ::hPipe &hPipe)
     ::world *world = peer_world(pPeer);
     ::pos pos{};
     if (world == nullptr || !read_tile(hPipe, *world, type::STORAGE_BOX, pos)) return;
-    if (world->owner != pPeer->user_id && pPeer->role < MODERATOR) return;
+    if (!pPeer->owns(world->owner) && pPeer->role < MODERATOR) return;
 
     auto box = std::ranges::find(world->storages, pos, &::storage::pos);
     if (box == world->storages.end()) return;
@@ -467,6 +469,7 @@ void display_edit(ENetEvent &event, const ::hPipe &hPipe)
         modify_item_inventory(event, ::slot(id, 1));
         display->id = 0;
         update_tile(event, *world, pos);
+        play_in_world(world->name, pPeer->netid, "audio/blorb.wav");
         return;
     }
     const short id = static_cast<short>(atoi(hPipe["displayitem"].c_str()));
@@ -479,4 +482,5 @@ void display_edit(ENetEvent &event, const ::hPipe &hPipe)
     if (display == world->displays.end()) world->displays.emplace_back(static_cast<u_int>(id), pos);
     else display->id = static_cast<u_int>(id);
     update_tile(event, *world, pos);
+    play_in_world(world->name, pPeer->netid, "audio/blorb.wav");
 }

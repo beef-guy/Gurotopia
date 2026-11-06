@@ -1,5 +1,7 @@
 #include "pch.hpp"
 
+#include "tools/sound.hpp"
+
 #include "msg.hpp"
 
 void msg(ENetEvent& event, const std::string_view text)
@@ -30,6 +32,7 @@ void msg(ENetEvent& event, const std::string_view text)
             online = true;
             send_gameMessage(event.peer, {.message = std::format("action|log\nmsg|CT:[MSG]_`6>> (Sent to `${}``)``", growid)});
             send_gameMessage(peer, {.message = std::format("action|log\nmsg|CT:[MSG]_`6>> Private msg from `${}``: `${}``", pPeer->growid, msg)});
+            play_sfx(peer, "audio/pay_time.wav");
         });
         if (!online)
         {
