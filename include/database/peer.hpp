@@ -106,6 +106,11 @@ public:
     /* @return seconds played, including this session */
     long long total_playtime() const { return this->playtime + ((this->login_at > 0) ? std::time(nullptr) - this->login_at : 0); }
     u_char role{};
+    /* @note /playermode: staff and owner powers are switched off (not saved) so the server's owner can test like a normal player */
+    bool player_mode{};
+    u_char real_role{};
+    /* @return true if `uid` is this peer and they're not in /playermode */
+    bool owns(int uid) const { return !this->player_mode && uid != 0 && uid == this->user_id; }
     std::array<float, 10ull> clothing{}; // @note peer's clothing {id, clothing::}
     u_char punch_effect{}; // @note last equipped clothing that has a effect. supporting 0-255 effects.
 

@@ -8,6 +8,7 @@
 #include "tools/random.hpp"
 #include "tools/time.hpp"
 #include "tools/create_dialog.hpp"
+#include "tools/sound.hpp"
 #include "action/quit_to_exit.hpp"
 #include "action/join_request.hpp"
 
@@ -92,7 +93,11 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
 
         /* @note wrenching is checked per block below (anyone may wrench a vending machine to buy from it) */
         if (gamePacket.id != 32 && !(item.cat & CAT_PUBLIC)) // @note if block is public skip validating if peer is owner or access
-            if (!world->can_edit(*pPeer, gamePacket.punch, gamePacket.id == 18)) return;
+            if (!world->can_edit(*pPeer, gamePacket.punch, gamePacket.id == 18))
+            {
+                if (gamePacket.id == 18) play_sfx(event.peer, "audio/punch_locked.wav");
+                return;
+            }
 
         bool tile_update{};
         bool lock_visuals{}; // @todo this looks sloppy
@@ -180,19 +185,21 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     if (is_tile_lock(item.id))
                     {
                         const ::area_lock *lock = world->lock_at(gamePacket.punch);
-                        if (lock != nullptr && lock->owner != pPeer->user_id && pPeer->role < MODERATOR)
+                        if (lock != nullptr && !pPeer->owns(lock->owner) && pPeer->role < MODERATOR)
                         {
                             ::peer owner{};
                             owner.user_id = lock->owner;
+                            play_sfx(event.peer, "audio/punch_locked.wav");
                             throw std::runtime_error(std::format("`w{}``'s `${}``", owner.mysql_select<std::string>("growid", "", true), item.raw_name));
                         }
                         break;
                     }
 
-                    if (world->owner != pPeer->user_id)
+                    if (!pPeer->owns(world->owner))
                     {
                         ::peer owner{}; // @note offline "fake" peer, only used to read the owner's name
                         owner.user_id = world->owner;
+                        play_sfx(event.peer, "audio/punch_locked.wav");
                         throw std::runtime_error(std::format("`5[```w{}`` `$World Locked`` by `w{}```5]``", world->name, owner.mysql_select<std::string>("growid", "", true)));
                     }
                     break;
@@ -620,6 +627,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                             std::format("`w{} Tree`` aged `${}``!", tree_name, (item.id == 228) ? "1 hour" : "24 hours"),
                         0u, 1u });
                     color = bgra::GREEN | bgra::ALPHA, particle = 0x2c;
+                    play_in_world(world->name, pPeer->netid, "audio/piano_nice.wav");
                     break;
                 }
                 case 5706: // @note Small Seed Pack: 5 random seeds, one of them rare. source: https://growtopia.fandom.com/wiki/Small_Seed_Pack
@@ -663,6 +671,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     }
                     on::ConsoleMessage(event.peer, std::format("You opened the `w{}`` and received: {}", item.raw_name, received));
                     send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, std::format("You opened the `w{}``!", item.raw_name), 0u, 1u });
+                    play_in_world(world->name, pPeer->netid, "audio/piano_nice.wav");
                     break;
                 }
                 case 3822: break; // Red Hair Dye
@@ -692,7 +701,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                         if (lock == nullptr) break;
                         ::peer owner{};
                         owner.user_id = lock->owner;
-                        if (lock->owner != pPeer->user_id && pPeer->role < MODERATOR)
+                        if (!pPeer->owns(lock->owner) && pPeer->role < MODERATOR)
                             throw std::runtime_error(std::format("`w{}``'s `${}``", owner.mysql_select<std::string>("growid", "", true), item.raw_name));
 
                         std::string access_rows{};
@@ -738,7 +747,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                         break;
                     }
 
-                    if (pPeer->user_id == world->owner)
+                    if (pPeer->owns(world->owner))
                     {
                         std::string access_rows{};
                         for (const int uid : world->access)
@@ -898,6 +907,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                                     0u, 1u
                                 });
                                 if (tree != world->trees.end()) tree->tick = ticks();
+                                play_in_world(world->name, pPeer->netid, "audio/success.wav");
                                 block.state[2] = (block.state[2] & S_PARENT) | S_SPLICED; // @todo handle for multiple flags
 
                                 block.fg = item.id;
@@ -1005,6 +1015,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 send_gamePacket(*event.peer, gamePacket);
                 refresh_lock_tiles(event, *world, gamePacket.punch);
                 send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, std::format("`5[```w{}`` area locked by {}`5]``", item.raw_name, pPeer->growid), 0u, 1u });
+                play_in_world(world->name, pPeer->netid, "audio/use_lock.wav");
                 return;
             }
         }
@@ -1016,6 +1027,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         }
         if (lock_visuals) 
         {
+            play_in_world(world->name, pPeer->netid, "audio/use_lock.wav");
             ::gamePacket copy_gamePacket = {
                 .type = 0x0f, // @note PACKET_SEND_LOCK
                 .netid = world->owner, 
