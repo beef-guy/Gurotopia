@@ -16,6 +16,7 @@
 #include "item_activate.hpp"
 
 #include "action/dialog_return/tile_extras.hpp"
+#include "action/dialog_return/wrenchables.hpp"
 
 #include "tile_change.hpp"
 
@@ -309,6 +310,19 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     if (box != world->storages.end() && !box->items.empty()) throw std::runtime_error("Empty the box first!");
                     break;
                 }
+                case type::DISPLAY_SHELF:
+                {
+                    auto shelf = std::ranges::find(world->shelves, gamePacket.punch, &::shelf::pos);
+                    if (shelf != world->shelves.end() && std::ranges::any_of(shelf->items, [](u_int id) { return id != 0; }))
+                        throw std::runtime_error("Take the items off the shelf first!");
+                    break;
+                }
+                case type::DONATION_BOX:
+                {
+                    auto box = std::ranges::find(world->donation_boxes, gamePacket.punch, &::donation_box::pos);
+                    if (box != world->donation_boxes.end() && !box->gifts.empty()) throw std::runtime_error("Empty the box first!");
+                    break;
+                }
                 case type::DISPLAY_BLOCK:
                 {
                     auto display = std::ranges::find(world->displays, gamePacket.punch, &::display::pos);
@@ -345,6 +359,9 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 std::erase_if(world->storages, [&](const ::storage &box) { return box.pos == gamePacket.punch; });
                 std::erase_if(world->displays, [&](const ::display &display) { return display.pos == gamePacket.punch; });
                 std::erase_if(world->providers, [&](const ::provider &prov) { return prov.pos == gamePacket.punch; });
+                std::erase_if(world->mailboxes, [&](const ::mailbox &box) { return box.pos == gamePacket.punch; });
+                std::erase_if(world->donation_boxes, [&](const ::donation_box &box) { return box.pos == gamePacket.punch; });
+                std::erase_if(world->shelves, [&](const ::shelf &shelf) { return shelf.pos == gamePacket.punch; });
                 if (is_tile_lock(item.id)) remove_area_lock(event, *world, gamePacket.punch);
                 if (item.type == type::XENONITE && world->xenonite != 0)
                 {
@@ -889,6 +906,31 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     storage_wrench(event, *world, gamePacket.punch);
                     break;
                 }
+                case type::MAILBOX:
+                {
+                    mailbox_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
+                case type::BULLETIN:
+                {
+                    bulletin_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
+                case type::DONATION_BOX:
+                {
+                    donation_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
+                case type::DISPLAY_SHELF:
+                {
+                    shelf_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
+                case type::FOREGROUND:
+                {
+                    if (item.id == 3898/*Telephone*/) telephone_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
             }
             return; // @note leave early else wrench will act as a block unlike fist which breaks. this is cause of send_gamePacket()
         }
@@ -1024,6 +1066,16 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 case type::DISPLAY_BLOCK:
                 {
                     tile_update = true; // @note these carry data the client needs (empty at first)
+                    break;
+                }
+                case type::MAILBOX:
+                case type::BULLETIN:
+                case type::DONATION_BOX:
+                {
+                    std::erase_if(world->mailboxes, [&](const ::mailbox &box) { return box.pos == gamePacket.punch; });
+                    std::erase_if(world->donation_boxes, [&](const ::donation_box &box) { return box.pos == gamePacket.punch; });
+                    block.state[2] &= ~S_TOGGLE; // @note a new one starts empty
+                    tile_update = true;
                     break;
                 }
             }

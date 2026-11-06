@@ -334,6 +334,12 @@ static void write_default_extra(::blob &blob, char type, const ::item &item)
             blob.i32(stocked ? vend->price : 0);
             break;
         }
+        case '\x2b': /* display shelf: the four items */
+        {
+            auto shelf = std::ranges::find(this->shelves, block_pos, &::shelf::pos);
+            for (int i = 0; i < 4; ++i) blob.u32((shelf != this->shelves.end()) ? shelf->items[i] : 0);
+            break;
+        }
         case '\x36': /* storage box: the client only needs to know it exists */
         {
             blob.i16(0);
@@ -629,7 +635,7 @@ namespace
         for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
         return true;
     }
-    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7 };
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10 };
 }
 
 /* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
@@ -673,6 +679,39 @@ namespace
     {
         blob.u8(EX_PROVIDER); blob.i16(prov.pos.x_int()); blob.i16(prov.pos.y_int());
         blob.u32(prov.tick);
+    }
+    for (const ::mailbox &box : this->mailboxes)
+    {
+        if (box.letters.empty() && !box.is_public && !box.hide_names) continue;
+        blob.u8(EX_MAILBOX); blob.i16(box.pos.x_int()); blob.i16(box.pos.y_int());
+        blob.u8(box.is_public); blob.u8(box.hide_names);
+        blob.u32(box.next_id);
+        blob.i32(static_cast<int>(box.letters.size()));
+        for (const ::letter &letter : box.letters)
+        {
+            blob.u32(letter.id); blob.i32(letter.uid);
+            write_string(blob, letter.name);
+            write_string(blob, letter.text);
+        }
+    }
+    for (const ::donation_box &box : this->donation_boxes)
+    {
+        if (box.gifts.empty()) continue;
+        blob.u8(EX_DONATION); blob.i16(box.pos.x_int()); blob.i16(box.pos.y_int());
+        blob.u32(box.next_id);
+        blob.i32(static_cast<int>(box.gifts.size()));
+        for (const ::gift &gift : box.gifts)
+        {
+            blob.u32(gift.id); blob.i16(gift.item); blob.i16(gift.count); blob.i32(gift.uid);
+            write_string(blob, gift.name);
+            write_string(blob, gift.note);
+        }
+    }
+    for (const ::shelf &shelf : this->shelves)
+    {
+        if (std::ranges::all_of(shelf.items, [](u_int id) { return id == 0; })) continue;
+        blob.u8(EX_SHELF); blob.i16(shelf.pos.x_int()); blob.i16(shelf.pos.y_int());
+        for (const u_int id : shelf.items) blob.u32(id);
     }
     if (this->xenonite != 0)
     {
@@ -764,6 +803,46 @@ void world::load_extras(::blob &blob)
             case EX_XENONITE:
             {
                 if (!blob.read_u32(this->xenonite, pos)) return;
+                break;
+            }
+            case EX_MAILBOX:
+            {
+                ::mailbox box{.pos = tile};
+                u_char is_public{}, hide_names{};
+                int count{};
+                if (!blob.read_u8(is_public, pos) || !blob.read_u8(hide_names, pos) || !blob.read_u32(box.next_id, pos) ||
+                    !blob.read_i32(count, pos) || count < 0 || count > 100) return;
+                for (int i = 0; i < count; ++i)
+                {
+                    ::letter letter{};
+                    if (!blob.read_u32(letter.id, pos) || !blob.read_i32(letter.uid, pos) || 
+                        !read_string(blob, pos, letter.name) || !read_string(blob, pos, letter.text)) return;
+                    box.letters.push_back(std::move(letter));
+                }
+                box.is_public = is_public, box.hide_names = hide_names;
+                this->mailboxes.push_back(std::move(box));
+                break;
+            }
+            case EX_SHELF:
+            {
+                ::shelf shelf{.pos = tile};
+                for (u_int &id : shelf.items) if (!blob.read_u32(id, pos)) return;
+                this->shelves.push_back(shelf);
+                break;
+            }
+            case EX_DONATION:
+            {
+                ::donation_box box{.pos = tile};
+                int count{};
+                if (!blob.read_u32(box.next_id, pos) || !blob.read_i32(count, pos) || count < 0 || count > 100) return;
+                for (int i = 0; i < count; ++i)
+                {
+                    ::gift gift{};
+                    if (!blob.read_u32(gift.id, pos) || !blob.read_i16(gift.item, pos) || !blob.read_i16(gift.count, pos) || 
+                        !blob.read_i32(gift.uid, pos) || !read_string(blob, pos, gift.name) || !read_string(blob, pos, gift.note)) return;
+                    box.gifts.push_back(std::move(gift));
+                }
+                this->donation_boxes.push_back(std::move(box));
                 break;
             }
             default: return; // @note unknown record, stop rather than misread the rest
