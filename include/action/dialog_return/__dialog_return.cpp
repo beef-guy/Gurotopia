@@ -19,6 +19,7 @@
 #include "daily_quest.hpp"
 #include "megaphone.hpp"
 #include "tile_extras.hpp"
+#include "wrenchables.hpp"
 
 #include "__dialog_return.hpp"
 
@@ -52,5 +53,11 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
     {"storage_deposit", std::bind(&storage_deposit, std::placeholders::_1, std::placeholders::_2)},
     {"storage_withdraw", std::bind(&storage_withdraw, std::placeholders::_1, std::placeholders::_2)},
     {"display", std::bind(&display_edit, std::placeholders::_1, std::placeholders::_2)},
-    {"xenonite_edit", std::bind(&xenonite_edit, std::placeholders::_1, std::placeholders::_2)}
+    {"xenonite_edit", std::bind(&xenonite_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"telephone", std::bind(&telephone, std::placeholders::_1, std::placeholders::_2)},
+    {"mailbox", std::bind(&mailbox_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"bulletin", std::bind(&bulletin_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"donation", std::bind(&donation_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"donation_give", std::bind(&donation_give, std::placeholders::_1, std::placeholders::_2)},
+    {"shelf", std::bind(&shelf_edit, std::placeholders::_1, std::placeholders::_2)}
 };

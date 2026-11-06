@@ -45,7 +45,7 @@ namespace
     }
 }
 
-void show_daily_quest(ENetEvent& event)
+void show_daily_quest(ENetEvent& event, const ::pos *phone)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
     const auto [first, second] = todays_quest();
@@ -54,40 +54,48 @@ void show_daily_quest(ENetEvent& event)
 
     ::create_dialog dialog = ::create_dialog()
         .set_default_color("`o")
-        .add_label_with_icon("big", "`wCrazy Jim's Daily Quest``", CRAZY_JIM)
-        .add_spacer("small")
-        .add_textbox("I guess some people call me Crazy Jim because I'm a bit of a hoarder. But I'm very particular about what I want! And today, what I want is this:")
-        .add_label_with_icon("small", std::format("`w{} {}``", first.second, one.raw_name), one.id)
-        .add_smalltext("and")
-        .add_label_with_icon("small", std::format("`w{} {}``", second.second, two.raw_name), two.id)
-        .add_spacer("small")
-        .add_textbox("You shove all that through the phone (it works, I've tried it), and I will hand you one of the `2Growtokens`` from my personal collection!  But hurry, this offer is only good until midnight, and only one `2Growtoken`` per person!")
-        .add_spacer("small");
+        .add_label_with_icon("big", "`wCrazy Jim's Quest Emporium``", CRAZY_JIM);
 
     if (pPeer->daily_quest == today())
-        dialog.add_textbox("`2You've already done today's quest. Come back tomorrow!``");
+    {
+        dialog.add_textbox("You've already completed my Daily Quest for today! Call me back after midnight to hear about my next cravings.")
+              .add_spacer("small");
+    }
     else
     {
-        dialog.add_smalltext(std::format("`6(You have {} {} and {} {}.)``", have_one, one.raw_name, have_two, two.raw_name));
-        if (have_one >= first.second && have_two >= second.second) dialog.add_button("deliver", "`wDeliver!``");
+        dialog.add_textbox("I guess some people call me Crazy Jim because I'm a bit of a hoarder. But I'm very particular about what I want! And today, what I want is this:")
+              .add_spacer("small")
+              .add_label_with_icon("small", std::format("`2{} {}``", first.second, one.raw_name), one.id)
+              .add_smalltext("and")
+              .add_label_with_icon("small", std::format("`2{} {}``", second.second, two.raw_name), two.id)
+              .add_spacer("small")
+              .add_textbox("You shove all that through the phone (it works, I've tried it), and I will hand you one of the `2Growtokens`` from my personal collection!  But hurry, this offer is only good until midnight, and only one `2Growtoken`` per person!")
+              .add_spacer("small")
+              .add_textbox(std::format("You have {} {} and {} {}", have_one, one.raw_name, have_two, two.raw_name))
+              .add_spacer("small");
+        if (have_one >= first.second && have_two >= second.second) dialog.add_button("deliver", "`2Turn in quest items``");
+    }
+    if (phone != nullptr)
+    {
+        dialog.add_button("jim_menu", "Back")
+              .embed_data("tilex", phone->x_int())
+              .embed_data("tiley", phone->y_int());
+        send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("telephone", "Hang Up", "") });
+        return;
     }
     send_varlist(event.peer, { "OnDialogRequest", dialog.add_quick_exit().end_dialog("daily_quest", "Hang Up", "") });
 }
 
-void daily_quest(ENetEvent& event, const ::hPipe &hPipe)
+void deliver_daily_quest(ENetEvent& event)
 {
-    if (hPipe["buttonClicked"] != "deliver") return;
-
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
     if (pPeer->daily_quest == today()) return;
 
     const auto [first, second] = todays_quest();
-    if (pPeer->have_slot(::slot(first.first, 0)) < first.second || pPeer->have_slot(::slot(second.first, 0)) < second.second) return;
+    if (pPeer->have_slot(::slot(first.first, 0)) < first.second || pPeer->have_slot(::slot(second.first, 0)) < second.second)
+        throw std::runtime_error("I don't have enough items to turn it in!");
     if (!pPeer->can_hold(GROWTOKEN, 1))
-    {
-        on::ConsoleMessage(event.peer, "`4Oops:`` `oYou don't have room in your backpack for a `2Growtoken``.``");
-        return;
-    }
+        throw std::runtime_error("This seems far-fetched, but you've already reached the maximum amount of Growtokens.");
 
     modify_item_inventory(event, ::slot(first.first, -first.second));
     modify_item_inventory(event, ::slot(second.first, -second.second));
@@ -95,6 +103,14 @@ void daily_quest(ENetEvent& event, const ::hPipe &hPipe)
     pPeer->daily_quest = today();
     pPeer->mysql_update_all(); // @note save now, so a crash or restart can't hand out a second Growtoken today
 
-    on::ConsoleMessage(event.peer, "`9[Crazy Jim]`` `oThanks, pal! Here's your `2Growtoken``. Come back tomorrow for a new quest!``");
-    play_sfx(event.peer, "audio/piano_nice.wav");
+    send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`wThanks, pardner! Have 1 `2Growtoken`w!", 0u, 1u });
+    on::ConsoleMessage(event.peer, std::format("[`6You jammed {} {} and {} {} into the phone, and 1 `2Growtoken`` popped out!``]",
+        first.second, id_to_item(first.first).raw_name, second.second, id_to_item(second.first).raw_name));
+    if (pPeer->netid != 0) play_in_world(pPeer->recent_worlds.back(), pPeer->netid, "audio/piano_nice.wav");
+    else play_sfx(event.peer, "audio/piano_nice.wav");
+}
+
+void daily_quest(ENetEvent& event, const ::hPipe &hPipe)
+{
+    if (hPipe["buttonClicked"] == "deliver") deliver_daily_quest(event);
 }

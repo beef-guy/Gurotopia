@@ -65,6 +65,17 @@ void item_activate(ENetEvent& event, ::gamePacket gamePacket)
             }
             else modify_item_inventory(event, ::slot(242, -hyaku)); // @note return wls if can't hold 100
         }
+        else if (id == 7188/*Blue Gem Lock*/ && count >= 1)
+        {
+            if (pPeer->can_hold(1796, 100))
+            {
+                modify_item_inventory(event, ::slot(id, -1));
+                modify_item_inventory(event, ::slot(1796, 100));
+                const std::string shattered = "You shattered a `2Blue Gem Lock`` into 100 `2Diamond Lock``!";
+                send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, shattered, 0u, 1u });
+                on::ConsoleMessage(event.peer, shattered);
+            }
+        }
         else if (id == 1486 && count >= 100)  
         {
             const u_short nokori = modify_item_inventory(event, {6802, 1});

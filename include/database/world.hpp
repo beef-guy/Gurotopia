@@ -173,6 +173,50 @@ struct provider
     u_int tick{}; // @note ticks() when placed or last collected
 };
 
+/* @brief a letter in a Mailbox, or a line on a Bulletin Board */
+struct letter
+{
+    u_int id{}; // @note stays the same while the letter exists, so a delete button can't hit the wrong letter
+    int uid{};
+    std::string name{};
+    std::string text{};
+};
+
+/* @brief Mailbox and Bulletin Board contents. is_public and hide_names are Bulletin Board settings */
+struct mailbox
+{
+    ::pos pos{};
+    std::vector<::letter> letters{};
+    u_int next_id{1};
+    bool is_public{};
+    bool hide_names{};
+};
+
+/* @brief one gift in a Donation Box */
+struct gift
+{
+    u_int id{};
+    short item{};
+    short count{};
+    int uid{};
+    std::string name{};
+    std::string note{};
+};
+
+struct donation_box
+{
+    ::pos pos{};
+    std::vector<::gift> gifts{};
+    u_int next_id{1};
+};
+
+/* @brief the four items on a Display Shelf (0 = empty spot) */
+struct shelf
+{
+    ::pos pos{};
+    std::array<u_int, 4> items{};
+};
+
 /* @brief Storage Box Xtreme contents */
 struct storage
 {
@@ -222,6 +266,9 @@ public:
     std::vector<::storage> storages{};
     std::vector<::display> displays{};
     std::vector<::provider> providers{};
+    std::vector<::mailbox> mailboxes{}; // @note Mailboxes and Bulletin Boards
+    std::vector<::donation_box> donation_boxes{};
+    std::vector<::shelf> shelves{};
     u_int xenonite{}; // @note the Xenonite Crystal's settings (xenonite:: in playmods.hpp). only one crystal per world
 
     /* @return the area lock that covers this tile, or nullptr */
