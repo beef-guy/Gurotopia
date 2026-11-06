@@ -356,6 +356,8 @@ void peer::update_effects()
         if (punch_id != 0) // @note an actual change rather than no effect.
             this->punch_effect = punch_id;
     }
+    /* @note the held item's effect wins (a gun or sword over a hat), like the real game */
+    if (u_char hand = get_punch_id(static_cast<u_int>(this->clothing[clothing::HAND])); hand != 0) this->punch_effect = hand;
 }
 
 ENetHost *host;

@@ -24,6 +24,8 @@
 #include "action/fossils.hpp"
 #include "action/growpass.hpp"
 #include "action/profile.hpp"
+#include "action/gauntlet.hpp"
+#include "database/playmods.hpp"
 
 #include "tile_change.hpp"
 
@@ -156,6 +158,8 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         
         if (gamePacket.id == 18) // @note punching a block
         {
+            if (gauntlet_punch(event, *world, gamePacket)) return; // @note Gauntlet of Elements: pick up or swap a block
+
             static bool punch{}; // @note true if tile_change has been called within this inital (punch)
 
             if (!punch) // @note put all multiple punch features here
@@ -455,6 +459,12 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 return;
             }
             tile_apply_damage(event, std::move(gamePacket), block, apply_damage_value);
+            {
+                /* @note Punch Damage: every punch counts twice. Enhanced Digging: dirt breaks twice as fast */
+                u_char &hits = (block.fg != 0) ? block.hits[0] : block.hits[1];
+                const bool dirt = item.raw_name.find("Dirt") != std::string::npos || item.id == 14/*Cave Background*/;
+                if (hits < item.hits && ((pPeer->mods & M_PUNCH_DAMAGE) || ((pPeer->mods & M_ENHANCED_DIGGING) && dirt))) ++hits;
+            }
 
             /* @note a loaded Fossil Prep Station or Geiger Charger can't be broken (the punch above collects instead) */
             if (block.hits[0] >= item.hits && std::ranges::any_of(world->timed_machines, [&](const ::timed_machine &m) { return m.pos == gamePacket.punch && m.item != 0; }))
@@ -587,6 +597,12 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         }
         else if (item.type == type::CONSUMEABLE) 
         {
+            if (is_elemental_stone(static_cast<short>(item.id)))
+            {
+                if (gamePacket.punch != pPeer->pos.by_32(true)) throw std::runtime_error("Use this on yourself!");
+                elemental_stone_use(event, static_cast<short>(item.id));
+                return;
+            }
             if (item.id == ROYAL_GROW_PASS_TOKEN || is_growmoji_item(static_cast<short>(item.id)))
             {
                 if (gamePacket.punch != pPeer->pos.by_32(true)) throw std::runtime_error("Use this on yourself!");

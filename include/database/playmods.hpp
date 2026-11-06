@@ -13,9 +13,9 @@ enum mod : u_short {
     M_BUILD_RANGE      = 0x0020, // @note +1 tile reach with everything else
     M_PUNCH_POWER      = 0x0040, // @note pushes players further
     M_WATER_SPEED      = 0x0080,
-    M_PUNCH_DAMAGE     = 0x0100, // @note message only for now
+    M_PUNCH_DAMAGE     = 0x0100, // @note each punch counts twice
     M_FIREPROOF        = 0x0200, // @note message only for now
-    M_ENHANCED_DIGGING = 0x0400, // @note message only for now
+    M_ENHANCED_DIGGING = 0x0400, // @note dirt breaks twice as fast
     M_SLOW             = 0x0800  // @note "Putt Putt Putt"
 };
 
