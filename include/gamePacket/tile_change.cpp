@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "action/event_buttons.hpp"
 
 #include "onVariant/NameChanged.hpp"
 #include "onVariant/SetClothing.hpp"
@@ -307,6 +308,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     {
                         block.hits[0] = 99;
                         add_break_drop(event, ::slot(item.id - 1, RandomRange(1, tree->fruit*3)), gamePacket.punch.by_32(), *world); // @note fruit (from tree)
+                        daily_challenge_harvest(event, static_cast<short>(item.id - 1));
                     }
                     break;
                 }

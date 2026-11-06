@@ -2,6 +2,7 @@
 
 #include "onVariant/SetBux.hpp"
 #include "onVariant/ConsoleMessage.hpp"
+#include "action/event_buttons.hpp"
 
 #include "item_activate_object.hpp"
 
@@ -36,6 +37,7 @@ void item_activate_object(ENetEvent& event, ::gamePacket gamePacket)
         pPeer->gems += object->count;
         pPeer->mysql_update("gems", pPeer->gems);
         on::SetBux(event);
+        piggy_bank_add(event, object->count); // @note the Piggy Bank fills as gems are collected
     }
     remove_object(event, object->uid);
     const ::object remember_object = *object;

@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "action/event_buttons.hpp"
 
 #include "onVariant/EmoticonDataChanged.hpp"
 #include "onVariant/Spawn.hpp"
@@ -142,6 +143,7 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
         ++world.visitors;
         on::SetClothing(event.peer);
         on::CountryState(event);
+        event_buttons_refresh(event.peer); // @note Daily Challenge, Piggy Bank and Mailbox on the left
 
         send_varlist(event.peer, {
             "OnSetFeatureEnableFlags",
