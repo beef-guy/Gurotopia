@@ -126,6 +126,7 @@ public:
         long long bite{};      // @note when the last bite happened, 0 = none yet
     } fishing{}; // @note not saved
     std::vector<int> friends{}; // @note user ids of friends (loaded on log in)
+    std::vector<int> ignored{}; // @note user ids this player ignores (Ignore Player): their chat and messages are hidden. until log off
     std::vector<int> friend_requests{}; // @note user ids who asked to be friends this session
     u_char punch_range{}, build_range{}; // @note extra reach in tiles from clothing (set in on::SetClothing)
     u_char punch_effect{}; // @note last equipped clothing that has a effect. supporting 0-255 effects.

@@ -4,7 +4,27 @@
 #include "action/trade.hpp"
 #include "friends.hpp"
 #include "daily_quest.hpp"
+#include "onVariant/ConsoleMessage.hpp"
+#include "tools/create_dialog.hpp"
+#include <algorithm>
 #include <unordered_map>
+
+namespace
+{
+    /* @brief the other player in this world from the wrench menu's netID, or nullptr */
+    ENetPeer *wrenched(ENetEvent &event, const ::hPipe &hPipe)
+    {
+        ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+        const int netid = atoi(hPipe["netID"].c_str());
+        ENetPeer *other = nullptr;
+        peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [&](ENetPeer *p)
+        {
+            const ::peer *pOthers = static_cast<::peer*>(p->data);
+            if (other == nullptr && pOthers->netid == netid && p != event.peer) other = p;
+        });
+        return other;
+    }
+}
 
 static const std::unordered_map<std::string, std::string> rml_pages{
     {"seed_diary_customization", "show_seed_diary_ui"},
@@ -97,8 +117,80 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
     {
         show_daily_quest(event);
     }
+    else if (hPipe["buttonClicked"] == "show_clothes") // @note View worn clothes
+    {
+        ENetPeer *other = wrenched(event, hPipe);
+        if (other == nullptr) return;
+        const ::peer *pOthers = static_cast<::peer*>(other->data);
+        ::create_dialog dialog = ::create_dialog()
+            .set_default_color("`o")
+            .add_label_with_icon("big", std::format("`w{}``'s clothes", pOthers->display_growid), 1784)
+            .add_spacer("small");
+        int worn = 0;
+        for (const float id : pOthers->clothing)
+        {
+            const short item = static_cast<short>(id);
+            if (item <= 0) continue;
+            dialog.add_label_with_icon("small", std::format("`w{}``", id_to_item(item).raw_name), item);
+            ++worn;
+        }
+        if (worn == 0) dialog.add_textbox("They aren't wearing anything special.");
+        dialog.add_spacer("small").add_quick_exit();
+        send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("view_clothes", "", "Close") });
+    }
+    else if (hPipe["buttonClicked"] == "ignore_player")
+    {
+        ENetPeer *other = wrenched(event, hPipe);
+        if (other == nullptr) return;
+        const ::peer *pOthers = static_cast<::peer*>(other->data);
+        if (auto it = std::ranges::find(pPeer->ignored, pOthers->user_id); it != pPeer->ignored.end())
+        {
+            pPeer->ignored.erase(it);
+            on::ConsoleMessage(event.peer, std::format("`oYou are no longer ignoring {}``.", pOthers->display_growid));
+        }
+        else
+        {
+            pPeer->ignored.push_back(pOthers->user_id);
+            on::ConsoleMessage(event.peer, std::format("`oYou are now ignoring {}``. You won't see their chat or messages until you log off. Wrench them and pick Ignore Player again to stop.", pOthers->display_growid));
+        }
+    }
+    else if (hPipe["buttonClicked"] == "report_player")
+    {
+        ENetPeer *other = wrenched(event, hPipe);
+        if (other == nullptr) return;
+        const ::peer *pOthers = static_cast<::peer*>(other->data);
+        send_varlist(event.peer, {
+            "OnDialogRequest",
+            ::create_dialog()
+                .set_default_color("`o")
+                .add_label_with_icon("big", std::format("`wReport {}``", pOthers->display_growid), 18)
+                .add_spacer("small")
+                .add_textbox("Tell the moderators what this player did. False reports may get you in trouble!")
+                .add_text_input("reason", "Reason:", "", 100)
+                .embed_data("netID", pOthers->netid)
+                .end_dialog("report_player", "Cancel", "Report")
+        });
+    }
     else if (hPipe["buttonClicked"] == "friend_add")
     {
         friend_add(event, atoi(hPipe["netID"].c_str())); // @note the wrench menu embeds the other player's netID
     }
+}
+void report_player(ENetEvent& event, const ::hPipe &hPipe)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    ENetPeer *other = wrenched(event, hPipe);
+    std::string reason = hPipe["reason"];
+    if (other == nullptr || reason.empty()) return;
+    if (reason.size() > 100) reason.resize(100);
+    std::erase_if(reason, [](char c) { return c == '|' || c == '\n' || c == '`'; });
+    const ::peer *pOthers = static_cast<::peer*>(other->data);
+    const std::string note = std::format("`4[REPORT]`` `w{}`` reported `w{}`` in `w{}``: {}", pPeer->growid, pOthers->growid, pPeer->recent_worlds.back(), reason);
+    print(std::format("report: {} reported {} in {}: {}", pPeer->growid, pOthers->growid, pPeer->recent_worlds.back(), reason));
+    peers("", PeerSearch::EVERYONE, [&](ENetPeer *p) // @note every moderator online sees it
+    {
+        const ::peer *pStaff = static_cast<::peer*>(p->data);
+        if (pStaff != nullptr && pStaff->role >= MODERATOR) on::ConsoleMessage(p, note);
+    });
+    on::ConsoleMessage(event.peer, "`2Thanks for your report! The moderators will look into it.``");
 }

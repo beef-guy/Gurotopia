@@ -80,6 +80,8 @@ void action::input(ENetEvent& event, const std::string& header)
         const std::string &message = std::format("CP:0_PL:0_OID:_CT:[W]_ `6<{}>`` `$`${}````", pPeer->display_growid, text);
         peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [&event, &pPeer, player_chat, message](ENetPeer *p) 
         {
+            const ::peer *pListener = static_cast<::peer*>(p->data);
+            if (std::ranges::find(pListener->ignored, pPeer->user_id) != pListener->ignored.end()) return; // @note Ignore Player
             send_varlist(p, { "OnTalkBubble", pPeer->netid, player_chat, 0u });
             on::ConsoleMessage(p, message, pPeer->netid);
         });
