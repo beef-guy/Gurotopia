@@ -1,6 +1,7 @@
 #include "pch.hpp"
 
 #include "database/playmods.hpp"
+#include "action/radiation.hpp"
 
 #include "SetClothing.hpp"
 
@@ -33,7 +34,7 @@ void on::SetClothing(ENetPeer *peer, bool sound)
         .type = static_cast<int>(0x14u | (u_int(pPeer->punch_effect) << 8) | (u_int(0x80 + fx.build_range) << 16) | (u_int(0x80 + fx.punch_range) << 24)),
         .netid = pPeer->netid,
         .waterspeed = fx.water_speed,
-        .id = pPeer->state | ((fx.mods & M_DOUBLE_JUMP) ? S_DOUBLE_JUMP : 0), // @note 04 invisible (only eyes/mouth), 08 no arms, 16 no face, 32 invisible (only legs/arms), 64 devil horns, 128 angel halo, 2048 frozen, 4096 gray skin?,8192 ducttape, 16384 Onion effect, 32768 stars effect, 65536 zombie, 131072 hit by lava, 262144 shadow effect, 524288 irradiated effect, 1048576 spotlight, 2097152 pineapple thingy
+        .id = pPeer->state | ((fx.mods & M_DOUBLE_JUMP) ? S_DOUBLE_JUMP : 0) | (irradiated(*pPeer) ? S_IRRADIATED : 0), // @note 04 invisible (only eyes/mouth), 08 no arms, 16 no face, 32 invisible (only legs/arms), 64 devil horns, 128 angel halo, 2048 frozen, 4096 gray skin?,8192 ducttape, 16384 Onion effect, 32768 stars effect, 65536 zombie, 131072 hit by lava, 262144 shadow effect, 524288 irradiated effect, 1048576 spotlight, 2097152 pineapple thingy
         .pos = ::pos{ 1200.0f/*acceleration*/, fx.punch_strength },
         .speed = ::pos{ fx.speed, fx.gravity },
         .punch = ::pos{ pPeer->hair_color, 0x00000000u } // @todo can this even be unsigned?

@@ -20,6 +20,8 @@
 #include "action/dialog_return/wrenchables.hpp"
 #include "action/fishing.hpp"
 #include "action/automation.hpp"
+#include "action/radiation.hpp"
+#include "action/fossils.hpp"
 
 #include "tile_change.hpp"
 
@@ -86,6 +88,8 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         if (gamePacket.id != 18 && gamePacket.id != 32 && pPeer->have_slot(::slot(gamePacket.id, 0)) == 0) return; // @note can only use items peer has
 
         if (fishing_tile_change(event, *world, gamePacket)) return; // @note casting bait, or punching to reel in
+        if (radiation_tile_change(event, *world, gamePacket)) return; // @note Geiger Charger
+        if (fossil_tile_change(event, *world, gamePacket)) return; // @note Rock Hammer, Fossil Brush, Fossil Prep Station
 
         /* @note the MAGPLANT 5000 Remote builds with whatever its linked MAGPLANT 5000 holds */
         ::magplant *remote_from = nullptr;
@@ -449,6 +453,16 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
             }
             tile_apply_damage(event, std::move(gamePacket), block, apply_damage_value);
 
+            /* @note a loaded Fossil Prep Station or Geiger Charger can't be broken (the punch above collects instead) */
+            if (block.hits[0] >= item.hits && std::ranges::any_of(world->timed_machines, [&](const ::timed_machine &m) { return m.pos == gamePacket.punch && m.item != 0; }))
+            {
+                block.hits[0] = 0;
+                return;
+            }
+            bool no_drops{};
+            if (block.hits[0] >= item.hits && item.type == type::FOSSIL)
+                no_drops = fossil_broken(event, *world, gamePacket.punch, block.state[2] & S_TOGGLE);
+
             if (block.hits[0] >= item.hits) block.fg = 0, block.hits[0] = 0;
             else if (block.hits[1] >= item.hits) block.bg = 0, block.hits[1] = 0;
             else return;
@@ -474,6 +488,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 std::erase_if(world->fish_mounts, [&](const ::fish_mount &mount) { return mount.pos == gamePacket.punch; });
                 std::erase_if(world->lobster_traps, [&](const ::lobster_trap &trap) { return trap.pos == gamePacket.punch; });
                 std::erase_if(world->auto_machines, [&](const ::auto_machine &m) { return m.pos == gamePacket.punch; });
+                std::erase_if(world->timed_machines, [&](const ::timed_machine &m) { return m.pos == gamePacket.punch; });
                 if (is_tile_lock(item.id)) remove_area_lock(event, *world, gamePacket.punch);
                 if (item.type == type::XENONITE && world->xenonite != 0)
                 {
@@ -528,6 +543,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 int uid = add_object(event, ::slot(item.id, 1), gamePacket.pos, *world);
                 item_activate_object(event, ::gamePacket{.id = uid, .punch = gamePacket.punch});
             }
+            else if (no_drops) { } // @note a Fossil Rock (its fossil, if any, was handled above)
             else if (u_char(item.property) & 04) { } // @note "This item never drops any seeds."; should it drop a block?
             else // @note normal break (drop gem, seed, block & give XP)
             {

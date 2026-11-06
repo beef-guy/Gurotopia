@@ -2,6 +2,7 @@
 
 #include "tools/create_dialog.hpp"
 #include "database/playmods.hpp"
+#include "action/radiation.hpp"
 
 #include "wrench.hpp"
 
@@ -62,7 +63,10 @@ void action::wrench(ENetEvent& event, const std::string& header)
                             .add_textbox("Surgeon Level: 0")
                             .add_spacer("small")
                             .add_textbox("`wActive effects:``")
-                            .add_raw(active_effects(pOthers->clothing, (here != worlds.end()) ? here->xenonite : 0))
+                            .add_raw([&] {
+                                const std::string worn = active_effects(pOthers->clothing, (here != worlds.end()) ? here->xenonite : 0), timed = radiation_effects(*pOthers);
+                                return timed.empty() ? worn : (worn.find("`wNone!``") != std::string::npos) ? timed : worn + timed;
+                            }())
                             .add_spacer("small")
                             .add_smalltext(std::format("Fires Put Out: {}", pOthers->fires_removed))
                             .add_spacer("small")
