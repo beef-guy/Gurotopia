@@ -111,6 +111,7 @@ namespace
         if (pPeer->disguised && id == 0) pPeer->disguise_ended = now_ms();
         pPeer->disguised = (id != 0);
         peers(world.name, PeerSearch::WORLD, [&](ENetPeer *p) { send_varlist(p, { "OnDisguiseChanged", id }, pPeer->netid); });
+        on::SetClothing(peer); // @note keep the game's "only eyes" look (0x14) in the character state we send, or it gets undone
     }
 
     void found_something(ENetPeer *peer, ::world &world)
