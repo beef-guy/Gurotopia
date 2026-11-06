@@ -10,8 +10,8 @@ Wants=network-online.target mariadb.service
 User=gurotopia
 Group=gurotopia
 WorkingDirectory=/opt/gurotopia
-# @note nginx holds TCP 443 and passes the game's requests to 8443 (see nginx.conf)
-ExecStart=/opt/gurotopia/main.out --gateway --platform-db gurotopia_platform --https-port 8443
+# @note nginx holds TCP 443 and passes the game's requests to 127.0.0.1:8443 (see nginx.conf)
+ExecStart=/opt/gurotopia/main.out --gateway --platform-db gurotopia_platform --https-port 8443 --https-bind 127.0.0.1
 KillSignal=SIGINT
 TimeoutStopSec=60
 Restart=always

@@ -114,7 +114,7 @@ Run these as root, or with `sudo`. The files are set up for `panel.flareps.xyz`.
    ufw enable
    ```
 9. Sign up on the website, then make yourself an admin:
-   `cd /opt/gurotopia-web && sudo -u gurotopia node --env-file=/etc/gurotopia/panel.env src/cli.js make-admin <username>`
+   `cd /opt/gurotopia-web && node --env-file=/etc/gurotopia/panel.env src/cli.js make-admin <username>` (run as root: `panel.env` is root-only, so game servers can't read the panel's database password)
 
 Useful commands: `journalctl -u gurotopia-supervisor -f` (supervisor), `journalctl -u gurotopia-gateway -f` (gateway), `tail -f /srv/gurotopia/servers/<id>/logs/server.log` (one server).
 
