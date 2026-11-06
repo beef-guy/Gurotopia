@@ -5,6 +5,7 @@
 #include "onVariant/ConsoleMessage.hpp"
 #include "onVariant/SetBux.hpp"
 #include "automate/holiday.hpp"
+#include "database/friends.hpp"
 
 #include "enter_game.hpp"
 
@@ -13,11 +14,18 @@ void action::enter_game(ENetEvent& event, const std::string& header)
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
 
     pPeer->display_growid = std::format("`w{}``", pPeer->growid);
+    /* @note load friends, then tell the ones online that we're here */
+    pPeer->friends.clear();
+    for (const ::friend_row &row : friends_of(pPeer->user_id)) pPeer->friends.emplace_back(row.uid);
+    const std::size_t online = friends_online(*pPeer);
     on::ConsoleMessage(event.peer, 
-        std::format("Welcome back, {}. No friends are online.", 
-            pPeer->display_growid
+        std::format("Welcome back, {}. {}", 
+            pPeer->display_growid,
+            (online == 0) ? "No friends are online." : 
+            (online == 1) ? "`w1`` friend is online." : std::format("`w{}`` friends are online.", online)
         )
     );
+    friends_alert(event.peer, true);
     on::ConsoleMessage(event.peer, holiday_greeting().second);
     if (active_holiday == holiday::HALLOWEEN)
     {

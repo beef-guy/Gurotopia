@@ -2,6 +2,7 @@
 
 #include "popup.hpp"
 #include "action/trade.hpp"
+#include "friends.hpp"
 #include <unordered_map>
 
 static const std::unordered_map<std::string, std::string> rml_pages{
@@ -90,5 +91,9 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
             if (other == nullptr && pOthers->netid == netid && p != event.peer) other = p;
         });
         if (other != nullptr) trade::request(event, other);
+    }
+    else if (hPipe["buttonClicked"] == "friend_add")
+    {
+        friend_add(event, atoi(hPipe["netID"].c_str())); // @note the wrench menu embeds the other player's netID
     }
 }

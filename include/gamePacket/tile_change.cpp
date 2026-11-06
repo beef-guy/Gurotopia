@@ -73,7 +73,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         if (pPeer->role < MODERATOR)
         {
             const ::pos standing = pPeer->pos.by_32(true);
-            const float reach = (pPeer->clothing[clothing::HAND] == 5480/*Rayman's Fist*/) ? 8.0f : 6.0f;
+            const float reach = ((pPeer->clothing[clothing::HAND] == 5480/*Rayman's Fist*/) ? 8.0f : 6.0f) + std::max(pPeer->punch_range, pPeer->build_range); // @note + clothing powers
             if (std::abs(gamePacket.punch.x - standing.x) > reach || std::abs(gamePacket.punch.y - standing.y) > reach) return;
         }
 

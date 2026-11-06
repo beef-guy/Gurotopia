@@ -1,5 +1,7 @@
 #include "pch.hpp"
 
+#include "database/playmods.hpp"
+
 #include "SetClothing.hpp"
 
 void on::SetClothing(ENetPeer *peer)
@@ -15,15 +17,20 @@ void on::SetClothing(ENetPeer *peer)
         CL_Vec3f{pPeer->clothing[clothing::ANCES], 0.0f, 0.0f}
     }, pPeer->netid);
 
+    /* @note powers from worn clothing (double jump, speedy, ...). @todo playmods from consumables */
+    const ::cloth_effects fx = get_cloth_effects(pPeer->clothing);
+    pPeer->punch_range = fx.punch_range;
+    pPeer->build_range = fx.build_range;
+
     ::gamePacket gamePacket {
-        .type = 0x14 | ((0x808000 + pPeer->punch_effect) << 8), // @note 0x8080{}14 - PACKET_SET_CHARACTER_STATE
+        /* @note 0x14 PACKET_SET_CHARACTER_STATE. byte 1: punch effect, byte 2: 0x80 + extra build range, byte 3: 0x80 + extra punch (Fist) range */
+        .type = static_cast<int>(0x14u | (u_int(pPeer->punch_effect) << 8) | (u_int(0x80 + fx.build_range) << 16) | (u_int(0x80 + fx.punch_range) << 24)),
         .netid = pPeer->netid,
-        .waterspeed = 125.0f,
-        .id = pPeer->state, // @note 04 invisible (only eyes/mouth), 08 no arms, 16 no face, 32 invisible (only legs/arms), 64 devil horns, 128 angel halo, 2048 frozen, 4096 gray skin?,8192 ducttape, 16384 Onion effect, 32768 stars effect, 65536 zombie, 131072 hit by lava, 262144 shadow effect, 524288 irradiated effect, 1048576 spotlight, 2097152 pineapple thingy
-        .pos = ::pos{ 1200.0f, 200.0f }, // @todo magic numbers
-        .speed = ::pos{ 250.0f, 1000.0f }, // @todo magic numbers
+        .waterspeed = fx.water_speed,
+        .id = pPeer->state | ((fx.mods & M_DOUBLE_JUMP) ? S_DOUBLE_JUMP : 0), // @note 04 invisible (only eyes/mouth), 08 no arms, 16 no face, 32 invisible (only legs/arms), 64 devil horns, 128 angel halo, 2048 frozen, 4096 gray skin?,8192 ducttape, 16384 Onion effect, 32768 stars effect, 65536 zombie, 131072 hit by lava, 262144 shadow effect, 524288 irradiated effect, 1048576 spotlight, 2097152 pineapple thingy
+        .pos = ::pos{ 1200.0f/*acceleration*/, fx.punch_strength },
+        .speed = ::pos{ fx.speed, fx.gravity },
         .punch = ::pos{ pPeer->hair_color, 0x00000000u } // @todo can this even be unsigned?
-        
     };
     send_gamePacket(*peer, gamePacket); // @todo handle for 'p'
 }
