@@ -82,10 +82,10 @@ namespace
         return water::NONE;
     }
 
-    /* @brief GONE_FISHIN: start (0) or stop (2) the fishing pose for everyone in the world */
+    /* @brief GONE_FISHIN: start (0) or stop (2) the fishing pose for everyone in the world. the mode is buildRange (byte 3) */
     void gone_fishin(const std::string &world, int netid, const ::pos &tile, int mode)
     {
-        ::gamePacket packet{.type = 0x1f | (mode << 16), .netid = netid, .punch = tile};
+        ::gamePacket packet{.type = 0x1f | (mode << 24), .netid = netid, .punch = tile};
         ::blob blob = compress_state(packet);
         peers(world, PeerSearch::WORLD, [&blob](ENetPeer *peer) { send_data(*peer, blob); });
     }
@@ -325,6 +325,7 @@ void fishing_tick()
         ::peer *pPeer = static_cast<::peer*>(peer->data);
         if (pPeer == nullptr || !pPeer->fishing.active) return;
         if (pPeer->netid == 0 || pPeer->recent_worlds.back() != pPeer->fishing.world) { pPeer->fishing = {}; return; }
+        if (!is_rod(pPeer->clothing[clothing::HAND])) { stop(peer, pPeer); return; } // @note took the rod off
         if (now < pPeer->fishing.next_bite) return;
 
         pPeer->fishing.bite = now; // @note a bite! punch now
