@@ -68,7 +68,8 @@ enum pstate : int
 {
     S_GHOST       = 0x00000001,
     S_DOUBLE_JUMP = 0x00000002,
-    S_DUCT_TAPE   = 0x00002000
+    S_DUCT_TAPE   = 0x00002000,
+    S_IRRADIATED  = 0x00080000  // @note the green glow of the Irradiated mod
 };
 
 class peer {
@@ -120,6 +121,15 @@ public:
     int daily_bonus{};        // @note day (yyyymmdd, UTC) the daily bonus was last claimed
     int bonus_streak{};       // @note days in a row the daily bonus was claimed
     int online_status{};      // @note 0 online, 1 busy, 2 away
+    /* @note Geiger Counter and Great Chameleon (action/radiation.cpp) */
+    int geiger_charge{};          // @note seconds a Dead Geiger Counter has charged in hand (saved)
+    long long irradiated_until{}; // @note unix seconds; the Irradiated mod (saved)
+    long long still_since{};      // @note ms: when the player last moved
+    ::pos last_pos{-1, -1};
+    long long geiger_found_since{}; // @note ms: standing on the radiation source since
+    long long geiger_pulse{};     // @note ms: last ping
+    long long geiger_charge_tick{}; // @note ms
+    bool disguised{};             // @note the Great Chameleon blended them into the background
     ::pos magplant{-1, -1}; // @note the MAGPLANT 5000 this player's remote builds from (not saved)
     std::string magplant_world{};
     struct

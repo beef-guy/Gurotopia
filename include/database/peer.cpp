@@ -112,6 +112,8 @@ void peer::mysql_select_all(bool by_user_id)
     this->daily_bonus    = this->mysql_select<signed>("daily_bonus", "", by_user_id);
     this->bonus_streak   = this->mysql_select<signed>("bonus_streak", "", by_user_id);
     this->online_status  = std::clamp(this->mysql_select<signed>("online_status", "", by_user_id), 0, 2);
+    this->geiger_charge    = std::max(this->mysql_select<signed>("geiger_charge", "", by_user_id), 0);
+    this->irradiated_until = this->mysql_select<long long>("irradiated_until", "", by_user_id);
     this->login_at     = std::time(nullptr);
     this->skin_color   = static_cast<u_int>(this->mysql_select<long long>("skin_color", "", by_user_id));
     const std::string clothing = this->mysql_select<std::string>("clothing", "", by_user_id);
@@ -186,14 +188,14 @@ void peer::mysql_update_all()
 {
     if (this->growid.empty()) return;
 
-    ::hStmt hStmt{ "UPDATE peer SET inventory = ?, gems = ?, level = ?, xp = ?, wl_storage = ?, clothing = ?, skin_color = ?, playtime = ?, daily_quest = ? WHERE growid = ?" };
+    ::hStmt hStmt{ "UPDATE peer SET inventory = ?, gems = ?, level = ?, xp = ?, wl_storage = ?, clothing = ?, skin_color = ?, playtime = ?, daily_quest = ?, geiger_charge = ?, irradiated_until = ? WHERE growid = ?" };
     const ::blob inventory = this->serialize_inventory();
     const int level_value = this->level[0], xp_value = this->level[1];
     const std::string clothing = this->serialize_clothing();
     const long long skin = this->skin_color;
     const long long played = this->total_playtime();
 
-    MYSQL_BIND params[10] = {
+    MYSQL_BIND params[12] = {
         make_bind_in(inventory),
         make_bind_in(this->gems),
         make_bind_in(level_value),
@@ -203,6 +205,8 @@ void peer::mysql_update_all()
         make_bind_in(skin),
         make_bind_in(played),
         make_bind_in(this->daily_quest),
+        make_bind_in(this->geiger_charge),
+        make_bind_in(this->irradiated_until),
         make_bind_in(this->growid)
     };
     hStmt.bind_param(params);

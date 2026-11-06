@@ -67,6 +67,11 @@ struct blob
         mData.resize(size + sizeof(u_int));
         memcpy(mData.data() + size, &val, sizeof(u_int));
     }
+    void i64(long long val) {
+        int size = mData.size();
+        mData.resize(size + sizeof(long long));
+        memcpy(mData.data() + size, &val, sizeof(long long));
+    }
     void i16(short val) {
         int size = mData.size();
         mData.resize(size + sizeof(short));
@@ -95,6 +100,13 @@ struct blob
         if (pos + (int)sizeof(u_int) > (int)mData.size()) return false;
         memcpy(&val, mData.data()+pos, sizeof(u_int));
         pos += sizeof(u_int);
+        return true;
+    }
+    bool read_i64(long long &val, int &pos)
+    {
+        if (pos + (int)sizeof(long long) > (int)mData.size()) return false;
+        memcpy(&val, mData.data()+pos, sizeof(long long));
+        pos += sizeof(long long);
         return true;
     }
     bool read_i16(short &val, int &pos)

@@ -14,6 +14,8 @@
 #include "include/database/platform.hpp"
 #include "include/action/fishing.hpp"
 #include "include/action/automation.hpp"
+#include "include/action/radiation.hpp"
+#include "include/action/fossils.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -249,6 +251,8 @@ int main(int argc, char *argv[])
             eventType_pool[event.type](event);
         fishing_tick(); // @note fish bites
         automation_tick(); // @note Tesseract Manipulator, Heart of Gaia, Techno-Organic Engine
+        radiation_tick(); // @note Geiger Counters, the Irradiated mod, the Great Chameleon
+        fossil_tick(); // @note rocks in busy worlds turn into Fossil Rocks
 
         if (clock::now() - last_save >= std::chrono::seconds(60)) // @note so a crash or force stop loses at most a minute
         {

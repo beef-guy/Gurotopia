@@ -290,6 +290,15 @@ struct auto_machine
     ::pos working{-1, -1}; // @note not saved: the block it is punching right now
 };
 
+/* @brief Fossil Prep Station and Geiger Charger: one item inside that is ready at a set time (unix seconds) */
+struct timed_machine
+{
+    ::pos pos{};
+    short item{};
+    long long start{};
+    long long ready{};
+};
+
 /* @brief Storage Box Xtreme contents */
 struct storage
 {
@@ -350,6 +359,10 @@ public:
     std::vector<::fish_mount> fish_mounts{};
     std::vector<::lobster_trap> lobster_traps{};
     std::vector<::auto_machine> auto_machines{};
+    std::vector<::timed_machine> timed_machines{}; // @note Fossil Prep Stations and Geiger Chargers
+    ::pos geiger{-1, -1}; // @note not saved: the hidden radiation source Geiger Counters look for
+    std::vector<std::pair<::pos, int>> fossil_life{}; // @note not saved: Rock Hammer taps a Fossil Rock still needs
+    std::vector<u_int> fresh_fossils{}; // @note not saved: dropped Fossils nobody picked up yet (a Fossil Brush can polish them)
     u_int xenonite{}; // @note the Xenonite Crystal's settings (xenonite:: in playmods.hpp). only one crystal per world
 
     /* @return the area lock that covers this tile, or nullptr */

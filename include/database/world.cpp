@@ -436,6 +436,17 @@ static void write_default_extra(::blob &blob, char type, const ::item &item)
             }
             break;
         }
+        case '\x32': /* fossil prep station: seconds left */
+        case '\x39': /* geiger charger: seconds charged so far */
+        {
+            auto m = std::ranges::find(this->timed_machines, block_pos, &::timed_machine::pos);
+            const long long now = std::time(nullptr);
+            u_int value{};
+            if (m != this->timed_machines.end())
+                value = static_cast<u_int>((type == '\x32') ? std::max(0ll, m->ready - now) : std::clamp(now - m->start, 0ll, m->ready - m->start));
+            blob.u32(value);
+            break;
+        }
         case '\x36': /* storage box: the client only needs to know it exists */
         {
             blob.i16(0);
@@ -731,7 +742,7 @@ namespace
         for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
         return true;
     }
-    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17, EX_AUTO = 18, EX_BASE_WEATHER = 19 };
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17, EX_AUTO = 18, EX_BASE_WEATHER = 19, EX_TIMED = 20 };
 }
 
 /* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
@@ -857,6 +868,12 @@ namespace
         if (m.gems <= 0 && m.target == 0 && m.count <= 0) continue;
         blob.u8(EX_AUTO); blob.i16(m.pos.x_int()); blob.i16(m.pos.y_int());
         blob.i32(m.gems); blob.i16(m.target); blob.u8(m.on); blob.i16(m.item); blob.i32(m.count);
+    }
+    for (const ::timed_machine &m : this->timed_machines)
+    {
+        if (m.item == 0) continue;
+        blob.u8(EX_TIMED); blob.i16(m.pos.x_int()); blob.i16(m.pos.y_int());
+        blob.i16(m.item); blob.i64(m.start); blob.i64(m.ready);
     }
     if (this->base_weather != 0)
     {
@@ -1031,6 +1048,17 @@ void world::load_extras(::blob &blob)
                 ::lobster_trap trap{.pos = tile};
                 if (!blob.read_i16(trap.bait, pos) || !blob.read_i32(trap.count, pos) || !blob.read_u32(trap.checked, pos)) return;
                 if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::LOBSTER_TRAP) this->lobster_traps.push_back(trap);
+                break;
+            }
+            case EX_TIMED:
+            {
+                ::timed_machine m{.pos = tile};
+                if (!blob.read_i16(m.item, pos) || !blob.read_i64(m.start, pos) || !blob.read_i64(m.ready, pos)) return;
+                if (valid_tile(*this, tile))
+                {
+                    const auto kind = id_to_item(this->blocks[cord(x, y)].fg).type;
+                    if (kind == type::FOSSIL_PREP_STATION || kind == type::GEIGER_CHARGER) this->timed_machines.push_back(m);
+                }
                 break;
             }
             case EX_BASE_WEATHER:

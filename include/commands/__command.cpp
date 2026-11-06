@@ -15,6 +15,8 @@
 #include "weather.hpp"
 #include "ghost.hpp"
 #include "moderation.hpp"
+#include "action/fossils.hpp"
+#include "action/radiation.hpp"
 #include "https/server_data.hpp"
 
 #include <algorithm>
@@ -80,6 +82,9 @@ const std::unordered_map<std::string_view, ::cmd_entry> cmd_pool
     {"/mail", {mail, DEVELOPER}},
     {"/maillayout", {maillayout, DEVELOPER}},
     {"/mailrewards", {mailrewards, DEVELOPER}},
+    {"/fossil", {fossil_command, DEVELOPER}}, // @note a Fossil Rock appears in this world now
+    {"/ready", {ready_command, DEVELOPER}},
+    {"/geiger", {geiger_command, DEVELOPER}}, // @note where the radiation source is (for testing)   // @note finish every Fossil Prep Station and Geiger Charger here
     {"/playermode", {playermode, PLAYER}}, // @note can_use() lets only developers, or someone already in player mode, use it
 
     {"/wave", {on::Action}}, {"/dance", {on::Action}}, {"/love", {on::Action}}, {"/sleep", {on::Action}}, {"/facepalm", {on::Action}}, {"/fp", {on::Action}},
