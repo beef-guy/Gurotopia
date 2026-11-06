@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "action/carnival.hpp"
 #include "action/growpass.hpp"
 
 #include "onVariant/ConsoleMessage.hpp"
@@ -148,6 +149,7 @@ namespace
         on::SetClothing(peer); // @note the green glow
         pPeer->mysql_update_all();
         grow_pass_points(peer, 15);
+        ring_progress(peer, RT_GEIGER, 1);
     }
 
     void geiger_tick(ENetPeer *peer, ::world &world, long long now)

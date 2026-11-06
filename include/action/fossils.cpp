@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "action/carnival.hpp"
 #include "action/growpass.hpp"
 
 #include "onVariant/ConsoleMessage.hpp"
@@ -170,6 +171,7 @@ namespace
             bubble(event, std::format("It was a `2{}``!", id_to_item(prize).raw_name));
             play_sfx(event.peer, "audio/secret.wav");
             grow_pass_points(event.peer, 15);
+            ring_progress(event.peer, RT_FOSSILS, 1);
             world.save();
             return true;
         }

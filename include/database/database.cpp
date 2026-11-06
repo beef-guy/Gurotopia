@@ -91,6 +91,7 @@ void mysql_gateway::integrity()
     if (!column_found("peer", "irradiated_until")) alter_table("peer", "irradiated_until BIGINT DEFAULT 0"); // @note unix seconds
     if (!column_found("peer", "cursed_until")) alter_table("peer", "cursed_until BIGINT DEFAULT 0"); // @note unix seconds: Curse Wand
     if (!column_found("peer", "piggy_bank"))   alter_table("peer", "piggy_bank BIGINT DEFAULT 0"); // @note gems in the Piggy Bank
+    if (!column_found("peer", "carnival"))     alter_table("peer", "carnival VARCHAR(128) DEFAULT ''"); // @note Carnival: ticket credit, wins, the Ringmaster's quest
 
     mail_create_table();             // @note Growmail
     daily_challenge_create_tables(); // @note scores and which days have been paid

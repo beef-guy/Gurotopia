@@ -152,6 +152,18 @@ public:
     long long geiger_charge_tick{}; // @note ms
     bool disguised{};             // @note the Great Chameleon blended them into a block
     long long disguise_ended{};   // @note ms: when the disguise last ended
+    /* @note the Carnival (action/carnival.cpp): Golden Ticket Booth credit, games won and the Ringmaster's quest (saved as one column) */
+    struct carnival_data
+    {
+        int credit{};        // @note Rarity given to a Golden Ticket Booth that didn't add up to a ticket yet
+        int wins{};          // @note Carnival games won (50 = Funtime Block)
+        int step{};          // @note the Ringmaster's quest: 0 = none, 1..10 = the task being done
+        int task{};          // @note ring_task::
+        int target{};        // @note the item to bring, for RT_DELIVER_ITEM
+        int goal{1};
+        long long progress{};
+        bool told{};         // @note "step done, go back to the Ringmaster" was said (not saved)
+    } carnival{};
     ::pos magplant{-1, -1}; // @note the MAGPLANT 5000 this player's remote builds from (not saved)
     std::string magplant_world{};
     struct

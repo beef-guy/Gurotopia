@@ -7,6 +7,7 @@
 #include "trade.hpp"
 #include "action/dialog_return/wrenchables.hpp"
 #include "action/special_items.hpp"
+#include "action/carnival.hpp"
 
 void action::quit_to_exit(ENetEvent& event, const std::string& header, bool skip_selection = false) 
 {
@@ -19,6 +20,7 @@ void action::quit_to_exit(ENetEvent& event, const std::string& header, bool skip
     auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
     if (world == worlds.end()) return;
     special_left_world(event, *world); // @note leave a running game, stop a challenge
+    carnival_left_world(event, *world); // @note leave a Carnival game, tidy the rooms when the carnival empties
 
     std::string message = std::format("`5<{} left, `w{}`` others here>``", pPeer->display_growid, world->visitors-1);
     std::string netid = std::format("netID|{}\n", pPeer->netid);

@@ -56,6 +56,8 @@ static constexpr ::playmod playmods[] {
     { 1824, 1, "Double Jump: Autumn Wings" },
     { 1830, 2048, "Putt Putt Putt" },
     { 1836, 1024, "Enhanced Digging" },
+    { 1874, 272, "Ring of Force" }, // @note wiki: punches reach farther and break blocks faster
+    { 1876, 9, "Ring of Winds" }, // @note wiki: clouds to stand on, like a Parasol
     { 1934, 1, "Double Jump" },
     { 1936, 1, "Double Jump: Blazing Electro Wings" },
     { 1938, 1, "Double Jump" },
@@ -96,6 +98,7 @@ static constexpr ::playmod playmods[] {
     { 2868, 2, "Speedy" },
     { 2878, 2, "Speedy" },
     { 2880, 2, "Speedy" },
+    { 2970, 640, "Ring of Water" }, // @note wiki: swim fast like Swim Fins, less burning like Asbestos Boots
     { 2974, 2, "Speedy" },
     { 2976, 16, "Eye Beam" },
     { 2984, 2, "Speedy" },

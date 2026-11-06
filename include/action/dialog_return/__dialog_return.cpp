@@ -27,6 +27,7 @@
 #include "action/growpass.hpp"
 #include "action/special_items.hpp"
 #include "action/cooking.hpp"
+#include "action/carnival.hpp"
 
 #include "__dialog_return.hpp"
 
@@ -88,5 +89,7 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
     {"online_status", std::bind(&online_status, std::placeholders::_1, std::placeholders::_2)},
     {"notebook_edit", std::bind(&notebook_edit, std::placeholders::_1, std::placeholders::_2)},
     {"growmojis", std::bind(&growmojis_edit, std::placeholders::_1, std::placeholders::_2)},
-    {"grow_pass", std::bind(&grow_pass_edit, std::placeholders::_1, std::placeholders::_2)}
+    {"grow_pass", std::bind(&grow_pass_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"carnival_booth", std::bind(&carnival_booth_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"carnival_ring", std::bind(&carnival_ring_edit, std::placeholders::_1, std::placeholders::_2)}
 };
