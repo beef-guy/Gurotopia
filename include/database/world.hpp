@@ -33,6 +33,7 @@ enum wstate4 : u_char
 {
     S_WATER =    0x04,
     S_GLUE =     0x08,
+    S_SILENCED = 0x02, // @note tile flag 0x200: a silenced dice / music block
     S_FIRE =     0x10,
     /* paint buckets */
     S_RED =      0x20,
@@ -217,6 +218,30 @@ struct shelf
     std::array<u_int, 4> items{};
 };
 
+/* @brief a Heart Monitor beats while the player who placed it is online */
+struct heart_monitor
+{
+    ::pos pos{};
+    int uid{};
+    std::string name{};
+};
+
+/* @brief a Mannequin's sign text and clothes, in clothing:: order (hair .. charm) */
+struct mannequin
+{
+    ::pos pos{};
+    std::string label{};
+    std::array<short, 9> clothes{};
+};
+
+/* @brief Weather Machine - Background (item = the background) and - Stuff (item that falls, gravity) */
+struct weather_setting
+{
+    ::pos pos{};
+    u_int item{};
+    int gravity{50};
+};
+
 /* @brief Storage Box Xtreme contents */
 struct storage
 {
@@ -269,6 +294,9 @@ public:
     std::vector<::mailbox> mailboxes{}; // @note Mailboxes and Bulletin Boards
     std::vector<::donation_box> donation_boxes{};
     std::vector<::shelf> shelves{};
+    std::vector<::heart_monitor> heart_monitors{};
+    std::vector<::mannequin> mannequins{};
+    std::vector<::weather_setting> weather_settings{};
     u_int xenonite{}; // @note the Xenonite Crystal's settings (xenonite:: in playmods.hpp). only one crystal per world
 
     /* @return the area lock that covers this tile, or nullptr */
@@ -322,6 +350,9 @@ extern int  add_object(ENetEvent& event, ::slot slot, const ::pos &pos, ::world 
 extern void add_drop(ENetEvent &event, ::slot im, ::pos pos, ::world &world);
 
 extern void send_tile_update(ENetEvent &event, gamePacket s, ::block &b, ::world &world);
+
+/* @brief send one tile to everyone in that world (for changes that don't come from someone in it) */
+extern void world_tile_update(::world &world, const ::pos &pos);
 
 /*
 * @param speed actually just the particle color & visual, not the speed.

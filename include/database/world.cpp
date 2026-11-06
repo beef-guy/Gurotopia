@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "friends.hpp"
 #include "tools/random.hpp"
 #include "tools/time.hpp"
 #include "onVariant/ConsoleMessage.hpp"
@@ -241,6 +242,12 @@ static void write_default_extra(::blob &blob, char type, const ::item &item)
         if (parent < 0 || parent >= static_cast<int>(this->blocks.size()) || !is_tile_lock(this->blocks[parent].fg)) copy.state[2] &= ~S_PARENT;
     }
     if (!(copy.state[2] & S_PARENT)) copy.state[0] = copy.state[1] = 0;
+    const auto heart = (type == '\x0b') ? std::ranges::find(this->heart_monitors, block_pos, &::heart_monitor::pos) : this->heart_monitors.end();
+    if (type == '\x0b') // @note the heart beats (tile flag 0x40) while its player is online
+    {
+        if (heart != this->heart_monitors.end() && online_by_uid(heart->uid) != nullptr) copy.state[2] |= S_TOGGLE;
+        else copy.state[2] &= ~S_TOGGLE;
+    }
     blob.push_back(copy.to_blob());
 
     if (copy.state[2] & S_PARENT) blob.i16(static_cast<short>(copy.state[0] | (copy.state[1] << 8))); // @note the lock that owns this tile
@@ -332,6 +339,39 @@ static void write_default_extra(::blob &blob, char type, const ::item &item)
             const bool stocked = vend != this->vendings.end() && vend->count > 0;
             blob.u32(stocked ? static_cast<u_int>(vend->id) : 0);
             blob.i32(stocked ? vend->price : 0);
+            break;
+        }
+        case '\x0b': /* heart monitor: user id, name */
+        {
+            blob.i32((heart != this->heart_monitors.end()) ? heart->uid : 0);
+            const std::string name = (heart != this->heart_monitors.end()) ? heart->name : "";
+            blob.i16(static_cast<short>(name.length()));
+            for (char c : name) blob.u8(c);
+            break;
+        }
+        case '\x0e': /* mannequin: label, flag, value, 9 clothes (hair .. charm) */
+        {
+            auto dummy = std::ranges::find(this->mannequins, block_pos, &::mannequin::pos);
+            const std::string label = (dummy != this->mannequins.end()) ? dummy->label : "";
+            blob.i16(static_cast<short>(label.length()));
+            for (char c : label) blob.u8(c);
+            blob.u8(0);
+            blob.u32(0);
+            for (int i = 0; i < 9; ++i) blob.i16((dummy != this->mannequins.end()) ? dummy->clothes[i] : 0);
+            break;
+        }
+        case '\x28': /* weather machine with one setting: for the Background machine, the background's item id */
+        {
+            auto w = std::ranges::find(this->weather_settings, block_pos, &::weather_setting::pos);
+            blob.u32((w != this->weather_settings.end()) ? w->item : 0x4080ff00);
+            break;
+        }
+        case '\x31': /* weather machine with several settings: item, gravity, flags */
+        {
+            auto w = std::ranges::find(this->weather_settings, block_pos, &::weather_setting::pos);
+            blob.u32((w != this->weather_settings.end()) ? w->item : 2);
+            blob.i32((w != this->weather_settings.end()) ? w->gravity : 50);
+            blob.u8(0);
             break;
         }
         case '\x2b': /* display shelf: the four items */
@@ -635,7 +675,7 @@ namespace
         for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
         return true;
     }
-    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10 };
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13 };
 }
 
 /* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
@@ -712,6 +752,23 @@ namespace
         if (std::ranges::all_of(shelf.items, [](u_int id) { return id == 0; })) continue;
         blob.u8(EX_SHELF); blob.i16(shelf.pos.x_int()); blob.i16(shelf.pos.y_int());
         for (const u_int id : shelf.items) blob.u32(id);
+    }
+    for (const ::heart_monitor &heart : this->heart_monitors)
+    {
+        blob.u8(EX_HEART); blob.i16(heart.pos.x_int()); blob.i16(heart.pos.y_int());
+        blob.i32(heart.uid);
+        write_string(blob, heart.name);
+    }
+    for (const ::mannequin &dummy : this->mannequins)
+    {
+        blob.u8(EX_MANNEQUIN); blob.i16(dummy.pos.x_int()); blob.i16(dummy.pos.y_int());
+        write_string(blob, dummy.label);
+        for (const short id : dummy.clothes) blob.i16(id);
+    }
+    for (const ::weather_setting &w : this->weather_settings)
+    {
+        blob.u8(EX_WEATHER); blob.i16(w.pos.x_int()); blob.i16(w.pos.y_int());
+        blob.u32(w.item); blob.i32(w.gravity);
     }
     if (this->xenonite != 0)
     {
@@ -821,6 +878,28 @@ void world::load_extras(::blob &blob)
                 }
                 box.is_public = is_public, box.hide_names = hide_names;
                 this->mailboxes.push_back(std::move(box));
+                break;
+            }
+            case EX_HEART:
+            {
+                ::heart_monitor heart{.pos = tile};
+                if (!blob.read_i32(heart.uid, pos) || !read_string(blob, pos, heart.name)) return;
+                this->heart_monitors.push_back(std::move(heart));
+                break;
+            }
+            case EX_MANNEQUIN:
+            {
+                ::mannequin dummy{.pos = tile};
+                if (!read_string(blob, pos, dummy.label)) return;
+                for (short &id : dummy.clothes) if (!blob.read_i16(id, pos)) return;
+                this->mannequins.push_back(std::move(dummy));
+                break;
+            }
+            case EX_WEATHER:
+            {
+                ::weather_setting w{.pos = tile};
+                if (!blob.read_u32(w.item, pos) || !blob.read_i32(w.gravity, pos)) return;
+                this->weather_settings.push_back(w);
                 break;
             }
             case EX_SHELF:
@@ -1071,6 +1150,16 @@ void send_tile_update(ENetEvent &event, ::gamePacket gamePacket, ::block &block,
     {
         send_data(*peer, blob);
     });
+}
+
+void world_tile_update(::world &world, const ::pos &pos)
+{
+    if (!valid_tile(world, pos)) return;
+    const int index = cord(pos.x_int(), pos.y_int());
+    ::gamePacket gamePacket{ .type = 05, .state = (int)gamePacketState::EXTENDED, .id = world.blocks[index].fg, .punch = pos };
+    ::blob blob = compress_state(gamePacket);
+    blob.push_back(world.tile_blob(index));
+    peers(world.name, PeerSearch::WORLD, [&blob](ENetPeer *peer) { send_data(*peer, blob); });
 }
 
 void send_particle_effect(ENetEvent &event, const ::pos& pos, ::pos speed, int id, float offset)
