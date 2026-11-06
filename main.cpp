@@ -18,6 +18,9 @@
 #include "include/action/fossils.hpp"
 #include "include/action/special_items.hpp"
 #include "include/action/carnival.hpp"
+#include "include/commands/renderworld.hpp"
+#include "include/render/render.hpp"
+#include "include/render/discord.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -55,6 +58,8 @@ static void print_help()
         "  --no-https          don't answer the login request. use for a 2nd server on the same PC\n"
         "  --owner NAME        this account is always a developer (staff commands, /find, /give)\n"
         "  --sandbox           let every player use /find (a creative server)\n"
+        "  --textures DIR      Growtopia's game folder, for /renderworld (default: %LOCALAPPDATA%\\Growtopia\\game)\n"
+        "  --discord-webhook F file with the Discord webhook URL /renderworld posts to (default: discord_webhook.txt)\n"
         "\n"
         "  many servers behind one IP:\n"
         "  --platform-db NAME  database that lists the servers (e.g. gurotopia_platform)\n"
@@ -64,6 +69,8 @@ static void print_help()
         "  --help              show this"
     );
 }
+
+static std::string discord_webhook_file{"discord_webhook.txt"};
 
 /* @note returns false when the options are wrong, after printing why */
 static bool parse_options(int argc, char *argv[])
@@ -150,6 +157,8 @@ static bool parse_options(int argc, char *argv[])
         }
         else if (option == "--server-data") gServer_data.config_file = value;
         else if (option == "--mysql-login") db.login_file = value;
+        else if (option == "--textures") render::texture_folder = value;
+        else if (option == "--discord-webhook") discord_webhook_file = value;
         else
         {
             print(std::format("unknown option {}. run with --help to see the options.", option));
@@ -226,6 +235,7 @@ int main(int argc, char *argv[])
         db.mysql_connect();
 
         decode_items_dat();
+        discord::load_webhook(discord_webhook_file); // @note ./discord_webhook.txt, or --discord-webhook
         parse_store();
         check_for_holiday();
 
@@ -257,6 +267,7 @@ int main(int argc, char *argv[])
         fossil_tick(); // @note rocks in busy worlds turn into Fossil Rocks
         special_tick(); // @note Freeze and Curse Wands wearing off, Challenge Timers, Game Generator games
         carnival_tick(); // @note Carnival games: timers, targets, platforms
+        render_tick(); // @note /renderworld results
 
         if (clock::now() - last_save >= std::chrono::seconds(60)) // @note so a crash or force stop loses at most a minute
         {

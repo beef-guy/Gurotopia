@@ -189,6 +189,13 @@ public:
     std::string info{}; // @note version 22 | item's info
 
     std::array<u_short, 2> splice{}; // @note version 23 | {seed1, seed2}
+
+    /* @note how the game draws it (used by /renderworld) */
+    std::string texture{}; // @note e.g. "tiles_page1.rttex" in the game folder
+    u_char tex_x{}, tex_y{}; // @note in 32px cells
+    u_char spread{}; // @note how it joins its neighbours: 1 single, 2 eight ways, 3 sideways, 4 sticks to a wall, 5 four ways, 6 random, 7 up and down
+    u_char seed_base{}, seed_overlay{}; // @note seed.rttex icons
+    u_int seed_color{}, seed_overlay_color{}; // @note 0xBBGGRRAA
 };
 extern std::vector<::item> items;
 

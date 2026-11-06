@@ -15,6 +15,7 @@
 #include "weather.hpp"
 #include "ghost.hpp"
 #include "moderation.hpp"
+#include "renderworld.hpp"
 #include "action/fossils.hpp"
 #include "action/growpass.hpp"
 #include "action/radiation.hpp"
@@ -63,6 +64,7 @@ const std::unordered_map<std::string_view, ::cmd_entry> cmd_pool
     {"/news", {news}},
     {"/weather", {weather}}, // @note only changes the weather on the player's own screen
     {"/carnival", {carnival_command}}, // @note when the Carnival is in town. developers: /carnival on|off|auto
+    {"/renderworld", {renderworld}}, // @note draws this world to a picture and posts it to Discord (discord_webhook.txt)
 
     /* @note staff */
     {"/ghost", {ghost, MODERATOR}},

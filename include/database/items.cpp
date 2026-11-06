@@ -98,16 +98,18 @@ void decode_items_dat()
             item.raw_name[i] = im_data[pos] ^ token[(i + item.id) % token.length()], 
             ++pos;
 
-        pos += *(reinterpret_cast<short*>(&im_data[pos]));
+        len = *(reinterpret_cast<short*>(&im_data[pos]));
         pos += sizeof(short);
+        if (len > 0 && pos + len <= im_data.size()) item.texture.assign(reinterpret_cast<char*>(&im_data[pos]), len);
+        pos += len;
 
         pos += sizeof(int);
         pos += sizeof(u_char);
 
         shift_pos(im_data, pos, item.ingredient);
-        pos += sizeof(u_char);
-        pos += sizeof(u_char);
-        pos += sizeof(u_char);
+        shift_pos(im_data, pos, item.tex_x);
+        shift_pos(im_data, pos, item.tex_y);
+        shift_pos(im_data, pos, item.spread);
         pos += sizeof(u_char);
 
         shift_pos(im_data, pos, item.collision);
@@ -152,7 +154,12 @@ void decode_items_dat()
         pos += *(reinterpret_cast<short*>(&im_data[pos]));
         pos += sizeof(short);
 
-        pos += sizeof(std::array<u_char, 16ull>);
+        shift_pos(im_data, pos, item.seed_base);
+        shift_pos(im_data, pos, item.seed_overlay);
+        pos += sizeof(std::array<u_char, 2ull>); // @note tree base, tree leaves
+        shift_pos(im_data, pos, item.seed_color);
+        shift_pos(im_data, pos, item.seed_overlay_color);
+        pos += sizeof(int); // @note ingredient (unused)
 
         shift_pos(im_data, pos, item.tick);
 
