@@ -37,6 +37,7 @@ void action::enter_game(ENetEvent& event, const std::string& header)
     on::ConsoleMessage(event.peer, "`3Today is (null)!`` Your first (null) quest will give 1 `2Growtoken`` and all (null) quests will give 25% bonus points!");
     on::ConsoleMessage(event.peer, "`5Personal Settings active:`` `#Punch Joystick enabled``");
     
+    if (const int remotes = pPeer->have_slot(::slot(5640, 0)); remotes > 0) pPeer->emplace(::slot(5640, static_cast<short>(-remotes))); // @note a MAGPLANT 5000 Remote left over from a crash
     send_inventory_state(event);
 
     on::SetBux(event);

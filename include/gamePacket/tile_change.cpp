@@ -382,6 +382,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                         mag->remote = !mag->remote;
                         world_tile_update(*world, gamePacket.punch);
                         if (mag->remote) magplant_give_remote(event, *world, gamePacket.punch); // @note turning building mode on hands out the remote
+                        else magplant_remotes_off(*world, gamePacket.punch); // @note and off takes them back
                     }
                     if (mag->count > 0 && block.hits[0] + 1 >= item.hits)
                     {
@@ -455,6 +456,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 std::erase_if(world->heart_monitors, [&](const ::heart_monitor &heart) { return heart.pos == gamePacket.punch; });
                 std::erase_if(world->mannequins, [&](const ::mannequin &dummy) { return dummy.pos == gamePacket.punch; });
                 std::erase_if(world->weather_settings, [&](const ::weather_setting &w) { return w.pos == gamePacket.punch; });
+                if (item.type == type::MAGPLANT) magplant_remotes_off(*world, gamePacket.punch);
                 std::erase_if(world->magplants, [&](const ::magplant &mag) { return mag.pos == gamePacket.punch; });
                 std::erase_if(world->fish_tanks, [&](const ::fish_tank &tank) { return tank.pos == gamePacket.punch; });
                 std::erase_if(world->fish_mounts, [&](const ::fish_mount &mount) { return mount.pos == gamePacket.punch; });
@@ -1273,6 +1275,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
             }
         }
         gamePacket.netid = pPeer->netid; // @todo sometimes rgt has this as 0
+        if (remote_from != nullptr) gamePacket.idk = 1.0f; // @note particleID not 0: the game doesn't take the placed item out of the backpack, so the remote stays selected (gtps-guide packets/03-tile-change-request.md)
         send_gamePacket(*event.peer, gamePacket); // finished.
         if (tile_update) 
         {

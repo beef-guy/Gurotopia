@@ -40,6 +40,10 @@ extern void weather_edit(ENetEvent &event, const ::hPipe &hPipe);
 extern void magplant_wrench(ENetEvent &event, ::world &world, const ::pos &pos);
 /* @brief give this player the MAGPLANT 5000 Remote, linked to the machine at pos */
 extern void magplant_give_remote(ENetEvent &event, ::world &world, const ::pos &pos);
+/* @brief take the remote away from this player (they left the world, logged off, or the machine stopped) */
+extern void magplant_take_remote(ENetEvent &event);
+/* @brief take the remote from everyone in the world who builds from the machine at pos */
+extern void magplant_remotes_off(::world &world, const ::pos &pos);
 extern void magplant_edit(ENetEvent &event, const ::hPipe &hPipe);
 
 /* @brief GrowScan 9000: counts every block and floating item in the world */
