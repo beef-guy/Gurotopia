@@ -39,7 +39,6 @@ namespace
     constexpr short EVIL_EYE       = 1226;
     constexpr short FUNHOUSE_MIRROR = 1872;
     constexpr short CARNIVAL_WALLPAPER = 1878;
-    constexpr short CARNIVAL_AWNING = 1880;
     constexpr short CARNIVAL_PIPE  = 2238;
     constexpr short CARNIVAL_BLOCK = 1882;
     constexpr short CARNIVAL_SIGN  = 1906;
@@ -168,7 +167,7 @@ namespace
     /*
     * @note my own layout: every game is its own striped building up in the night sky, standing on stilts over a walkway.
     *   three walkways (y 21, 44 and the ground at 57) are joined by Carnival Ladders. each building's Carnival Tent stands
-    *   on the walkway right under it. the plaza on the ground has the main door, the Ringmaster's stage and both booths.
+    *   on the walkway right under it. the plaza on the ground has the Ringmaster's Room with the main door and both booths.
     */
     constexpr int WALK_TOP = 21, WALK_MID = 44, GROUND = 57;
     const room_def ROOMS[] = {
@@ -337,15 +336,17 @@ namespace
         for (int x : { 29, 69 })
             for (int y = WALK_TOP - 1; y < WALK_MID; ++y) put(world, x, y, CARNIVAL_LADDERS);
 
-        /* @note the plaza: the Ringmaster's stage under a striped awning, the booths either side, the main door in the middle */
-        for (int x = 42; x <= 60; ++x)
+        /* @note the plaza: the Ringmaster's Room, a striped building with open doorways at both ends. the main door and both booths are inside */
+        for (int x = 43; x <= 59; ++x)
         {
-            put(world, x, 50, CARNIVAL_AWNING);
-            if (x % 2 == 0) put(world, x, 49, PENNANTS[(x / 2) % 4]);
-            for (int y = 51; y < GROUND; ++y) backdrop(x, y, (x == 42 || x == 60) ? CARNIVAL_PIPE : CARNIVAL_WALLPAPER);
+            put(world, x, 49, CARNIVAL_BLOCK);
+            if (x % 2 == 1) put(world, x, 48, PENNANTS[(x / 2) % 4]);
+            for (int y = 50; y < GROUND; ++y)
+            {
+                const bool wall = (x == 43 || x == 59) && y < GROUND - 2; // @note 2 tiles open at the bottom to walk in
+                put(world, x, y, wall ? CARNIVAL_BLOCK : 0, CARNIVAL_WALLPAPER);
+            }
         }
-        for (int y = 53; y < GROUND; ++y) /* @note the Hall of Mirrors around the main door: walk past and look funny */
-            for (int x = DOOR_X - 3; x <= DOOR_X + 2; ++x) backdrop(x, y, FUNHOUSE_MIRROR);
 
         put(world, DOOR_X, GROUND - 1, MAIN_DOOR);
         put(world, DOOR_X, GROUND, BEDROCK);
