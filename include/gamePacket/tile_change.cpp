@@ -1023,6 +1023,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 }
             }
             block.state[2] |= (pPeer->facing_left) ? S_LEFT : S_RIGHT;
+            if (item.type != type::BACKGROUND && get_type(item) != '\x00') tile_update = true; // @note send the block's data right away, the game may crash on it without
             (item.type == type::BACKGROUND) ? block.bg = gamePacket.id : block.fg = gamePacket.id;
             pPeer->emplace(::slot(item.id, -1));
             if (place_area_lock)
