@@ -1,5 +1,6 @@
 #include "pch.hpp"
 
+#include "action/carnival.hpp" // @note is_carnival_world()
 #include "tools/string.hpp"
 #include "tools/time.hpp"
 
@@ -392,6 +393,7 @@ void import_command(ENetEvent &event, const std::string_view text)
     world_in w{};
     try { w = read_world(data); }
     catch (const std::exception &e) { return say(event, std::format("`4Couldn't read {}.dat: {}.``", file, e.what())); }
+    if (is_carnival_world(w.name) || is_carnival_world(target)) return say(event, "`4CARNIVAL worlds are built by the server and can't be imported.``");
     if (w.width != 100 || w.height != 60) return say(event, std::format("`4{} is {}x{}. Only 100x60 worlds can be imported.``", file, w.width, w.height));
 
     ::world &world = *worlds.emplace(worlds.end(), target);
