@@ -167,7 +167,7 @@ namespace
     /*
     * @note my own layout: every game is its own striped building up in the night sky, standing on stilts over a walkway.
     *   three walkways (y 21, 44 and the ground at 57) are joined by Carnival Ladders. each building's Carnival Tent stands
-    *   on the walkway right under it. the plaza on the ground has the Ringmaster's Room with the main door and both booths.
+    *   on the walkway right under it. the Big Top in the middle of the ground has the main door, the Ringmaster and both booths.
     */
     constexpr int WALK_TOP = 21, WALK_MID = 44, GROUND = 57;
     const room_def ROOMS[] = {
@@ -178,7 +178,7 @@ namespace
         { SHOOTING,      "Shooting Gallery", 16, GROUND - 1,   12, 45, 30, 53, 21, 52, {1890/*Yellow Pennant*/, 1894/*Lion Block*/, 1892/*Lion Taming Whip*/}, 45, 1 },
         { SHOOTING,      "Shooting Gallery", 65, WALK_TOP - 1, 63, 9,  81, 17, 72, 16, {1886/*Blue Pennant*/, 1896/*Elephant Block*/, 1934/*Orbs Of Elixir*/}, 45, 1 },
         { CONCENTRATION, "Concentration",    83, GROUND - 1,   68, 45, 86, 53, 69, 52, {1914/*Carnival Platform*/, 1906/*Carnival Sign*/, 1938/*Diamond Wings*/}, 60, 1 },
-        { BOUNCE,        "Brutal Bounce",    32, WALK_MID - 1, 30, 25, 68, 40, 49, 39, {2568/*Carnival Spikeball*/, 2570/*Carny Vest*/, 2572/*Flame Scythe*/}, 120, 2 },
+        { BOUNCE,        "Brutal Bounce",    31, WALK_MID - 1, 30, 25, 68, 40, 49, 39, {2568/*Carnival Spikeball*/, 2570/*Carny Vest*/, 2572/*Flame Scythe*/}, 120, 2 },
         { SPIKY,         "Spiky Survivor",   72, WALK_MID - 1, 70, 22, 89, 40, 79, 23, {7178/*Carnival Ladders*/, 7176/*Dragon Block*/, 7136/*Ethereal Rainbow Dragon*/}, 60, 1 },
         { GULCH,         "Growganoth Gulch", 88, GROUND - 1,   91, 22, 99, 53, 92, 52, {1878/*Carnival Wallpaper*/, 1930/*Ringmaster Suit*/, 1940/*Diamond Rocket Shoes*/}, 60, 1 },
         { WASTE,         "Waste a Ticket",   98, 0,  0,  0,  0,  0,  0,  0,  {0, 0, 0}, 0, 1 } // @note up in the top right corner: only floating gets you there
@@ -313,7 +313,7 @@ namespace
             for (int y = GROUND + 1; y < 60; ++y) put(world, x, y, BEDROCK);
         }
         for (int x = 0; x <= 90; ++x) put(world, x, WALK_TOP, CARNIVAL_PLATFORM);
-        for (int x = 9; x <= 90; ++x) put(world, x, WALK_MID, CARNIVAL_PLATFORM);
+        for (int x = 9; x <= 90; ++x) if (x <= 34 || x >= 66) put(world, x, WALK_MID, CARNIVAL_PLATFORM); // @note open over the Big Top
         for (int x = 94; x < 100; ++x) put(world, x, 1, CARNIVAL_PLATFORM); // @note the plank for Waste a Ticket
 
         for (const room_def &room : ROOMS) build_room(world, room);
@@ -331,22 +331,27 @@ namespace
         }
 
         /* @note ladders: ground to the middle walkway, middle to the top */
-        for (int x : { 36, 64 })
+        for (int x : { 34, 66 })
             for (int y = WALK_MID - 1; y < GROUND; ++y) put(world, x, y, CARNIVAL_LADDERS);
         for (int x : { 29, 69 })
             for (int y = WALK_TOP - 1; y < WALK_MID; ++y) put(world, x, y, CARNIVAL_LADDERS);
 
-        /* @note the plaza: the Ringmaster's Room, a striped building with open doorways at both ends. the main door and both booths are inside */
-        for (int x = 43; x <= 59; ++x)
+        /* @note the Big Top: a striped tent with a stepped roof in the middle of the midway. the main door, the Ringmaster and both booths are inside */
+        constexpr int TOP_L = 35, TOP_R = 65, EAVES = 49;
+        for (int k = 0; TOP_L + 2 * k <= TOP_R - 2 * k; ++k)
         {
-            put(world, x, 49, CARNIVAL_BLOCK);
-            if (x % 2 == 1) put(world, x, 48, PENNANTS[(x / 2) % 4]);
-            for (int y = 50; y < GROUND; ++y)
+            const int y = EAVES - k, from = TOP_L + 2 * k, to = TOP_R - 2 * k;
+            for (int x = from; x <= to; ++x) put(world, x, y, CARNIVAL_BLOCK);
+            if (k > 0) { put(world, from - 1, y, PENNANTS[k % 4]); put(world, to + 1, y, PENNANTS[(k + 2) % 4]); } // @note bunting down the roof
+            if (from + 2 > to - 2) for (int x = from; x <= to; ++x) put(world, x, y - 1, PENNANTS[x % 4]); // @note flags on the peak
+        }
+        for (int x = TOP_L; x <= TOP_R; ++x)
+            for (int y = EAVES + 1; y < GROUND; ++y)
             {
-                const bool wall = (x == 43 || x == 59) && y < GROUND - 2; // @note 2 tiles open at the bottom to walk in
+                const bool wall = (x == TOP_L || x == TOP_R) && y < GROUND - 2; // @note 2 tiles open at the bottom to walk in
                 put(world, x, y, wall ? CARNIVAL_BLOCK : 0, CARNIVAL_WALLPAPER);
             }
-        }
+        sign(world, DOOR_X - 1, GROUND - 4, CARNIVAL_SIGN, "Welcome to the Big Top!");
 
         put(world, DOOR_X, GROUND - 1, MAIN_DOOR);
         put(world, DOOR_X, GROUND, BEDROCK);
@@ -361,7 +366,7 @@ namespace
             sign(world, x, GROUND - 3, CARNIVAL_SIGN, "Golden Tickets! 100 rarity of any items, or 30 per World Lock");
         }
         for (const auto &[x, y] : { std::pair{40, GROUND - 1}, {62, GROUND - 1}, {5, GROUND - 1}, {95, GROUND - 1},
-                                    {41, WALK_TOP - 1}, {62, WALK_TOP - 1}, {86, WALK_TOP - 1}, {20, WALK_MID - 1}, {50, WALK_MID - 1}, {80, WALK_MID - 1} })
+                                    {41, WALK_TOP - 1}, {62, WALK_TOP - 1}, {86, WALK_TOP - 1}, {20, WALK_MID - 1}, {80, WALK_MID - 1} })
             if (empty(x, y)) put(world, x, y, CALLIOPE);
 
         for (const room_def &room : ROOMS)
