@@ -875,3 +875,190 @@ void weather_edit(ENetEvent &event, const ::hPipe &hPipe)
     world->save();
     if (!hPipe["weather_item"].empty()) weather_wrench(event, *world, pos); // @note an item was picked: show what it's set to now
 }
+
+/* ---------------- ID_MAGPLANT 5000, Gaia's Beacon, Unstable Tesseract ---------------- */
+/* @note texts and rules from github.com/cppdecl/Nomikai (BlockWrenchListener.hh, DialogCloseListener.hh "Magplant") */
+
+namespace
+{
+    constexpr short ID_MAGPLANT = 5638;
+    constexpr short ID_MAGPLANT_REMOTE = 5640;
+    constexpr short ID_GAIAS_BEACON = 6946;
+    constexpr short ID_UNSTABLE_TESSERACT = 6948;
+
+    ::magplant &magplant_at(::world &world, const ::pos &pos)
+    {
+        auto mag = std::ranges::find(world.magplants, pos, &::magplant::pos);
+        if (mag == world.magplants.end()) mag = world.magplants.emplace(world.magplants.end(), ::magplant{.pos = pos});
+        return *mag;
+    }
+
+    void send_magplant(ENetEvent &event, const ::pos &pos, ::create_dialog &dialog, const std::string &close, const std::string &ok)
+    {
+        dialog.embed_data("tilex", pos.x_int())
+              .embed_data("tiley", pos.y_int());
+        send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("magplant", close, ok) });
+    }
+
+    /* @return why this machine can't store the item, or "" */
+    std::string magplant_rejects(short machine, const ::item &item)
+    {
+        if (item.id == 0 || (item.cat & CAT_UNTRADEABLE) || item.cloth_type != clothing::NONE || item.type == type::CLOTHING ||
+            item.type == type::AURA || item.type == type::GEM || item.type == type::FIST || item.type == type::WRENCH ||
+            item.id == ID_MAGPLANT_REMOTE)
+            return "This item is not compatible with this machine.";
+        if (machine == ID_UNSTABLE_TESSERACT && item.type == type::SEED) return "This item is not compatible with this machine.";
+        if (machine == ID_GAIAS_BEACON && item.type != type::SEED) return "This item is not compatible with this machine.";
+        return "";
+    }
+}
+
+void magplant_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    const ::item &machine = id_to_item(world.blocks[cord(pos.x_int(), pos.y_int())].fg);
+    auto found = std::ranges::find(world.magplants, pos, &::magplant::pos);
+    const ::magplant mag = (found != world.magplants.end()) ? *found : ::magplant{.pos = pos};
+    const bool owner = world.can_edit(*pPeer, pos, false);
+    const bool linked = pPeer->magplant == pos && pPeer->magplant_world == world.name;
+
+    ::create_dialog dialog = ::create_dialog()
+        .set_default_color("`o")
+        .add_label_with_icon("big", std::format("`w{}``", machine.raw_name), machine.id)
+        .add_spacer("small");
+
+    if (mag.item == 0)
+    {
+        dialog.add_label("small", "`6This machine is empty.");
+        if (owner) dialog.add_item_picker("SelectItem", "`wChoose Item``", std::format("Choose an item to put in the {}!", machine.raw_name));
+        send_magplant(event, pos, dialog, "Close", "");
+        return;
+    }
+    const std::string name = id_to_item(mag.item).raw_name;
+    dialog.add_label_with_icon("small", std::format("`2{}``", name), mag.item);
+    dialog.add_label("small", (mag.count > 0) ? std::format("`6The machine contains {} `2{}``", mag.count, name) : "`6The machine is currently empty!``");
+
+    if (owner)
+    {
+        dialog.add_spacer("small");
+        const int have = pPeer->have_slot(::slot(mag.item, 0));
+        if (have > 0 && mag.count < magplant_limit(machine.id)) dialog.add_button("AddItem", "Add Items to the machine");
+        if (200 - have > 0 && mag.count > 0) dialog.add_button("TakeItem", "Retrieve Items");
+        if (mag.count < 1) dialog.add_item_picker("SelectItem", "`wChange Item``", std::format("Choose an item to put in the {}!", machine.raw_name));
+    }
+    if (machine.id == ID_MAGPLANT)
+    {
+        dialog.add_label("small", std::format("Building Mode: {}", mag.remote ? "ACTIVE" : "`6DISABLED"));
+        if (owner || (mag.remote && !linked))
+            dialog.add_label("small", mag.remote ? 
+                std::format("Use the ID_MAGPLANT 5000 Remote to build `2{}`` directly from the ID_MAGPLANT 5000's storage.", name) : "Punch to activate building mode.");
+        dialog.add_spacer("small");
+        if (!linked && mag.remote) dialog.add_button("GetRemote", "Get Remote");
+    }
+    if (owner)
+    {
+        dialog.add_checkbox("EnableSucking", "Enable Collection", mag.collect);
+        send_magplant(event, pos, dialog, "Close", "Update");
+        return;
+    }
+    send_magplant(event, pos, dialog, "Close", "");
+}
+
+void magplant_edit(ENetEvent &event, const ::hPipe &hPipe)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    ::world *world = peer_world(pPeer);
+    ::pos pos{};
+    if (world == nullptr || !read_tile(hPipe, *world, type::MAGPLANT, pos)) return;
+    const ::item &machine = id_to_item(world->blocks[cord(pos.x_int(), pos.y_int())].fg);
+    ::magplant &mag = magplant_at(*world, pos);
+    const bool owner = world->can_edit(*pPeer, pos, false);
+    const std::string button = hPipe["buttonClicked"];
+    bool changed = false;
+
+    if (button == "GetRemote")
+    {
+        if (machine.id != ID_MAGPLANT || mag.item == 0 || !mag.remote) return;
+        if (const int old = pPeer->have_slot(::slot(ID_MAGPLANT_REMOTE, 0)); old > 0) modify_item_inventory(event, ::slot(ID_MAGPLANT_REMOTE, static_cast<short>(-old)));
+        if (!pPeer->can_hold(ID_MAGPLANT_REMOTE, 1)) throw std::runtime_error("You don't have room in your backpack!");
+        modify_item_inventory(event, ::slot(ID_MAGPLANT_REMOTE, 1));
+        pPeer->magplant = pos;
+        pPeer->magplant_world = world->name;
+        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`wYou received a `2Magplant `wRemote!", 0u, 1u });
+        send_varlist(event.peer, { "OnPlanterActivated", static_cast<int>(mag.item), pos.x_int(), pos.y_int() });
+        pPeer->mysql_update_all();
+        return;
+    }
+    if (!owner) return;
+
+    const std::string name = id_to_item(mag.item).raw_name;
+    if (button == "AddItem" && mag.item != 0)
+    {
+        const int have = pPeer->have_slot(::slot(mag.item, 0));
+        ::create_dialog dialog = ::create_dialog()
+            .set_default_color("`o")
+            .add_label_with_icon("big", std::format("`w{}``", machine.raw_name), machine.id)
+            .add_smalltext(std::format("You have {} `2{}`` in your backpack.", have, name))
+            .add_label("small", std::format("How many `2{}`` would you like to add?", name))
+            .add_text_input("AddAmount", "Amount:", std::to_string(have), 3);
+        send_magplant(event, pos, dialog, "Close", "Confirm");
+        return;
+    }
+    if (button == "TakeItem" && mag.item != 0)
+    {
+        ::create_dialog dialog = ::create_dialog()
+            .set_default_color("`o")
+            .add_label_with_icon("big", std::format("`w{}``", machine.raw_name), machine.id)
+            .add_smalltext(std::format("The {} contains {} `2{}``", machine.raw_name, mag.count, name))
+            .add_label("small", std::format("How many `2{}`` would you like to take?", name))
+            .add_text_input("TakeAmount", "Amount:", std::to_string(std::min(mag.count, 200)), 3);
+        send_magplant(event, pos, dialog, "Close", "Confirm");
+        return;
+    }
+    if (!hPipe["AddAmount"].empty() && mag.item != 0)
+    {
+        int amount = std::min({atoi(hPipe["AddAmount"].c_str()), 200, static_cast<int>(pPeer->have_slot(::slot(mag.item, 0)))});
+        if (amount < 1) return;
+        const int space = magplant_limit(machine.id) - mag.count;
+        if (amount > space)
+        {
+            send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, std::format("That won't fit into the `2{}``!", machine.raw_name), 0u, 1u });
+            amount = space;
+            if (amount < 1) return;
+        }
+        modify_item_inventory(event, ::slot(mag.item, static_cast<short>(-amount)));
+        mag.count += amount;
+        on::ConsoleMessage(event.peer, std::format("Added {} {} to the {}", amount, name, machine.raw_name));
+        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, std::format("Added {} {} to the `2{}``!", amount, name, machine.raw_name), 0u, 1u });
+        changed = true;
+    }
+    else if (!hPipe["TakeAmount"].empty() && mag.item != 0)
+    {
+        const int amount = std::min({atoi(hPipe["TakeAmount"].c_str()), 200, mag.count});
+        if (amount < 1) return;
+        if (!pPeer->can_hold(mag.item, amount)) throw std::runtime_error("That won't fit into your inventory.");
+        modify_item_inventory(event, ::slot(mag.item, static_cast<short>(amount)));
+        mag.count -= amount;
+        on::ConsoleMessage(event.peer, std::format("Took {} {} from the {}", amount, name, machine.raw_name));
+        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, std::format("Took {} {} from the `2{}``!", amount, name, machine.raw_name), 0u, 1u });
+        changed = true;
+    }
+    if (const short id = static_cast<short>(atoi(hPipe["SelectItem"].c_str())); id > 0)
+    {
+        if (mag.count > 0) return; // @note empty it first
+        const std::string problem = magplant_rejects(machine.id, id_to_item(id));
+        if (!problem.empty()) throw std::runtime_error(problem);
+        mag.item = id;
+        mag.count = 0;
+        changed = true;
+    }
+    if (const std::string collect = hPipe["EnableSucking"]; !collect.empty() && mag.item != 0)
+    {
+        const bool on = collect == "1";
+        if (mag.collect != on) mag.collect = on, changed = true;
+    }
+    if (!changed) return;
+    update_tile(event, *world, pos);
+    pPeer->mysql_update_all();
+    world->save();
+}

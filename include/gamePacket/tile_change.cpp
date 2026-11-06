@@ -82,6 +82,29 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
 
         if (gamePacket.id != 18 && gamePacket.id != 32 && pPeer->have_slot(::slot(gamePacket.id, 0)) == 0) return; // @note can only use items peer has
 
+        /* @note the MAGPLANT 5000 Remote builds with whatever its linked MAGPLANT 5000 holds */
+        ::magplant *remote_from = nullptr;
+        if (gamePacket.id == 5640/*MAGPLANT 5000 Remote*/)
+        {
+            if (pPeer->magplant_world == world->name && valid_tile(*world, pPeer->magplant) &&
+                world->blocks[cord(pPeer->magplant.x_int(), pPeer->magplant.y_int())].fg == 5638/*MAGPLANT 5000*/)
+            {
+                auto mag = std::ranges::find(world->magplants, pPeer->magplant, &::magplant::pos);
+                if (mag != world->magplants.end() && mag->remote && mag->item != 0) remote_from = &*mag;
+            }
+            if (remote_from == nullptr) throw std::runtime_error("There is no active `2Magplant 5000``!");
+            if (remote_from->count <= 0) throw std::runtime_error("The `2Magplant 5000`` is empty!");
+            const ::item &stored = id_to_item(remote_from->item);
+            if (stored.type == type::CONSUMEABLE || stored.cloth_type != clothing::NONE) return; // @note the remote only builds
+            gamePacket.id = remote_from->item;
+        }
+        /* @brief use up one of what was placed: from the backpack, or from the magplant when using the remote */
+        auto use_one = [&](short id)
+        {
+            if (remote_from != nullptr) --remote_from->count; // @note the remote never runs out itself
+            else pPeer->emplace(::slot(id, -1));
+        };
+
         const ::item &item = id_to_item((gamePacket.id != 32 && gamePacket.id != 18) ? gamePacket.id : (block.fg != 0) ? block.fg : block.bg);
         if (item.id == 0) return;
 
@@ -279,7 +302,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     if (tree != world->trees.end() && ticks() - tree->tick >= item.tick) // @todo limit this check.
                     {
                         block.hits[0] = 99;
-                        add_drop(event, ::slot(item.id - 1, RandomRange(1, tree->fruit*3)), gamePacket.punch.by_32(), *world); // @note fruit (from tree)
+                        add_break_drop(event, ::slot(item.id - 1, RandomRange(1, tree->fruit*3)), gamePacket.punch.by_32(), *world); // @note fruit (from tree)
                     }
                     break;
                 }
@@ -347,6 +370,22 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                         throw std::runtime_error("Take its clothes off first!");
                     break;
                 }
+                case type::MAGPLANT:
+                {
+                    auto mag = std::ranges::find(world->magplants, gamePacket.punch, &::magplant::pos);
+                    if (mag == world->magplants.end()) break;
+                    if (item.id == 5638/*MAGPLANT 5000*/ && mag->item != 0) // @note punching turns building mode on and off
+                    {
+                        mag->remote = !mag->remote;
+                        world_tile_update(*world, gamePacket.punch);
+                    }
+                    if (mag->count > 0 && block.hits[0] + 1 >= item.hits)
+                    {
+                        block.hits[0] = 0;
+                        throw std::runtime_error("That machine still has items in it!");
+                    }
+                    break;
+                }
                 case type::DONATION_BOX:
                 {
                     auto box = std::ranges::find(world->donation_boxes, gamePacket.punch, &::donation_box::pos);
@@ -401,6 +440,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 std::erase_if(world->heart_monitors, [&](const ::heart_monitor &heart) { return heart.pos == gamePacket.punch; });
                 std::erase_if(world->mannequins, [&](const ::mannequin &dummy) { return dummy.pos == gamePacket.punch; });
                 std::erase_if(world->weather_settings, [&](const ::weather_setting &w) { return w.pos == gamePacket.punch; });
+                std::erase_if(world->magplants, [&](const ::magplant &mag) { return mag.pos == gamePacket.punch; });
                 if (is_tile_lock(item.id)) remove_area_lock(event, *world, gamePacket.punch);
                 if (item.type == type::XENONITE && world->xenonite != 0)
                 {
@@ -478,8 +518,8 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                             for (; gems >= i; gems -= i/* downgrade type */)
                                 add_drop(event, {112, i}, gamePacket.punch.by_32(), *world);
                     }
-                    if (!RandomRange(0, (rarity_to_gem > 1) ? 2 : 4)) add_drop(event, ::slot(item.id + 1, 1), gamePacket.punch.by_32(), *world); 
-                    else if (!RandomRange(0, (rarity_to_gem > 1) ? 4 : 8)) add_drop(event, ::slot(item.id, 1), gamePacket.punch.by_32(), *world);
+                    if (!RandomRange(0, (rarity_to_gem > 1) ? 2 : 4)) add_break_drop(event, ::slot(item.id + 1, 1), gamePacket.punch.by_32(), *world); 
+                    else if (!RandomRange(0, (rarity_to_gem > 1) ? 4 : 8)) add_break_drop(event, ::slot(item.id, 1), gamePacket.punch.by_32(), *world);
                 } /* ~gem drop */
 
                 pPeer->add_xp(event, std::trunc(1.0f + item.rarity / 5.0f));
@@ -981,6 +1021,11 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     weather_wrench(event, *world, gamePacket.punch);
                     break;
                 }
+                case type::MAGPLANT:
+                {
+                    magplant_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
                 case type::FOREGROUND:
                 {
                     if (item.id == 3898/*Telephone*/) telephone_wrench(event, *world, gamePacket.punch);
@@ -1032,7 +1077,8 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 }
                 if (update_tile)
                 {
-                    modify_item_inventory(event, ::slot(gamePacket.id, -1));
+                    if (remote_from != nullptr) --remote_from->count;
+                    else modify_item_inventory(event, ::slot(gamePacket.id, -1));
                     send_tile_update(event, std::move(gamePacket), block, *world);
                     return;
                 }
@@ -1136,6 +1182,12 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     tile_update = true;
                     break;
                 }
+                case type::MAGPLANT:
+                {
+                    std::erase_if(world->magplants, [&](const ::magplant &mag) { return mag.pos == gamePacket.punch; });
+                    tile_update = true;
+                    break;
+                }
                 case type::MAILBOX:
                 case type::BULLETIN:
                 case type::DONATION_BOX:
@@ -1150,7 +1202,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
             block.state[2] |= (pPeer->facing_left) ? S_LEFT : S_RIGHT;
             if (item.type != type::BACKGROUND && get_type(item) != '\x00') tile_update = true; // @note send the block's data right away, the game may crash on it without
             (item.type == type::BACKGROUND) ? block.bg = gamePacket.id : block.fg = gamePacket.id;
-            pPeer->emplace(::slot(item.id, -1));
+            use_one(item.id);
             if (place_area_lock)
             {
                 ::area_lock &lock = world->area_locks.emplace_back(::area_lock{.pos = gamePacket.punch, .owner = pPeer->user_id});

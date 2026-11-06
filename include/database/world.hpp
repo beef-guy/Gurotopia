@@ -242,6 +242,18 @@ struct weather_setting
     int gravity{50};
 };
 
+/* @brief MAGPLANT 5000, Gaia's Beacon and Unstable Tesseract: the item it stores, how many, collecting drops, building mode */
+struct magplant
+{
+    ::pos pos{};
+    short item{};
+    int count{};
+    bool collect{};
+    bool remote{};
+};
+/* @return how many items this machine holds at most */
+extern int magplant_limit(short machine);
+
 /* @brief Storage Box Xtreme contents */
 struct storage
 {
@@ -297,6 +309,7 @@ public:
     std::vector<::heart_monitor> heart_monitors{};
     std::vector<::mannequin> mannequins{};
     std::vector<::weather_setting> weather_settings{};
+    std::vector<::magplant> magplants{};
     u_int xenonite{}; // @note the Xenonite Crystal's settings (xenonite:: in playmods.hpp). only one crystal per world
 
     /* @return the area lock that covers this tile, or nullptr */
@@ -348,6 +361,8 @@ extern void remove_object(ENetEvent& event, signed uid);
 extern int  add_object(ENetEvent& event, ::slot slot, const ::pos &pos, ::world &world);
 
 extern void add_drop(ENetEvent &event, ::slot im, ::pos pos, ::world &world);
+/* @brief a drop from breaking a block or harvesting a tree: a magplant collecting this item takes it, else it lands on the ground */
+extern void add_break_drop(ENetEvent &event, ::slot im, ::pos pos, ::world &world);
 
 extern void send_tile_update(ENetEvent &event, gamePacket s, ::block &b, ::world &world);
 
