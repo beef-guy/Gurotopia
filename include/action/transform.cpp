@@ -29,7 +29,7 @@ namespace
         { "rpan",                    { 12872/*Red Panda Spirit*/, 12874/*Royal Red Panda Spirit*/ }, 26 },
         { "mask_dragon_transform",   { 11506/*Mask of The Dragon*/, 11508/*Royal Mask of The Dragon*/ }, 19 },
         { "msf_transform",           { 10426/*Mystic Snow Fox*/ }, 11 },
-        { "pps_transform",           { 10618/*Perilous Pirate Ship*/ } },
+        { "pps_transform",           { 10618/*Perilous Pirate Ship*/ }, 12 }, // @note karim found bit 12 with /transformscan
         { "ggg_transform",           { 7384/*Go-Go-Growformer!*/ } },
         { "dsf_transform",           { 9136/*Dueling Star Fighter - Rebel Raider*/, 9138/*Dueling Star Fighter - Imperial Enforcer*/ } },
         { "tf",                      { 14068/*Beastformer!*/, 14070/*Royal Beastformer!*/ } },
