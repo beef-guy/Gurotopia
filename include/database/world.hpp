@@ -287,6 +287,7 @@ struct auto_machine
     short item{};   // @note Techno-Organic Engine: the drop it keeps
     int count{};
     long long next{}; // @note not saved: when it acts next (ms)
+    ::pos working{-1, -1}; // @note not saved: the block it is punching right now
 };
 
 /* @brief Storage Box Xtreme contents */
