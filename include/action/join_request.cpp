@@ -13,6 +13,7 @@
 #include "special_items.hpp"
 #include "carnival.hpp"
 #include "transform.hpp"
+#include "ghosts.hpp"
 
 #include "join_request.hpp"
 
@@ -151,6 +152,7 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
         on::CountryState(event);
         event_buttons_refresh(event.peer); // @note Daily Challenge, Piggy Bank and Mailbox on the left
         special_entered(event, world);
+        ghost_entered(event, world); // @note ghosts and Ghost Jars for their screen
 
         if (world.base_weather != 0) // @note a blast world's own weather, unless a weather machine is running
         {

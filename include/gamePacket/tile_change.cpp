@@ -28,6 +28,7 @@
 #include "action/special_items.hpp"
 #include "action/carnival.hpp"
 #include "action/cooking.hpp"
+#include "action/ghosts.hpp"
 #include "database/playmods.hpp"
 
 #include "tile_change.hpp"
@@ -99,6 +100,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         if (fishing_tile_change(event, *world, gamePacket)) return; // @note casting bait, or punching to reel in
         if (radiation_tile_change(event, *world, gamePacket)) return; // @note Geiger Charger
         if (fossil_tile_change(event, *world, gamePacket)) return; // @note Rock Hammer, Fossil Brush, Fossil Prep Station
+        if (ghost_tile_change(event, *world, gamePacket)) return; // @note Neutron Gun beams, Ghost Jars and Traps, Ghost-In-A-Jar, Ghost-Be-Gone, the Spirit Storage Unit
         if (special_tile_change(event, *world, gamePacket, block)) return; // @note wands on players, Game Blocks during a game
         if (cooking_tile_change(event, *world, gamePacket, block)) return; // @note ovens, and punching an open Chemical Combiner with a recipe in it
 
@@ -370,6 +372,10 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                         peers(world->name, PeerSearch::WORLD, [&](ENetPeer *peer) { on::ConsoleMessage(peer, message); });
                         send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, message, 0u, 1u });
                     }
+                    if (item.id == GHOST_CHARM)
+                        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, (block.state[2] & S_TOGGLE) ?
+                            "`2Ghost Charm activated!`` No new ghosts will come here. The ones already here still need catching!" :
+                            "Ghost Charm deactivated. Ghosts may come here again.", 0u, 1u });
                     break;
                 }
                 case type::VENDING_MACHINE:
@@ -514,6 +520,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 std::erase_if(world->auto_machines, [&](const ::auto_machine &m) { return m.pos == gamePacket.punch; });
                 std::erase_if(world->timed_machines, [&](const ::timed_machine &m) { return m.pos == gamePacket.punch; });
                 special_broken(*world, gamePacket.punch);
+                ghost_tile_cleared(*world, gamePacket.punch); // @note a Spirit Storage Unit loses its ghosts
                 cooking_broken(*world, gamePacket.punch);
                 if (is_tile_lock(item.id)) remove_area_lock(event, *world, gamePacket.punch);
                 if (item.type == type::XENONITE && world->xenonite != 0)
@@ -1365,6 +1372,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
             if (item.type != type::BACKGROUND && get_type(item) != '\x00') tile_update = true; // @note send the block's data right away, the game may crash on it without
             (item.type == type::BACKGROUND) ? block.bg = gamePacket.id : block.fg = gamePacket.id;
             if (item.type != type::BACKGROUND) special_placed(*world, gamePacket.punch, item);
+            if (item.type != type::BACKGROUND) ghost_tile_cleared(*world, gamePacket.punch);
             if (item.type != type::BACKGROUND) cooking_placed(*world, gamePacket.punch, item);
             if (item.type == type::CHEMICAL_COMBINER) tile_update = true; // @note it stands open: tell the game
             if (no_place_echo)

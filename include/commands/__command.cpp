@@ -17,6 +17,7 @@
 #include "moderation.hpp"
 #include "renderworld.hpp"
 #include "action/fossils.hpp"
+#include "action/ghosts.hpp"
 #include "action/growpass.hpp"
 #include "action/radiation.hpp"
 #include "action/carnival.hpp"
@@ -92,6 +93,7 @@ const std::unordered_map<std::string_view, ::cmd_entry> cmd_pool
     {"/maillayout", {maillayout, DEVELOPER}},
     {"/mailrewards", {mailrewards, DEVELOPER}},
     {"/fossil", {fossil_command, DEVELOPER}}, // @note a Fossil Rock appears in this world now
+    {"/spawnghost", {spawnghost_command, DEVELOPER}}, // @note /spawnghost [mind] [count]: ghosts appear around you
     {"/ready", {ready_command, DEVELOPER}},
     {"/export", {export_command, DEVELOPER}}, // @note worlds/<world>.dat
     {"/import", {import_command, DEVELOPER}}, // @note a new world from worlds/<file>.dat
