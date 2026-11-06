@@ -3,6 +3,7 @@
 #include <chrono>
 
 #include "onVariant/ConsoleMessage.hpp"
+#include "onVariant/SetClothing.hpp"
 #include "tools/sound.hpp"
 
 #include "transform.hpp"
@@ -57,6 +58,8 @@ namespace
     /* @note Diamond Horn -> Diamond Horns -> Diamond Devil Horns -> Diamond Horn, each time it's taken off */
     constexpr u_short diamond_horns[] { 4746, 4748, 4750 };
 
+    constexpr u_short GROWFORMER = 7384;
+
     const transform_set *set_of(u_short id)
     {
         if (id == 0) return nullptr;
@@ -105,6 +108,7 @@ namespace
         ::peer *pPeer = static_cast<::peer*>(peer->data);
         pPeer->transformed = (pPeer->transformed == id) ? 0 : id;
         broadcast(peer);
+        if (id == GROWFORMER) on::SetClothing(peer, false, true); // @note robot form / back to wheels
         if (pPeer->netid != 0) play_in_world(pPeer->recent_worlds.back(), pPeer->netid, "audio/transform.wav");
     }
 }
@@ -166,6 +170,7 @@ void transform_clothes_changed(ENetEvent &event, u_short was_wearing, u_short no
     {
         pPeer->transformed = 0; // @note took the item off: back to normal
         broadcast(event.peer);
+        on::SetClothing(event.peer, false, true); // @note e.g. the Growformer robot is gone too
     }
     else if (was_wearing == DIAMOND_DUST || now_wearing == DIAMOND_DUST) broadcast(event.peer);
 
