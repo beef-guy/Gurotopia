@@ -453,6 +453,18 @@ static void write_default_extra(::blob &blob, char type, const ::item &item)
             blob.u8((t != this->game_tiles.end()) ? t->team : 4);
             break;
         }
+        case '\x37': /* oven: heat, (ingredient, heat taken) pairs, seconds since this update. the game keeps cooking on its own */
+        {
+            auto o = std::ranges::find(this->ovens, block_pos, &::oven::pos);
+            const bool found = o != this->ovens.end() && !o->parts.empty();
+            blob.u32(found ? o->heat : 0);
+            if (!found) { blob.u32(0); blob.u32(0); break; }
+            const std::vector<std::pair<short, int>> now = oven_parts_now(*o);
+            blob.u32(static_cast<u_int>(now.size() * 2));
+            for (const auto &[id, value] : now) { blob.u32(static_cast<u_int>(id)); blob.u32(static_cast<u_int>(value)); }
+            blob.u32(0);
+            break;
+        }
         case '\x50': /* kranken's blocks: value (0 when placed), tint */
         {
             auto k = std::ranges::find(this->krankens, block_pos, &::kranken::pos);
@@ -755,7 +767,7 @@ namespace
         for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
         return true;
     }
-    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17, EX_AUTO = 18, EX_BASE_WEATHER = 19, EX_TIMED = 20, EX_KRANKEN = 21, EX_VAULT = 22, EX_GAME_TILE = 23, EX_GAME_RULES = 24, EX_CHALLENGE = 25, EX_WORLD_BAN = 26 };
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17, EX_AUTO = 18, EX_BASE_WEATHER = 19, EX_TIMED = 20, EX_KRANKEN = 21, EX_VAULT = 22, EX_GAME_TILE = 23, EX_GAME_RULES = 24, EX_CHALLENGE = 25, EX_WORLD_BAN = 26, EX_OVEN = 27 };
 }
 
 /* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
@@ -917,6 +929,14 @@ namespace
         blob.u8(EX_CHALLENGE); blob.i16(t.pos.x_int()); blob.i16(t.pos.y_int());
         blob.i32(t.seconds); blob.i32(t.best_ms);
         write_string(blob, t.best_name);
+    }
+    for (const ::oven &o : this->ovens)
+    {
+        if (o.parts.empty()) continue;
+        blob.u8(EX_OVEN); blob.i16(o.pos.x_int()); blob.i16(o.pos.y_int());
+        blob.u8(o.heat); blob.i64(o.since);
+        blob.i32(static_cast<int>(o.parts.size()));
+        for (const auto &[id, value] : o.parts) { blob.i16(id); blob.i32(value); }
     }
     for (const ::world_ban &ban : this->world_bans)
     {
@@ -1193,6 +1213,20 @@ void world::load_extras(::blob &blob)
                 ::challenge_timer t{.pos = tile};
                 if (!blob.read_i32(t.seconds, pos) || !blob.read_i32(t.best_ms, pos) || !read_string(blob, pos, t.best_name)) return;
                 if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::CHALLENGE_TIMER) this->challenge_timers.push_back(std::move(t));
+                break;
+            }
+            case EX_OVEN:
+            {
+                ::oven o{.pos = tile};
+                int count{};
+                if (!blob.read_u8(o.heat, pos) || !blob.read_i64(o.since, pos) || !blob.read_i32(count, pos) || count < 0 || count > 64) return;
+                for (int i = 0; i < count; ++i)
+                {
+                    short id{}; int value{};
+                    if (!blob.read_i16(id, pos) || !blob.read_i32(value, pos)) return;
+                    o.parts.emplace_back(id, value);
+                }
+                if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::COOKING_OVEN) this->ovens.push_back(std::move(o));
                 break;
             }
             case EX_WORLD_BAN:

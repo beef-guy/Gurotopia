@@ -347,6 +347,17 @@ struct challenge_timer
     std::string best_name{};
 };
 
+/* @brief a cooking oven: the heat picked for the first ingredient and what is cooking */
+struct oven
+{
+    ::pos pos{};
+    u_char heat{}; // @note heat units per second: 3 Low, 6 Medium, 9 High (the game's own values; 0 = empty)
+    long long since{}; // @note unix milliseconds when `parts` was last brought up to date
+    std::vector<std::pair<short, int>> parts{}; // @note ingredient, heat it has taken so far
+};
+/* @return each ingredient with the heat it has taken up to now (action/cooking.cpp) */
+extern std::vector<std::pair<short, int>> oven_parts_now(const ::oven &oven);
+
 /* @brief someone hit with a Ban Wand can't come back until `until` (unix seconds) */
 struct world_ban
 {
@@ -429,6 +440,7 @@ public:
     std::vector<::game_rules> game_generators{};
     std::vector<::challenge_timer> challenge_timers{};
     std::vector<::world_ban> world_bans{};
+    std::vector<::oven> ovens{};
     ::battle battle{}; // @note not saved
     ::pos geiger{-1, -1}; // @note not saved: the hidden radiation source Geiger Counters look for
     std::vector<std::pair<::pos, int>> fossil_life{}; // @note not saved: Rock Hammer taps a Fossil Rock still needs
