@@ -68,6 +68,8 @@ enum pstate : int
 {
     S_GHOST       = 0x00000001,
     S_DOUBLE_JUMP = 0x00000002,
+    S_DEVIL_HORNS = 0x00000040, // @note shown while Cursed
+    S_FROZEN      = 0x00000800, // @note Freeze Wand
     S_DUCT_TAPE   = 0x00002000,
     S_IRRADIATED  = 0x00080000  // @note the green glow of the Irradiated mod
 };
@@ -133,6 +135,16 @@ public:
     /* @note Geiger Counter and Great Chameleon (action/radiation.cpp) */
     int geiger_charge{};          // @note seconds a Dead Geiger Counter has charged in hand (saved)
     long long irradiated_until{}; // @note unix seconds; the Irradiated mod (saved)
+    /* @note Freeze, Curse and Ban Wands, Challenge Flags (action/special_items.cpp) */
+    long long frozen_until{};     // @note ms (steady clock); 0 = not frozen
+    long long cursed_until{};     // @note unix seconds; stuck in HELL until then (saved)
+    struct
+    {
+        bool active{};
+        std::string world{};
+        long long start{};    // @note ms (steady clock)
+        long long deadline{}; // @note ms; 0 = no time limit
+    } challenge{};
     long long still_since{};      // @note ms: when the player last moved
     ::pos last_pos{-1, -1};
     long long geiger_found_since{}; // @note ms: standing on the radiation source since

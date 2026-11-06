@@ -120,6 +120,7 @@ void peer::mysql_select_all(bool by_user_id)
     this->pass_royal        = this->mysql_select<signed>("pass_royal", "", by_user_id);
     this->geiger_charge    = std::max(this->mysql_select<signed>("geiger_charge", "", by_user_id), 0);
     this->irradiated_until = this->mysql_select<long long>("irradiated_until", "", by_user_id);
+    this->cursed_until = this->mysql_select<long long>("cursed_until", "", by_user_id);
     this->login_at     = std::time(nullptr);
     this->skin_color   = static_cast<u_int>(this->mysql_select<long long>("skin_color", "", by_user_id));
     const std::string clothing = this->mysql_select<std::string>("clothing", "", by_user_id);

@@ -10,6 +10,7 @@
 #include "onVariant/TradeStatus.hpp"
 #include "tools/time.hpp"
 #include "quit_to_exit.hpp"
+#include "special_items.hpp"
 
 #include "join_request.hpp"
 
@@ -45,6 +46,7 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
         if (!isalnum(name)) throw std::runtime_error("Sorry, spaces and special characters are not allowed in world or door names.  Try again.");
 
         for (char &c : name) c = std::toupper(c); // @note start -> START
+        if (const std::string forced = special_join_check(event, name); !forced.empty()) name = forced; // @note Curse Wand: HELL. Ban Wand: throws
 
         action::quit_to_exit(event, "", true); // @note does nothing unless peer is still in a world
 
@@ -144,6 +146,7 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
         on::SetClothing(event.peer);
         on::CountryState(event);
         event_buttons_refresh(event.peer); // @note Daily Challenge, Piggy Bank and Mailbox on the left
+        special_entered(event, world);
 
         if (world.base_weather != 0) // @note a blast world's own weather, unless a weather machine is running
         {
