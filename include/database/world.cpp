@@ -380,6 +380,17 @@ static void write_default_extra(::blob &blob, char type, const ::item &item)
             for (int i = 0; i < 4; ++i) blob.u32((shelf != this->shelves.end()) ? shelf->items[i] : 0);
             break;
         }
+        case '\x3e': /* magplant: item, count, collecting, building mode, capacity */
+        {
+            auto mag = std::ranges::find(this->magplants, block_pos, &::magplant::pos);
+            const bool found = mag != this->magplants.end();
+            blob.u32(found ? static_cast<u_int>(mag->item) : 0);
+            blob.u32(found ? static_cast<u_int>(mag->count) : 0);
+            blob.u8(found && mag->collect);
+            blob.u8(found && mag->remote);
+            blob.u32(static_cast<u_int>(magplant_limit(block.fg)));
+            break;
+        }
         case '\x36': /* storage box: the client only needs to know it exists */
         {
             blob.i16(0);
@@ -675,7 +686,7 @@ namespace
         for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
         return true;
     }
-    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13 };
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14 };
 }
 
 /* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
@@ -769,6 +780,12 @@ namespace
     {
         blob.u8(EX_WEATHER); blob.i16(w.pos.x_int()); blob.i16(w.pos.y_int());
         blob.u32(w.item); blob.i32(w.gravity);
+    }
+    for (const ::magplant &mag : this->magplants)
+    {
+        if (mag.item == 0) continue;
+        blob.u8(EX_MAGPLANT); blob.i16(mag.pos.x_int()); blob.i16(mag.pos.y_int());
+        blob.i16(mag.item); blob.i32(mag.count); blob.u8(mag.collect); blob.u8(mag.remote);
     }
     if (this->xenonite != 0)
     {
@@ -900,6 +917,16 @@ void world::load_extras(::blob &blob)
                 ::weather_setting w{.pos = tile};
                 if (!blob.read_u32(w.item, pos) || !blob.read_i32(w.gravity, pos)) return;
                 this->weather_settings.push_back(w);
+                break;
+            }
+            case EX_MAGPLANT:
+            {
+                ::magplant mag{.pos = tile};
+                u_char collect{}, remote{};
+                if (!blob.read_i16(mag.item, pos) || !blob.read_i32(mag.count, pos) || !blob.read_u8(collect, pos) || !blob.read_u8(remote, pos)) return;
+                mag.collect = collect, mag.remote = remote;
+                if (mag.count < 0) mag.count = 0;
+                if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::MAGPLANT) this->magplants.push_back(mag);
                 break;
             }
             case EX_SHELF:
@@ -1132,6 +1159,40 @@ void add_drop(ENetEvent &event, ::slot im, ::pos pos, ::world &world) // @todo
         pos.x + RandomRange(0, 16),
         pos.y + RandomRange(0, 16)
     }, world);
+}
+
+int magplant_limit(short machine)
+{
+    return (machine == 6946/*Gaia's Beacon*/ || machine == 6948/*Unstable Tesseract*/) ? 1500 : 5000; // @note source: github.com/cppdecl/Nomikai Src/World/Tile.cc
+}
+
+void add_break_drop(ENetEvent &event, ::slot im, ::pos pos, ::world &world)
+{
+    if (im.id != 112/*Gems*/ && im.count > 0)
+    {
+        auto mag = std::ranges::find_if(world.magplants, [&](const ::magplant &m) {
+            return m.item == im.id && m.collect && valid_tile(world, m.pos) &&
+                   id_to_item(world.blocks[cord(m.pos.x_int(), m.pos.y_int())].fg).type == type::MAGPLANT &&
+                   m.count + im.count <= magplant_limit(world.blocks[cord(m.pos.x_int(), m.pos.y_int())].fg);
+        });
+        if (mag != world.magplants.end())
+        {
+            mag->count += im.count;
+            /* @note the item flies into the machine (PACKET_ITEM_EFFECT), like real Growtopia */
+            ::gamePacket effect{
+                .type  = 0x13,
+                .uid   = -1,
+                .delay = 200,
+                .pos   = ::pos{mag->pos.x * 32.0f + 16.0f, mag->pos.y * 32.0f + 16.0f},
+                .speed = ::pos{pos.x + 8.0f, pos.y + 8.0f},
+                .punch = ::pos{static_cast<int>(im.id), static_cast<int>(im.id)}
+            };
+            ::blob blob = compress_state(effect);
+            peers(world.name, PeerSearch::WORLD, [&blob](ENetPeer *peer) { send_data(*peer, blob); });
+            return;
+        }
+    }
+    add_drop(event, im, pos, world);
 }
 
 void send_tile_update(ENetEvent &event, ::gamePacket gamePacket, ::block &block, ::world &world) 

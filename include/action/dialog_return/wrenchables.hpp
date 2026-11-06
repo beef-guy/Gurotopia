@@ -35,3 +35,7 @@ extern void dice_edit(ENetEvent &event, const ::hPipe &hPipe);
 /* @brief Weather Machine - Background (pick a background) and - Stuff (item that falls, gravity) */
 extern void weather_wrench(ENetEvent &event, ::world &world, const ::pos &pos);
 extern void weather_edit(ENetEvent &event, const ::hPipe &hPipe);
+
+/* @brief MAGPLANT 5000, Gaia's Beacon, Unstable Tesseract: pick an item, add or take stock, collection, remote */
+extern void magplant_wrench(ENetEvent &event, ::world &world, const ::pos &pos);
+extern void magplant_edit(ENetEvent &event, const ::hPipe &hPipe);
