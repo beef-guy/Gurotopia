@@ -8,6 +8,7 @@
 #include "ping_reply.hpp"
 #include "disconnect.hpp"
 #include "set_icon_state.hpp"
+#include "action/ghosts.hpp"
 
 #include "_gamePacket.hpp"
 
@@ -20,5 +21,6 @@ const std::unordered_map<u_char, void(*)(ENetEvent&, ::gamePacket)> gamePacket_p
     {0x0b, &item_activate_object},
     {0x12, &set_icon_state},
     {0x15, &ping_reply},
-    {0x1a, &disconnect}
+    {0x1a, &disconnect},
+    {0x22, &ghost_npc_packet} // @note PACKET_NPC: the Neutron Power Glove hit a ghost
 };

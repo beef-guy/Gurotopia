@@ -17,6 +17,7 @@
 #include "include/action/radiation.hpp"
 #include "include/action/transform.hpp"
 #include "include/action/fossils.hpp"
+#include "include/action/ghosts.hpp"
 #include "include/action/special_items.hpp"
 #include "include/action/carnival.hpp"
 #include "include/commands/renderworld.hpp"
@@ -267,6 +268,7 @@ int main(int argc, char *argv[])
         radiation_tick(); // @note Geiger Counters, the Irradiated mod, the Great Chameleon
         transform_tick(); // @note /transformscan
         fossil_tick(); // @note rocks in busy worlds turn into Fossil Rocks
+        ghost_tick(); // @note ghosts float about, Ghost Jars catch them, new ghosts move in
         special_tick(); // @note Freeze and Curse Wands wearing off, Challenge Timers, Game Generator games
         carnival_tick(); // @note Carnival games: timers, targets, platforms
         render_tick(); // @note /renderworld results

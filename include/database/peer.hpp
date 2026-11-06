@@ -138,6 +138,11 @@ public:
     /* @note Freeze, Curse and Ban Wands, Challenge Flags (action/special_items.cpp) */
     long long frozen_until{};     // @note ms (steady clock); 0 = not frozen
     long long cursed_until{};     // @note unix seconds; stuck in HELL until then (saved)
+    /* @note ghosts (action/ghosts.cpp) */
+    long long slimed_until{};     // @note ms (steady clock): a Ghost touched them, they're slow
+    long long mind_until{};       // @note ms (steady clock): a Mind Ghost touched them, left is right
+    float beam[4]{};              // @note their last Neutron Gun beam: from x, y to x, y (pixels)
+    long long beam_ms{};          // @note when they fired it (ms, steady clock)
     struct
     {
         bool active{};

@@ -327,6 +327,12 @@ static void write_default_extra(::blob &blob, char type, const ::item &item)
             blob.u32(0);
             break;
         }
+        case '\x29': /* spirit storage unit: ghosts stored */
+        {
+            auto ssu = std::ranges::find(this->spirit_units, block_pos, &::spirit_unit::pos);
+            blob.u32((ssu != this->spirit_units.end()) ? static_cast<u_int>(ssu->ghosts) : 0);
+            break;
+        }
         case '\x17': /* display block */
         {
             auto display = std::ranges::find(this->displays, block_pos, &::display::pos);
@@ -767,7 +773,7 @@ namespace
         for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
         return true;
     }
-    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17, EX_AUTO = 18, EX_BASE_WEATHER = 19, EX_TIMED = 20, EX_KRANKEN = 21, EX_VAULT = 22, EX_GAME_TILE = 23, EX_GAME_RULES = 24, EX_CHALLENGE = 25, EX_WORLD_BAN = 26, EX_OVEN = 27 };
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17, EX_AUTO = 18, EX_BASE_WEATHER = 19, EX_TIMED = 20, EX_KRANKEN = 21, EX_VAULT = 22, EX_GAME_TILE = 23, EX_GAME_RULES = 24, EX_CHALLENGE = 25, EX_WORLD_BAN = 26, EX_OVEN = 27, EX_SPIRIT = 28, EX_GHOSTS = 29 };
 }
 
 /* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
@@ -943,6 +949,19 @@ namespace
         if (ban.until <= std::time(nullptr)) continue;
         blob.u8(EX_WORLD_BAN); blob.i16(0); blob.i16(0);
         blob.i32(ban.uid); blob.i64(ban.until);
+    }
+    for (const ::spirit_unit &ssu : this->spirit_units)
+    {
+        if (ssu.ghosts <= 0) continue;
+        blob.u8(EX_SPIRIT); blob.i16(ssu.pos.x_int()); blob.i16(ssu.pos.y_int());
+        blob.i32(ssu.ghosts);
+    }
+    {
+        /* @note the ghosts here (kind and tile only) and when the world was last open, so ghosts can move in while it's empty */
+        blob.u8(EX_GHOSTS); blob.i16(0); blob.i16(0);
+        blob.i64(std::time(nullptr));
+        blob.i32(static_cast<int>(this->ghosts.size()));
+        for (const ::ghost &g : this->ghosts) { blob.u8(g.kind); blob.i16(static_cast<short>(g.x / 32.0f)); blob.i16(static_cast<short>(g.y / 32.0f)); }
     }
     if (this->base_weather != 0)
     {
@@ -1227,6 +1246,31 @@ void world::load_extras(::blob &blob)
                     o.parts.emplace_back(id, value);
                 }
                 if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::COOKING_OVEN) this->ovens.push_back(std::move(o));
+                break;
+            }
+            case EX_SPIRIT:
+            {
+                ::spirit_unit ssu{.pos = tile};
+                if (!blob.read_i32(ssu.ghosts, pos)) return;
+                if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::SPIRIT_STORAGE) this->spirit_units.push_back(ssu);
+                break;
+            }
+            case EX_GHOSTS:
+            {
+                long long seen{};
+                int count{};
+                if (!blob.read_i64(seen, pos) || !blob.read_i32(count, pos) || count < 0 || count > 255) return;
+                this->ghosts_checked = seen;
+                for (int i = 0; i < count; ++i)
+                {
+                    u_char kind{};
+                    short gx{}, gy{};
+                    if (!blob.read_u8(kind, pos) || !blob.read_i16(gx, pos) || !blob.read_i16(gy, pos)) return;
+                    ::ghost g{.kind = kind};
+                    g.x = g.dx = gx * 32.0f + 16.0f;
+                    g.y = g.dy = gy * 32.0f + 16.0f;
+                    this->ghosts.push_back(g); // @note action/ghosts.cpp gives it an NPC id when someone comes in
+                }
                 break;
             }
             case EX_WORLD_BAN:

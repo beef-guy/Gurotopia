@@ -5,6 +5,7 @@
 #include "action/radiation.hpp"
 #include "action/special_items.hpp"
 #include "action/carnival.hpp"
+#include "action/ghosts.hpp"
 
 #include "movement.hpp"
 
@@ -19,6 +20,7 @@ void movement(ENetEvent& event, ::gamePacket gamePacket)
     radiation_moved(event); // @note Geiger Counter and Great Chameleon want you standing still
     special_moved(event); // @note Challenge Flags, Game Flags and Goals
     carnival_moved(event); // @note the Death Race 5000 finish line
+    ghost_moved(event); // @note bumping into a ghost slimes you
 
     /* add fireproof only take away 1 hp instead of 2 */
     if (gamePacket.state & (int)gamePacketState::HIT_BY_LAVA) pPeer->pain_hp -= 2;

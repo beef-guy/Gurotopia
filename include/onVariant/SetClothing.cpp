@@ -3,6 +3,7 @@
 #include "database/playmods.hpp"
 #include "action/radiation.hpp"
 #include "action/special_items.hpp"
+#include "action/ghosts.hpp"
 
 #include "SetClothing.hpp"
 
@@ -48,7 +49,7 @@ void on::SetClothing(ENetPeer *peer, bool sound, bool everyone)
         .waterspeed = fx.water_speed,
         .id = pPeer->state | ((fx.mods & M_DOUBLE_JUMP) ? S_DOUBLE_JUMP : 0) | (irradiated(*pPeer) ? S_IRRADIATED : 0) | (cursed(*pPeer) ? S_DEVIL_HORNS : 0) | (robot ? 0x3c : 0), // @note 04 invisible (only eyes/mouth), 08 no arms, 16 no face, 32 invisible (only legs/arms), 64 devil horns, 128 angel halo, 2048 frozen, 4096 gray skin?,8192 ducttape, 16384 Onion effect, 32768 stars effect, 65536 zombie, 131072 hit by lava, 262144 shadow effect, 524288 irradiated effect, 1048576 spotlight, 2097152 pineapple thingy
         .pos = ::pos{ 1200.0f/*acceleration*/, fx.punch_strength },
-        .speed = ::pos{ fx.speed, fx.gravity },
+        .speed = ::pos{ fx.speed * ghost_speed_factor(*pPeer), fx.gravity }, // @note slimed by a ghost: slower, or turned around by a Mind Ghost
         .punch = ::pos{ pPeer->hair_color, 0x00000000u } // @todo can this even be unsigned?
     };
     send_gamePacket(*peer, gamePacket); // @todo handle for 'p'

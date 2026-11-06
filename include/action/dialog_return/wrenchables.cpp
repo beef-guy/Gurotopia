@@ -5,6 +5,7 @@
 #include "tools/sound.hpp"
 #include "daily_quest.hpp"
 #include "commands/weather.hpp"
+#include "action/ghosts.hpp"
 
 #include "wrenchables.hpp"
 
@@ -153,8 +154,27 @@ namespace
         send_phone(event, pos, dialog);
     }
 
+    /* @note 52368: the B.O.O. office clears every ghost in the world for 15 World Locks */
+    void boo_office(ENetEvent &event, const ::pos &pos)
+    {
+        ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+        ::world *world = peer_world(pPeer);
+        const int ghosts = (world != nullptr) ? static_cast<int>(world->ghosts.size()) : 0;
+        ::create_dialog dialog = ::create_dialog()
+            .set_default_color("`o")
+            .add_label_with_icon("big", "`wB.O.O. Headquarters``", NEUTRON_GUN)
+            .add_textbox(ghosts == 0 ?
+                "Battlers Of the Otherworldly here! Our instruments say there are no ghosts in your world. Call us when it gets spooky!" :
+                std::format("Battlers Of the Otherworldly here! Our instruments say there {} `w{}`` ghost{} in your world. We'll clear them all out for `215 World Locks``.",
+                    (ghosts == 1) ? "is" : "are", ghosts, (ghosts == 1) ? "" : "s"))
+            .add_spacer("small");
+        if (ghosts > 0) dialog.add_button("boo_clear", "Clear the ghosts (15 World Locks)");
+        send_phone(event, pos, dialog);
+    }
+
     void dial(ENetEvent &event, const ::pos &pos, const std::string &number)
     {
+        if (number == "52368") { boo_office(event, pos); return; }
         if (number == "12345") { crazy_jim(event, pos); return; }
         if (number == "53785") { sales_man(event, pos); return; }
 
@@ -208,6 +228,18 @@ void telephone(ENetEvent &event, const ::hPipe &hPipe)
     {
         deliver_daily_quest(event);
         show_daily_quest(event, &pos);
+    }
+    else if (button == "boo_clear")
+    {
+        if (world->ghosts.empty()) return boo_office(event, pos);
+        if (pPeer->have_slot(::slot(242/*World Lock*/, 0)) < 15) throw std::runtime_error("`4You need 15 World Locks for that.``");
+        modify_item_inventory(event, ::slot(242, -15));
+        const int gone = ghosts_clear(*world);
+        play_in_world(world->name, pPeer->netid, "audio/boo_ghost_be_gone.wav");
+        peers(world->name, PeerSearch::WORLD, [&](ENetPeer *peer) {
+            on::ConsoleMessage(peer, std::format("`2The B.O.O. cleared this world!`` {} ghost{} gone.", gone, (gone == 1) ? "" : "s"));
+        });
+        pPeer->mysql_update_all();
     }
     else if (button == "sales_menu") sales_man(event, pos);
     else if (button == "sales_bgl") sales_bgl(event, pos);

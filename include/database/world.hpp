@@ -358,6 +358,36 @@ struct oven
 /* @return each ingredient with the heat it has taken up to now (action/cooking.cpp) */
 extern std::vector<std::pair<short, int>> oven_parts_now(const ::oven &oven);
 
+/* @brief a ghost floating around the world (an NPC the game draws itself). positions are in pixels, the middle of the ghost */
+struct ghost
+{
+    u_char id{};    // @note the NPC id the game knows it by (1-255, shared with Ghost Jars)
+    u_char kind{1}; // @note NPC type: 1 Ghost, 12 Mind Ghost
+    float x{}, y{};   // @note where it was when it last changed course
+    float dx{}, dy{}; // @note where it is floating to
+    float speed{40.0f}; // @note pixels a second
+    long long since{};  // @note ms (steady clock) when it left (x, y)
+    long long next{};   // @note not before this (ms): pick somewhere new to float to
+    long long held_until{}; // @note a Neutron Gun beam has it until then (ms)
+};
+
+/* @brief a Ghost Jar or Ghost Trap that was set down. it pulls in a ghost above it for a while */
+struct ghost_jar
+{
+    u_char id{};
+    short item{}; // @note 3720 Ghost Jar, 6082 Ghost Trap
+    float x{}, y{};
+    long long placed{}; // @note ms (steady clock)
+    bool done{};
+};
+
+/* @brief a Spirit Storage Unit and how many ghosts are stored in it (each one is 5%) */
+struct spirit_unit
+{
+    ::pos pos{};
+    int ghosts{};
+};
+
 /* @brief someone hit with a Ban Wand can't come back until `until` (unix seconds) */
 struct world_ban
 {
@@ -442,6 +472,11 @@ public:
     std::vector<::world_ban> world_bans{};
     std::vector<::oven> ovens{};
     ::battle battle{}; // @note not saved
+    std::vector<::spirit_unit> spirit_units{};
+    std::vector<::ghost> ghosts{}; // @note saved (kind and place only), so a haunted world stays haunted
+    std::vector<::ghost_jar> ghost_jars{}; // @note not saved: a jar only works for a few seconds
+    std::vector<std::pair<long long, std::array<u_char, 2>>> npc_removals{}; // @note not saved: NPCs to take away after a moment (ms, {id, id})
+    long long ghosts_checked{}; // @note unix seconds the world was last open, for ghosts moving in while nobody was here
     ::pos geiger{-1, -1}; // @note not saved: the hidden radiation source Geiger Counters look for
     std::vector<std::pair<::pos, int>> fossil_life{}; // @note not saved: Rock Hammer taps a Fossil Rock still needs
     std::vector<u_int> fresh_fossils{}; // @note not saved: dropped Fossils nobody picked up yet (a Fossil Brush can polish them)
