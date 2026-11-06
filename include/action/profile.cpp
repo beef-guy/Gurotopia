@@ -11,46 +11,36 @@
 #include <algorithm>
 #include <unordered_map>
 
+#include "onVariant/EmoticonDataChanged.hpp"
+#include "growpass.hpp"
 #include "profile.hpp"
 
 extern std::unordered_map<std::string_view, std::string_view> emoticon; // @note onVariant/EmoticonDataChanged.cpp
 
 namespace
 {
-    constexpr short GROWTOKEN = 1486;
-
-    /* @note the Daily Bonus: a 7 day streak, then it starts over. {gems, item, count} */
-    struct bonus_day { int gems; short item; short count; };
-    constexpr bonus_day bonus_days[7] = {
-        {250, 0, 0}, {500, 0, 0}, {750, 0, 0}, {1000, 0, 0}, {1500, 0, 0}, {2000, 0, 0}, {2500, GROWTOKEN, 1}
+    /* @note Growmojis that start locked, and the Growmoji item that unlocks each one. every other Growmoji is free */
+    struct growmoji { std::string_view code; short item; };
+    constexpr growmoji growmoji_items[] = {
+        {"wl", 5770}, {"grow", 5772}, {"gems", 5774}, {"gtoken", 5776}, {"vend", 5778}, {"oops", 5804}, {"sleep", 5806},
+        {"punch", 5808}, {"bheart", 5810}, {"cry", 5812}, {"bunny", 6002}, {"cactus", 6052}, {"pine", 6122}, {"peace", 6272},
+        {"terror", 6274}, {"troll", 6276}, {"evil", 6278}, {"fireworks", 6322}, {"football", 6672}, {"alien", 6744},
+        {"party", 6822}, {"pizza", 6824}, {"clap", 6894}, {"song", 7062}, {"ghost", 7130}, {"halo", 7232}, {"nuke", 7234},
+        {"turkey", 7370}, {"gift", 7474}, {"cake", 7656}, {"heartarrow", 7684}, {"lucky", 7698}, {"shamrock", 7932},
+        {"grin", 8028}, {"ill", 8416}, {"eyes", 10114}, {"weary", 10116}, {"plead", 12542}, {"moyai", 12544},
+        {"fire", 16322}, {"flirty", 16324}, {"lightbulb", 16326}, {"moneymouth", 16328}, {"nerd", 16330},
+        {"skull", 16332}, {"trophy", 16334}, {"wilted", 16336}
     };
 
-    std::tm utc_at(std::time_t when)
+    const growmoji *growmoji_for_code(std::string_view code)
     {
-        std::tm utc{};
-#ifdef _WIN32
-        gmtime_s(&utc, &when);
-#else
-        gmtime_r(&when, &utc);
-#endif
-        return utc;
+        auto it = std::ranges::find(growmoji_items, code, &growmoji::code);
+        return (it == std::end(growmoji_items)) ? nullptr : &*it;
     }
-    int day_of(std::time_t when) { const std::tm utc = utc_at(when); return (utc.tm_year + 1900) * 10000 + (utc.tm_mon + 1) * 100 + utc.tm_mday; }
-    int today() { return day_of(std::time(nullptr)); }
-    int yesterday() { return day_of(std::time(nullptr) - 86400); }
-
-    std::string until_midnight()
+    const growmoji *growmoji_for_item(short item)
     {
-        const long long left = 86400ll - static_cast<long long>(std::time(nullptr) % 86400);
-        return std::format("{}h {}m", left / 3600, (left % 3600) / 60);
-    }
-
-    /* @return the streak day (1-7) the next claim pays */
-    int next_bonus_day(const ::peer &peer)
-    {
-        const int streak = (peer.daily_bonus == today() || peer.daily_bonus == yesterday()) ? peer.bonus_streak : 0;
-        if (peer.daily_bonus == today()) return std::max(streak, 1);
-        return (streak % 7) + 1;
+        auto it = std::ranges::find(growmoji_items, item, &growmoji::item);
+        return (it == std::end(growmoji_items)) ? nullptr : &*it;
     }
 
     /* -- wardrobe -- */
@@ -154,27 +144,72 @@ namespace
 
     void show_growmojis(ENetEvent &event)
     {
-        std::vector<std::pair<std::string_view, std::string_view>> list(emoticon.begin(), emoticon.end());
-        std::ranges::sort(list, {}, &std::pair<std::string_view, std::string_view>::second);
+        const ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+        std::vector<std::pair<std::string_view, std::string_view>> free_list{};
+        for (const auto &[code, glyph] : emoticon)
+            if (growmoji_for_code(code) == nullptr) free_list.emplace_back(code, glyph);
+        std::ranges::sort(free_list, {}, &std::pair<std::string_view, std::string_view>::second);
 
-        std::string lines{};
-        for (std::size_t i = 0; i < list.size(); i += 4)
+        int unlocked = static_cast<int>(free_list.size()), total = static_cast<int>(free_list.size());
+        std::string grid{};
+        for (const growmoji &g : growmoji_items)
+        {
+            if (!emoticon.contains(g.code)) continue;
+            const bool have = growmoji_unlocked(*pPeer, g.code);
+            ++total;
+            if (have) ++unlocked;
+            grid += std::format("add_button_with_icon|gmoji_{}|{}{}``|{}|{}||\n",
+                g.code, have ? "`2" : "`o", g.code, have ? "staticBlueFrame" : "staticGreyFrame", g.item);
+        }
+        grid += "add_button_with_icon||END_LIST|noflags|0||\n";
+
+        std::string free_rows{};
+        for (std::size_t i = 0; i < free_list.size(); i += 4)
         {
             std::string row{};
-            for (std::size_t j = i; j < std::min(i + 4, list.size()); ++j)
-                row += std::format("{} `w({})``     ", list[j].second, list[j].first);
-            lines += std::format("add_smalltext|{}|left|\n", row);
+            for (std::size_t j = i; j < std::min(i + 4, free_list.size()); ++j)
+                row += std::format("{} `w({})``     ", free_list[j].second, free_list[j].first);
+            free_rows += std::format("add_smalltext|{}|left|\n", row);
         }
         send_varlist(event.peer, {
             "OnDialogRequest",
             ::create_dialog()
                 .set_default_color("`o")
-                .add_label("big", "`wGrowmojis``")
+                .add_label_with_icon("big", "`wGrowmojis``", 5770)
                 .add_spacer("small")
-                .add_textbox(std::format("You have unlocked `2{}/{}`` Growmojis. Type the word in brackets in chat to use one, like `w(wl)``.", list.size(), list.size()))
+                .add_textbox(std::format("You have unlocked `2{}/{}`` Growmojis.", unlocked, total))
+                .add_smalltext("Type a Growmoji's name in brackets in chat to use it, like `w(smile)``. Find a Growmoji item and use it on yourself to unlock that Growmoji forever. Tap one to see more.")
                 .add_spacer("small")
-                .add_raw(lines)
+                .add_label("small", "`wCollectable Growmojis``")
+                .add_raw(grid)
                 .add_spacer("small")
+                .add_label("small", "`wEveryone has these``")
+                .add_raw(free_rows)
+                .add_spacer("small")
+                .add_quick_exit()
+                .end_dialog("growmojis", "Close", "")
+        });
+    }
+
+    void show_growmoji(ENetEvent &event, std::string_view code)
+    {
+        const ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+        const growmoji *g = growmoji_for_code(code);
+        auto glyph = emoticon.find(code);
+        if (g == nullptr || glyph == emoticon.end()) return;
+        const bool have = growmoji_unlocked(*pPeer, code);
+        const std::string &name = id_to_item(g->item).raw_name;
+        send_varlist(event.peer, {
+            "OnDialogRequest",
+            ::create_dialog()
+                .set_default_color("`o")
+                .add_label_with_icon("big", std::format("`w{}``", name), g->item)
+                .add_spacer("small")
+                .add_textbox(have ?
+                    std::format("`2Unlocked!`` Type `w({})`` in chat to use {}", code, glyph->second) :
+                    std::format("`4Locked.`` Find a `w{}`` and use it on yourself to unlock `w({})`` forever.", name, code))
+                .add_spacer("small")
+                .add_button("back", "Back")
                 .add_quick_exit()
                 .end_dialog("growmojis", "Close", "")
         });
@@ -237,72 +272,6 @@ namespace
         send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("trade_history", "Close", "") });
     }
 
-    std::string bonus_dialog(const ::peer &peer)
-    {
-        const bool claimed = (peer.daily_bonus == today());
-        const int next = next_bonus_day(peer);
-
-        std::string text = std::format(
-            "set_default_color|`o\n"
-            "add_label_with_icon|big|`wDaily Bonus``|left|{}|\n"
-            "add_spacer|small|\n"
-            "add_textbox|Come back every day to claim a bonus. Claim 7 days in a row for a `2Growtoken``! Miss a day and the streak starts over.|left|\n"
-            "add_spacer|small|\n", GROWTOKEN);
-        for (int day = 1; day <= 7; ++day)
-        {
-            const bonus_day &b = bonus_days[day - 1];
-            const bool done = claimed ? (day <= next) : (day < next);
-            const std::string reward = (b.item != 0) ? std::format("{} Gems + {} {}", b.gems, b.count, id_to_item(b.item).raw_name) : std::format("{} Gems", b.gems);
-            text += std::format("add_label_with_icon|small|{}Day {}: {}``|left|{}|\n",
-                done ? "`2" : (day == next ? "`w" : "`o"), day, done ? reward + " (claimed)" : reward, (b.item != 0) ? b.item : 112/*gem*/);
-        }
-        text += "add_spacer|small|\n";
-        if (claimed)
-            text += std::format("add_countdown|Next bonus in {}|disable|\n", until_midnight());
-        else
-            text += std::format("add_countdown|Day {} is ready!|enable|\n"
-                                "add_button|claimbutton|`2Claim Day {}``|noflags|0|0|\n", next, next);
-        text += "add_quick_exit|\n"
-                "end_dialog|daily_bonus|Close||\n";
-        return text;
-    }
-
-    void show_bonus(ENetEvent &event)
-    {
-        send_varlist(event.peer, { "OnDailyRewardRequest", bonus_dialog(*static_cast<::peer*>(event.peer->data)) });
-    }
-
-    void claim_bonus(ENetEvent &event)
-    {
-        ::peer *pPeer = static_cast<::peer*>(event.peer->data);
-        if (pPeer->daily_bonus == today())
-        {
-            on::ConsoleMessage(event.peer, std::format("You already claimed today's bonus. Come back in {}.", until_midnight()));
-            return;
-        }
-        const int day = next_bonus_day(*pPeer);
-        const bonus_day &b = bonus_days[day - 1];
-        if (b.item != 0 && !pPeer->can_hold(b.item, b.count))
-        {
-            on::ConsoleMessage(event.peer, "`4Make room in your backpack first!``");
-            return;
-        }
-        pPeer->daily_bonus = today();
-        pPeer->bonus_streak = day;
-        pPeer->mysql_update("daily_bonus", pPeer->daily_bonus);
-        pPeer->mysql_update("bonus_streak", pPeer->bonus_streak);
-
-        pPeer->gems += b.gems;
-        on::SetBux(event);
-        if (b.item != 0) modify_item_inventory(event, ::slot(b.item, b.count));
-        pPeer->mysql_update_all();
-
-        const std::string got = (b.item != 0) ? std::format("`2{}`` Gems and `2{} {}``", b.gems, b.count, id_to_item(b.item).raw_name) : std::format("`2{}`` Gems", b.gems);
-        on::ConsoleMessage(event.peer, std::format("Daily Bonus day {}: you got {}!", day, got));
-        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, std::format("Daily Bonus: {}!", got), 0u, 1u });
-        play_sfx(event.peer, "audio/piano_nice.wav");
-    }
-
     void coming_soon(ENetEvent &event, const std::string &title, int icon, const std::string &text)
     {
         send_varlist(event.peer, {
@@ -349,7 +318,7 @@ std::string online_status_text(const ::peer &peer)
 bool profile_button(ENetEvent& event, const std::string &button)
 {
     if (button == "wardrobe_customization") send_varlist(event.peer, { "OnDialogRequestRML", "show_wardrobe_main_ui" });
-    else if (button == "bonus") show_bonus(event);
+    else if (button == "bonus") show_grow_pass(event);
     else if (button == "set_online_status") show_online_status(event);
     else if (button == "notebook_edit") show_notebook(event);
     else if (button == "emojis") show_growmojis(event);
@@ -395,9 +364,41 @@ void notebook_edit(ENetEvent& event, const ::hPipe &hPipe)
     on::ConsoleMessage(event.peer, note.empty() ? "Notebook cleared." : "Notebook saved.");
 }
 
-void daily_bonus(ENetEvent& event, const ::hPipe &hPipe)
+bool growmoji_unlocked(const ::peer &peer, std::string_view code)
 {
-    if (hPipe["buttonClicked"] == "claimbutton") claim_bonus(event);
+    if (growmoji_for_code(code) == nullptr) return true;
+    return peer.growmojis.find(std::format(",{},", code)) != std::string::npos;
+}
+
+bool is_growmoji_item(short item) { return growmoji_for_item(item) != nullptr; }
+
+bool growmoji_use(ENetEvent& event, short item)
+{
+    const growmoji *g = growmoji_for_item(item);
+    if (g == nullptr) return false;
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    auto glyph = emoticon.find(g->code);
+    if (growmoji_unlocked(*pPeer, g->code))
+    {
+        on::ConsoleMessage(event.peer, std::format("You already unlocked `w({})``!", g->code));
+        return true;
+    }
+    if (pPeer->growmojis.empty()) pPeer->growmojis = ",";
+    pPeer->growmojis += std::format("{},", g->code);
+    pPeer->mysql_update("growmojis", pPeer->growmojis);
+    modify_item_inventory(event, ::slot(item, -1));
+    on::EmoticonDataChanged(event);
+    on::ConsoleMessage(event.peer, std::format("`2You unlocked a new Growmoji!`` Type `w({})`` in chat to use it.", g->code));
+    send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, std::format("`2New Growmoji: {}``", (glyph != emoticon.end()) ? std::string(glyph->second) : std::format("({})", g->code)), 0u, 1u });
+    play_sfx(event.peer, "audio/piano_nice.wav");
+    return true;
+}
+
+void growmojis_edit(ENetEvent& event, const ::hPipe &hPipe)
+{
+    const std::string button = hPipe["buttonClicked"];
+    if (button.starts_with("gmoji_")) show_growmoji(event, button.substr(6));
+    else if (button == "back") show_growmojis(event);
 }
 
 void action::wardrobe_preset_load(ENetEvent& event, const std::string&)
@@ -478,10 +479,10 @@ void action::wardrobe_purchase_slot(ENetEvent& event, const std::string&)
 
 void action::dailyrewardmenu(ENetEvent& event, const std::string&)
 {
-    show_bonus(event);
+    show_grow_pass(event, "daily");
 }
 
 void action::claimdailyreward(ENetEvent& event, const std::string&)
 {
-    claim_bonus(event);
+    show_grow_pass(event, "daily");
 }

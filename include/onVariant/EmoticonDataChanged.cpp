@@ -2,6 +2,7 @@
 
 #include <unordered_map>
 
+#include "action/profile.hpp"
 #include "EmoticonDataChanged.hpp"
 
 std::unordered_map<std::string_view, std::string_view> emoticon = 
@@ -23,8 +24,9 @@ void on::EmoticonDataChanged(ENetEvent& event)
 {
     std::string EmoticonData;
     EmoticonData.reserve(emoticon.size() * 23/* emoticon data + ()||1/0& */);
+    const ::peer *pPeer = static_cast<::peer*>(event.peer->data);
     for (const auto &[key, value] : emoticon) 
-        EmoticonData.append(std::format("({})|{}|1&", key, value)); // @todo add requirements for unlocking emoticons
+        EmoticonData.append(std::format("({})|{}|{}&", key, value, growmoji_unlocked(*pPeer, key) ? 1 : 0)); // @note Growmoji items unlock the rest (action/profile.cpp)
 
     send_varlist(event.peer, {
         "OnEmoticonDataChanged", 

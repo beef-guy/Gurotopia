@@ -121,6 +121,15 @@ public:
     int daily_bonus{};        // @note day (yyyymmdd, UTC) the daily bonus was last claimed
     int bonus_streak{};       // @note days in a row the daily bonus was claimed
     int online_status{};      // @note 0 online, 1 busy, 2 away
+    std::string growmojis{};  // @note unlocked Growmojis: ",wl,grow," (action/profile.cpp)
+    /* @note Grow Pass (action/growpass.cpp) */
+    int pass_season{};        // @note yyyymm the points below belong to
+    int pass_points{};
+    int pass_free{};          // @note bit per level: free reward claimed
+    int pass_royal_claims{};  // @note bit per level: Royal reward claimed
+    int pass_royal{};         // @note yyyymm of the season they have the Royal Grow Pass for
+    int pass_breaks{};        // @note blocks broken towards the next point (not saved)
+    int pass_harvests{};      // @note trees harvested towards the next point (not saved)
     /* @note Geiger Counter and Great Chameleon (action/radiation.cpp) */
     int geiger_charge{};          // @note seconds a Dead Geiger Counter has charged in hand (saved)
     long long irradiated_until{}; // @note unix seconds; the Irradiated mod (saved)

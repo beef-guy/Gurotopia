@@ -7,10 +7,15 @@
 #include "tools/time.hpp"
 #include "tools/random.hpp"
 
+#include "action/profile.hpp"
+
 #include "input.hpp"
 
 #include <algorithm>
 #include <ctime>
+#include <unordered_map>
+
+extern std::unordered_map<std::string_view, std::string_view> emoticon; // @note onVariant/EmoticonDataChanged.cpp
 
 namespace
 {
@@ -70,6 +75,12 @@ void action::input(ENetEvent& event, const std::string& header)
             pPeer->duct_tape_until = 0;
             on::ConsoleMessage(event.peer, "`2The duct tape fell off, you can talk again!``");
             on::SetClothing(event.peer);
+        }
+        for (const auto &[code, glyph] : emoticon) // @note a Growmoji they haven't unlocked shows as its name
+        {
+            if (growmoji_unlocked(*pPeer, code)) continue;
+            for (std::size_t at = text.find(glyph); at != std::string::npos; at = text.find(glyph, at))
+                text.replace(at, glyph.size(), std::format("({})", code));
         }
         if (pPeer->state & S_DUCT_TAPE)
         {

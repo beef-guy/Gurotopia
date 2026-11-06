@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "action/growpass.hpp"
 
 #include "onVariant/ConsoleMessage.hpp"
 #include "tools/create_dialog.hpp"
@@ -225,6 +226,7 @@ namespace
         const std::string q = quality(c.item, c.lbs);
         say(event.peer, pPeer, std::format("You caught a {}`2{} lb. {}``!", q.empty() ? "" : std::format("`9{}`` ", q), c.lbs, id_to_item(c.item).raw_name));
         pPeer->add_xp(event, 1 + c.lbs / 20);
+        grow_pass_points(event.peer, 2);
     }
 
     ::world *world_of(::peer *pPeer)

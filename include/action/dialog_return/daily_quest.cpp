@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "action/growpass.hpp"
 
 #include "onVariant/ConsoleMessage.hpp"
 #include "tools/create_dialog.hpp"
@@ -108,6 +109,7 @@ void deliver_daily_quest(ENetEvent& event)
         first.second, id_to_item(first.first).raw_name, second.second, id_to_item(second.first).raw_name));
     if (pPeer->netid != 0) play_in_world(pPeer->recent_worlds.back(), pPeer->netid, "audio/piano_nice.wav");
     else play_sfx(event.peer, "audio/piano_nice.wav");
+    grow_pass_points(event.peer, 100);
 }
 
 void daily_quest(ENetEvent& event, const ::hPipe &hPipe)
