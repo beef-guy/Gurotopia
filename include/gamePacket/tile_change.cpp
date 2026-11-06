@@ -206,8 +206,12 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 }
                 case type::PROVIDER:
                 {
-                    //if (ticks() - block.tick >= item.tick)
-                    //{
+                    auto prov = std::ranges::find(world->providers, gamePacket.punch, &::provider::pos);
+                    const u_int age = (prov != world->providers.end()) ? ticks() - prov->tick : static_cast<u_int>(item.tick);
+                    if (age >= static_cast<u_int>(item.tick)) // @note ready: collect. not ready: the punch damages it like any block
+                    {
+                        if (prov != world->providers.end()) prov->tick = ticks();
+                        else world->providers.emplace_back(::provider{gamePacket.punch, ticks()});
                         switch (item.id)
                         {
                             case 1008: // @note ATM
@@ -245,12 +249,11 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                                 break;
                             }
                         }
-                        //block.tick = ticks();
-                        send_tile_update(event, std::move(gamePacket), block, *world); // @note update countdown on provider.
+                        send_tile_update(event, std::move(gamePacket), block, *world); // @note restart the countdown on the provider
 
                         pPeer->add_xp(event, 1);
                         return;
-                    //}
+                    }
                     break;
                 }
                 case type::SEED:
@@ -341,6 +344,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 std::erase_if(world->vendings, [&](const ::vending &vend) { return vend.pos == gamePacket.punch; });
                 std::erase_if(world->storages, [&](const ::storage &box) { return box.pos == gamePacket.punch; });
                 std::erase_if(world->displays, [&](const ::display &display) { return display.pos == gamePacket.punch; });
+                std::erase_if(world->providers, [&](const ::provider &prov) { return prov.pos == gamePacket.punch; });
                 if (is_tile_lock(item.id)) remove_area_lock(event, *world, gamePacket.punch);
                 if (item.type == type::XENONITE && world->xenonite != 0)
                 {
@@ -1011,7 +1015,8 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 }
                 case type::PROVIDER:
                 {
-                    //block.tick = ticks();
+                    std::erase_if(world->providers, [&](const ::provider &p) { return p.pos == gamePacket.punch; });
+                    world->providers.emplace_back(::provider{gamePacket.punch, ticks()}); // @note a new provider starts its timer
                     break;
                 }
                 case type::VENDING_MACHINE:
@@ -1023,6 +1028,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 }
             }
             block.state[2] |= (pPeer->facing_left) ? S_LEFT : S_RIGHT;
+            if (item.type != type::BACKGROUND && get_type(item) != '\x00') tile_update = true; // @note send the block's data right away, the game may crash on it without
             (item.type == type::BACKGROUND) ? block.bg = gamePacket.id : block.fg = gamePacket.id;
             pPeer->emplace(::slot(item.id, -1));
             if (place_area_lock)

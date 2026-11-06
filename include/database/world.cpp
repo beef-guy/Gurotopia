@@ -11,7 +11,7 @@ char get_type(const ::item &item)
 {
     switch (item.type)
     {
-        case type::MAIN_DOOR: case type::DOOR: case type::PORTAL: return '\x01';
+        case type::MAIN_DOOR: case type::DOOR: case type::PORTAL: case type::SUNGATE: return '\x01';
         case type::SIGN: return '\x02';
         case type::LOCK: return '\x03';
         case type::SEED: return '\x04';
@@ -21,6 +21,79 @@ char get_type(const ::item &item)
         case type::VENDING_MACHINE: return '\x18';
         case type::STORAGE_BOX: return '\x36';
         case type::XENONITE: return '\x12'; // @note the game crashes on a crystal tile without its extra data
+    }
+    /*
+    * @note every other block the game gives tile data to. a tile like this sent WITHOUT its data crashes the game,
+    * so these send empty defaults (write_default_extra) until the block gets a real feature.
+    * action type -> extra type, from github.com/voidkle/gtps-guide guide/tile-extras.md (5.60 client)
+    */
+    switch (static_cast<int>(item.type))
+    {
+        case 33: return '\x06'; // mailbox
+        case 34: case 50: return '\x07'; // bulletin board, security camera
+        case 40: return '\x0a'; // achievement block
+        case 46: return '\x0b'; // heart monitor
+        case 47: return '\x0c'; // donation box
+        case 49: return '\x0e'; // mannequin
+        case 51: return '\x0f'; // bunny egg
+        case 52: return '\x10'; // game blocks
+        case 53: return '\x11'; // game generator
+        case 55: return '\x13'; // phone booth
+        case 56: return '\x14'; // crystal
+        case 57: return '\x15'; // crime in progress
+        case 59: return '\x16'; // spotlight
+        case 63: return '\x19'; // fish tank port
+        case 65: return '\x1a'; // solar collector
+        case 66: return '\x1b'; // forge
+        case 67: return '\x1c'; // giving tree
+        case 68: return '\x1d'; // giving tree stump
+        case 71: return '\x1e'; // steam organ
+        case 72: return '\x1f'; // silkworm
+        case 73: return '\x20'; // sewing machine
+        case 74: case 86: return '\x21'; // country flag, challenge flags
+        case 75: return '\x22'; // lobster trap
+        case 76: return '\x23'; // painting easel
+        case 77: return '\x24'; // battle pet cage
+        case 78: return '\x25'; // pet trainer
+        case 79: return '\x26'; // steam engine
+        case 80: return '\x27'; // lock-bot
+        case 81: return '\x28'; // weather machine (one setting)
+        case 82: return '\x29'; // spirit storage unit
+        case 83: return '\x2b'; // display shelf
+        case 84: return '\x2c'; // VIP entrance
+        case 85: return '\x2d'; // challenge timer
+        case 87: return '\x2f'; // fish wall mount
+        case 88: return '\x30'; // portrait
+        case 89: return '\x31'; // weather machine (several settings)
+        case 91: return '\x32'; // fossil prep station
+        case 92: return '\x33'; // DNA processor
+        case 93: return '\x34'; // howler, trickster
+        case 96: return '\x35'; // chemsynth tank
+        case 98: return '\x37'; // oven
+        case 99: return '\x38'; // audio rack
+        case 100: return '\x39'; // geiger charger
+        case 101: return '\x3a'; // the adventure begins
+        case 102: return '\x3b'; // tomb robber
+        case 103: case 104: case 105: case 106: return '\x3c'; // balloon-o-matic, team entrances
+        case 109: return '\x3d'; // training port
+        case 111: return '\x3e'; // MAGPLANT 5000, gaia's beacon, unstable tesseract
+        case 113: return '\x3f'; // robots
+        case 115: return '\x40'; // lucky token
+        case 116: return '\x42'; // growscan 9000
+        case 117: return '\x43'; // containment field power node
+        case 118: return '\x44'; // spirit board
+        case 123: return '\x45'; // tesseract manipulator
+        case 124: return '\x46'; // heart of gaia
+        case 125: return '\x47'; // techno-organic engine
+        case 126: return '\x48'; // storm cloud
+        case 127: return '\x49'; // phased blocks
+        case 130: return '\x4a'; // safe vault
+        case 131: return '\x4b'; // angelic counting cloud
+        case 134: return '\x4d'; // infinity weather machine
+        case 137: return '\x4e'; // completionist
+        case 140: return '\x4f'; // pineapple guzzler
+        case 141: return '\x50'; // kranken's blocks
+        case 142: return '\x51'; // friends entrance
     }
     return '\x00';
 }
@@ -84,6 +157,64 @@ void block::reset()
     blob.u8(this->fruit);
 
     return blob;
+}
+
+/*
+* @brief the empty data of a block this server doesn't run yet, exactly as long as the game reads it for a world of version 0.
+* fields that only exist in newer world versions are left out. source: gtps-guide guide/tile-extras.md
+*/
+static void write_default_extra(::blob &blob, char type, const ::item &item)
+{
+    auto str = [&blob]() { blob.i16(0); }; // @note u16 length 0
+    auto u32 = [&blob](u_int v = 0) { blob.u32(v); };
+    auto u8  = [&blob](u_char v = 0) { blob.u8(v); };
+    switch (type)
+    {
+        case '\x06': case '\x07': case '\x0c': str(); str(); str(); u8(); break; // three strings + flag
+        case '\x0a': u32(); u8(0x7f); break;
+        case '\x0b': u32(); str(); break;
+        case '\x0e': str(); u8(); u32(); for (int i = 0; i < 9; ++i) blob.i16(0); break; // label, flag, value, 9 clothes
+        case '\x0f': case '\x1b': case '\x26': case '\x27': case '\x29': case '\x32': case '\x39': case '\x49': case '\x4e': case '\x4f': u32(); break;
+        case '\x10': u8(4); break; // @note 4: no team
+        case '\x13': for (int i = 0; i < 9; ++i) blob.i16(0); break; // @note read and thrown away
+        case '\x14': str(); break;
+        case '\x15': str(); u32(); u8(); break;
+        case '\x19': u8(); u32(0); break; // @note 0 fish
+        case '\x1a': u8(0x18); u32(); break;
+        case '\x1c': u8(); u32(); u8(); break;
+        case '\x1e': u8(); u32(); break;
+        case '\x1f': u8(); str(); u32(); u32(); u32(); u8(); u32(21600); u32(21600); u32(0xffffffff); u32(); break; // @note fed and watered
+        case '\x20': u32(0); break; // @note empty project
+        case '\x21': if (item.id == 3394/*Country Flag*/) str(); break;
+        case '\x23': u32(); str(); break;
+        case '\x24': str(); u32(); u32(); u32(); break;
+        case '\x25': str(); u32(0); u32(); break; // @note name, 0 pets, age
+        case '\x28': u32(0x4080ff00); break;
+        case '\x2b': u32(); u32(); u32(); u32(); break;
+        case '\x2c': u8(); u32(); u32(0); break; // @note flags, owner, 0 user ids
+        case '\x2f': str(); u32(); u8(); break;
+        case '\x30': str(); u32(); u32(); u32(); u32(); blob.i16(0); blob.i16(0); blob.i16(0); break; // @note value 0: no portrait drawn
+        case '\x31': u32(2); u32(50); u8(); break;
+        case '\x35': u32(); u32(); break;
+        case '\x37': u32(); u32(0); u32(); break; // @note heat off, no ingredients, timer
+        case '\x38': str(); u32(); break;
+        case '\x3c': u32(); u8(static_cast<u_char>(std::clamp(static_cast<int>(item.type) - 103, 0, 3))); break;
+        case '\x3d': u32(); u8(); u8(); for (int i = 0; i < 7; ++i) u32(); u8(); break;
+        case '\x3e': u32(); u32(); u8(); u8(); u32(); break;
+        case '\x3f': u32(0); u32(); u32(); break; // @note no commands
+        case '\x40': str(); break;
+        case '\x42': u8(); break;
+        case '\x43': u32(); u32(0); break;
+        case '\x44': u32(); str(); str(); u32(0); break;
+        case '\x45': case '\x46': u32(); u32(); u32(); break; // @note the "on" u32 is only read for world version > 7
+        case '\x47': u32(); u32(); u32(); u32(); u32(); u8(); u8(); u32(); u32(); break;
+        case '\x48': u32(0); u32(1); u32(0); break;
+        case '\x4b': u32(); str(); break;
+        case '\x4d': u32(); u32(0); break;
+        case '\x50': u32(); u32(0xffffffff); break;
+        case '\x51': u32(0); u32(1); break;
+        default: break; // @note 0x11, 0x16, 0x1d, 0x22, 0x2d, 0x33, 0x34, 0x3a, 0x3b, 0x4a: the game reads no bytes from a server
+    }
 }
 
 ::blob world::tile_blob(int i)
@@ -178,7 +309,9 @@ void block::reset()
         }
         case '\x09': /* provider: seconds since it was last collected */
         {
-            blob.u32(static_cast<u_int>(item.tick)); // @note always ready
+            auto prov = std::ranges::find(this->providers, block_pos, &::provider::pos);
+            blob.u32((prov != this->providers.end()) ? ticks() - prov->tick : static_cast<u_int>(item.tick)); // @note one placed before timers is ready
+            if (block.fg == 5318/*Winterfest Calendar - 2017*/) blob.u32(0); // @note the game reads one more u32 for this one
             break;
         }
         case '\x12': /* xenonite crystal: u8 + u32 (gtps-guide tile-extras 0x12). the powers are applied by the server, so both stay 0 */
@@ -206,6 +339,7 @@ void block::reset()
             blob.i16(0);
             break;
         }
+        default: write_default_extra(blob, type, item); break;
     }
     return blob;
 }
@@ -495,7 +629,7 @@ namespace
         for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
         return true;
     }
-    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6 };
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7 };
 }
 
 /* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
@@ -534,6 +668,11 @@ namespace
     {
         blob.u8(EX_DISPLAY); blob.i16(display.pos.x_int()); blob.i16(display.pos.y_int());
         blob.u32(display.id);
+    }
+    for (const ::provider &prov : this->providers)
+    {
+        blob.u8(EX_PROVIDER); blob.i16(prov.pos.x_int()); blob.i16(prov.pos.y_int());
+        blob.u32(prov.tick);
     }
     if (this->xenonite != 0)
     {
@@ -613,6 +752,13 @@ void world::load_extras(::blob &blob)
                 u_int id{};
                 if (!blob.read_u32(id, pos)) return;
                 this->displays.emplace_back(id, tile);
+                break;
+            }
+            case EX_PROVIDER:
+            {
+                ::provider prov{.pos = tile};
+                if (!blob.read_u32(prov.tick, pos)) return;
+                this->providers.push_back(prov);
                 break;
             }
             case EX_XENONITE:

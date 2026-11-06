@@ -3,6 +3,7 @@
 #include "popup.hpp"
 #include "action/trade.hpp"
 #include "friends.hpp"
+#include "daily_quest.hpp"
 #include <unordered_map>
 
 static const std::unordered_map<std::string, std::string> rml_pages{
@@ -91,6 +92,10 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
             if (other == nullptr && pOthers->netid == netid && p != event.peer) other = p;
         });
         if (other != nullptr) trade::request(event, other);
+    }
+    else if (hPipe["buttonClicked"] == "goals") // @note the "Goals & Quests" button in the wrench menu
+    {
+        show_daily_quest(event);
     }
     else if (hPipe["buttonClicked"] == "friend_add")
     {
