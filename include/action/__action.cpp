@@ -32,6 +32,9 @@
 #include "worldlock_storage_getpage.hpp"
 #include "worldlock_storage_modify_amount.hpp"
 
+#include "mailbox.hpp"
+#include "event_buttons.hpp"
+
 #include "quit.hpp"
 
 #include "__action.hpp"
@@ -70,6 +73,15 @@ std::unordered_map<std::string, std::function<void(ENetEvent&, const std::string
 
     {"action|worldlock_storage_getpage", std::bind(&action::worldlock_storage_getpage, std::placeholders::_1, std::placeholders::_2)},
     {"action|worldlock_storage_modify_amount", std::bind(&action::worldlock_storage_modify_amount, std::placeholders::_1, std::placeholders::_2)},
+
+    /* @note the buttons on the left of the world screen */
+    {"action|openPiggyBank", std::bind(&action::openPiggyBank, std::placeholders::_1, std::placeholders::_2)},
+    {"action|dailychallengemenu", std::bind(&action::dailychallengemenu, std::placeholders::_1, std::placeholders::_2)},
+    {"action|show_mailbox_ui", std::bind(&action::show_mailbox_ui, std::placeholders::_1, std::placeholders::_2)},
+    {"action|mailbox_getpage", std::bind(&action::mailbox_getpage, std::placeholders::_1, std::placeholders::_2)},
+    {"action|mailbox_readmessage", std::bind(&action::mailbox_readmessage, std::placeholders::_1, std::placeholders::_2)},
+    {"action|mailbox_claimreward", std::bind(&action::mailbox_claimreward, std::placeholders::_1, std::placeholders::_2)},
+    {"action|mailbox_claimrewardsmany", std::bind(&action::mailbox_claimrewardsmany, std::placeholders::_1, std::placeholders::_2)},
 
     {"action|quit", std::bind(&action::quit, std::placeholders::_1, std::placeholders::_2)}
 };

@@ -21,6 +21,7 @@
 #include "tile_extras.hpp"
 #include "wrenchables.hpp"
 #include "action/fishing.hpp"
+#include "action/event_buttons.hpp"
 
 #include "__dialog_return.hpp"
 
@@ -45,6 +46,7 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
     {"socialportal", std::bind(&socialportal, std::placeholders::_1, std::placeholders::_2)},
     {"friends", std::bind(&friends, std::placeholders::_1, std::placeholders::_2)},
     {"daily_quest", std::bind(&daily_quest, std::placeholders::_1, std::placeholders::_2)},
+    {"piggy_bank", std::bind(&piggy_bank, std::placeholders::_1, std::placeholders::_2)},
     {"friend_edit", std::bind(&friend_edit, std::placeholders::_1, std::placeholders::_2)},
     {"megaphone", std::bind(&megaphone, std::placeholders::_1, std::placeholders::_2)},
 
