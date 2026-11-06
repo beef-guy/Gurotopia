@@ -24,6 +24,11 @@ namespace
             if (size < 16) out += static_cast<char>(0x90 | size);
             else { out += static_cast<char>(0xdc); out += static_cast<char>((size >> 8) & 0xff); out += static_cast<char>(size & 0xff); }
         }
+        void map(std::size_t size)
+        {
+            if (size < 16) out += static_cast<char>(0x80 | size);
+            else { out += static_cast<char>(0xde); out += static_cast<char>((size >> 8) & 0xff); out += static_cast<char>(size & 0xff); }
+        }
         void integer(long long value)
         {
             if (value >= 0 && value < 128) { out += static_cast<char>(value); return; }
@@ -47,15 +52,39 @@ namespace
         }
     };
 
-    std::string rewards_json(const ::mail_row &row)
+    /* @note one reward list, written the way `mail_rewards` (1-8) says. see /mailrewards */
+    std::string rewards_text(const ::mail_row &row, int format)
     {
-        std::string json = "{";
+        std::string out{};
         for (const auto &[id, count] : row.rewards)
         {
-            if (json.size() > 1) json += ',';
-            json += std::format("\"{}\":{}", id, count);
+            if (!out.empty()) out += ',';
+            switch (format)
+            {
+                case 2:  out += std::format("{}:{}", id, count); break;
+                case 3:  out += std::format("{{\"itemID\":{},\"count\":{}}}", id, count); break;
+                case 4:  out += std::format("{{\"id\":{},\"count\":{}}}", id, count); break;
+                case 5:  out += std::format("[{},{}]", id, count); break;
+                case 8:  out += std::format("{{\"ItemId\":{},\"Count\":{}}}", id, count); break;
+                default: out += std::format("\"{}\":{}", id, count); break;
+            }
         }
-        return json + "}";
+        return ((format >= 3 && format <= 5) || format == 8) ? "[" + out + "]" : "{" + out + "}";
+    }
+
+    void pack_rewards(msgpack &pack, const ::mail_row &row)
+    {
+        if (mail_rewards == 6 || mail_rewards == 7) // @note a MessagePack map instead of JSON text
+        {
+            pack.map(row.rewards.size());
+            for (const auto &[id, count] : row.rewards)
+            {
+                if (mail_rewards == 6) pack.integer(id); else pack.string(std::to_string(id));
+                pack.integer(count);
+            }
+            return;
+        }
+        pack.string(rewards_text(row, mail_rewards));
     }
 
     /*
@@ -85,7 +114,7 @@ namespace
         pack.string(row.title);
         pack.string(row.body.substr(0, 60)); // @note the short text in the list
         pack.string(row.body);
-        pack.string(rewards_json(row));
+        pack_rewards(pack, row);
         pack.integer(value(3));
         pack.integer(value(4));
         pack.integer(value(5));

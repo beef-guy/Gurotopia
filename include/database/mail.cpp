@@ -9,7 +9,8 @@
 
 #include "mail.hpp"
 
-std::string mail_layout = "id,status,icon,0,expires,0"; // @note spots 0, 1, 2, 7, 8, 9 of a packed mail
+std::string mail_layout = "id,icon,icon,status,expires,status";
+int mail_rewards = 1; // @note spots 0, 1, 2, 7, 8, 9 of a packed mail
 
 namespace
 {

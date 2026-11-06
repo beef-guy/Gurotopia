@@ -39,3 +39,5 @@ extern std::string mail_button_json(int unread);
 
 /* @note the owner can switch how a mail is packed for the client with /maillayout (see mail.cpp) */
 extern std::string mail_layout;
+/* @note how the rewards of a mail are written (1-8), changed with /mailrewards while we find the client format */
+extern int mail_rewards;

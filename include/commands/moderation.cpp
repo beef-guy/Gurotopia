@@ -497,8 +497,18 @@ void maillayout(ENetEvent& event, const std::string_view text)
 {
     const std::vector<std::string> list = words(text);
     if (list.empty())
-        return reply(event, std::format("Mail layout: `w{}``. Usage: /maillayout <six names from id, status, icon, expires, left or a number, comma separated>. Default: id,status,icon,0,expires,0", mail_layout));
+        return reply(event, std::format("Mail layout: `w{}``. Usage: /maillayout <six names from id, status, icon, expires, left or a number, comma separated>. Default: id,icon,icon,status,expires,status", mail_layout));
     if (readch(list[0], ',').size() != 6ull) return reply(event, "`4Give exactly six names, comma separated.``");
     mail_layout = list[0];
     reply(event, std::format("`2Mail layout is now {}.`` Close and open your mailbox to see it.", mail_layout));
+}
+
+void mailrewards(ENetEvent& event, const std::string_view text)
+{
+    const std::vector<std::string> list = words(text);
+    const int format = list.empty() ? 0 : atoi(list[0].c_str());
+    if (format < 1 || format > 8)
+        return reply(event, std::format("Mail reward format: `w{}``. Usage: /mailrewards <1-8>", mail_rewards));
+    mail_rewards = format;
+    reply(event, std::format("`2Mail reward format is now {}.`` Close and open your mailbox to see it.", format));
 }
