@@ -108,7 +108,12 @@ void https::listener()
 #endif
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
+    if (inet_pton(AF_INET, gServer_data.https_bind.c_str(), &addr.sin_addr) != 1)
+    {
+        print(std::format("--https-bind {} is not an IPv4 address, this server won't answer logins.", gServer_data.https_bind));
+        cross_close(socket);
+        return;
+    }
     addr.sin_port = htons(gServer_data.https_port);
     socklen_t addrlen = sizeof(addr);
 
@@ -149,7 +154,7 @@ void https::listener()
         cross_close(socket);
         return;
     }
-    else print(std::format("listening on {}:{}", gServer_data.server, gServer_data.port));
+    else print(std::format("answering logins (https) on {}:{}, game on udp port {}", gServer_data.https_bind, gServer_data.https_port, gServer_data.port));
     
     while (true)
     {

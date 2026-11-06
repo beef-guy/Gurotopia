@@ -58,6 +58,7 @@ static void print_help()
         "  --mysql-login FILE  MariaDB login file (default: mysql_login.txt)\n"
         "  --max-players N     most players online at once (default: 50)\n"
         "  --https-port N      port for the game's login request (default: 443)\n"
+        "  --https-bind IP     address the login listener binds to (default: 0.0.0.0, every address)\n"
         "  --no-https          don't answer the login request. use for a 2nd server on the same PC\n"
         "  --owner NAME        this account is always a developer (staff commands, /find, /give)\n"
         "  --sandbox           let every player use /find (a creative server)\n"
@@ -158,6 +159,7 @@ static bool parse_options(int argc, char *argv[])
             if (value.empty() || value.size() > 18 || !isalnum(value)) { print("--owner must be a GrowID: letters and digits, at most 18"); return false; }
             gServer_data.owner = value;
         }
+        else if (option == "--https-bind") gServer_data.https_bind = value;
         else if (option == "--server-data") gServer_data.config_file = value;
         else if (option == "--mysql-login") db.login_file = value;
         else if (option == "--textures") render::texture_folder = value;
