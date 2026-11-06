@@ -32,6 +32,7 @@
 
 #include "tile_change.hpp"
 
+#include "action/transform.hpp"
 #include <algorithm>
 #include <cmath>
 #include <ctime>
@@ -614,6 +615,12 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
             {
                 if (gamePacket.punch != pPeer->pos.by_32(true)) throw std::runtime_error("Use this on yourself!");
                 elemental_stone_use(event, static_cast<short>(item.id));
+                return;
+            }
+            if (item.id == 7480 || item.id == 10456 || item.id == 10620) // @note Growformer PowerKey, Mystic Transform Crystal, Magical Captain's Compass
+            {
+                if (gamePacket.punch != pPeer->pos.by_32(true)) throw std::runtime_error("Use this on yourself!");
+                transform_consumable(event, static_cast<short>(item.id));
                 return;
             }
             if (item.id == ROYAL_GROW_PASS_TOKEN || is_growmoji_item(static_cast<short>(item.id)))

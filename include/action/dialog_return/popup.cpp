@@ -8,6 +8,7 @@
 #include "onVariant/ConsoleMessage.hpp"
 #include "tools/create_dialog.hpp"
 #include "action/carnival.hpp"
+#include "action/transform.hpp"
 #include <algorithm>
 #include <unordered_map>
 
@@ -36,6 +37,8 @@ static const std::unordered_map<std::string, std::string> rml_pages{
 void popup(ENetEvent& event, const ::hPipe &hPipe)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+
+    if (transform_button_clicked(event, hPipe["buttonClicked"])) return; // @note the Transform buttons of the self wrench menu
 
     if (hPipe["buttonClicked"] == "my_worlds")
     {

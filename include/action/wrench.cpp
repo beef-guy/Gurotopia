@@ -3,6 +3,7 @@
 #include "tools/create_dialog.hpp"
 #include "database/playmods.hpp"
 #include "action/radiation.hpp"
+#include "action/transform.hpp"
 
 #include "wrench.hpp"
 
@@ -56,6 +57,7 @@ void action::wrench(ENetEvent& event, const std::string& header)
                             .add_custom_button("pets", "image:interface/large/gui_wrench_battle_pets.rttex;image_size:400,260;width:0.19;")
                             .add_custom_button("wrench_customization", "image:interface/large/gui_wrench_customization.rttex;image_size:400,260;width:0.19;")
                             .add_custom_button("open_worldlock_storage", "image:interface/large/gui_wrench_auction.rttex;image_size:400,260;width:0.19;")
+                            .add_raw(transform_buttons(*pOthers)) // @note Space Badger, Mask of The Dragon... "Transform"
                             .add_custom_break()
                             .add_spacer("small")
                             .set_custom_spacing(0, 0) // @todo research why rgt adds this too. is 0, 0 unaffecting? or is this resetting the previous 5, 10 spacing

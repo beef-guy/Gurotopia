@@ -4,6 +4,7 @@
 #include "commands/punch.hpp"
 #include "onVariant/ConsoleMessage.hpp"
 #include "database/playmods.hpp"
+#include "action/transform.hpp"
 
 #include "item_activate.hpp"
 
@@ -34,6 +35,7 @@ void item_activate(ENetEvent& event, ::gamePacket gamePacket)
 
         send_varlist(event.peer, { "OnEquipNewItem", gamePacket.id }, pPeer->netid);
         on::SetClothing(event.peer, true);
+        transform_clothes_changed(event, was_wearing, static_cast<u_short>(current_cloth)); // @note took a transform item off, Diamond Horn flavours
     }
     else 
     {
