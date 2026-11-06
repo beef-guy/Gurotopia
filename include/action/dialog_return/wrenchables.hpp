@@ -38,4 +38,6 @@ extern void weather_edit(ENetEvent &event, const ::hPipe &hPipe);
 
 /* @brief MAGPLANT 5000, Gaia's Beacon, Unstable Tesseract: pick an item, add or take stock, collection, remote */
 extern void magplant_wrench(ENetEvent &event, ::world &world, const ::pos &pos);
+/* @brief give this player the MAGPLANT 5000 Remote, linked to the machine at pos */
+extern void magplant_give_remote(ENetEvent &event, ::world &world, const ::pos &pos);
 extern void magplant_edit(ENetEvent &event, const ::hPipe &hPipe);

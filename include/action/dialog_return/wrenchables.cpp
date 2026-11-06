@@ -876,7 +876,7 @@ void weather_edit(ENetEvent &event, const ::hPipe &hPipe)
     if (!hPipe["weather_item"].empty()) weather_wrench(event, *world, pos); // @note an item was picked: show what it's set to now
 }
 
-/* ---------------- ID_MAGPLANT 5000, Gaia's Beacon, Unstable Tesseract ---------------- */
+/* ---------------- MAGPLANT 5000, Gaia's Beacon, Unstable Tesseract ---------------- */
 /* @note texts and rules from github.com/cppdecl/Nomikai (BlockWrenchListener.hh, DialogCloseListener.hh "Magplant") */
 
 namespace
@@ -911,6 +911,21 @@ namespace
         if (machine == ID_GAIAS_BEACON && item.type != type::SEED) return "This item is not compatible with this machine.";
         return "";
     }
+}
+
+void magplant_give_remote(ENetEvent &event, ::world &world, const ::pos &pos)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    auto mag = std::ranges::find(world.magplants, pos, &::magplant::pos);
+    if (mag == world.magplants.end() || mag->item == 0) return;
+    if (const int old = pPeer->have_slot(::slot(ID_MAGPLANT_REMOTE, 0)); old > 0) modify_item_inventory(event, ::slot(ID_MAGPLANT_REMOTE, static_cast<short>(-old)));
+    if (!pPeer->can_hold(ID_MAGPLANT_REMOTE, 1)) throw std::runtime_error("You don't have room in your backpack!");
+    modify_item_inventory(event, ::slot(ID_MAGPLANT_REMOTE, 1));
+    pPeer->magplant = pos;
+    pPeer->magplant_world = world.name;
+    send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`wYou received a `2Magplant `wRemote!", 0u, 1u });
+    send_varlist(event.peer, { "OnPlanterActivated", static_cast<int>(mag->item), pos.x_int(), pos.y_int() });
+    pPeer->mysql_update_all();
 }
 
 void magplant_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
@@ -951,7 +966,7 @@ void magplant_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
         dialog.add_label("small", std::format("Building Mode: {}", mag.remote ? "ACTIVE" : "`6DISABLED"));
         if (owner || (mag.remote && !linked))
             dialog.add_label("small", mag.remote ? 
-                std::format("Use the ID_MAGPLANT 5000 Remote to build `2{}`` directly from the ID_MAGPLANT 5000's storage.", name) : "Punch to activate building mode.");
+                std::format("Use the MAGPLANT 5000 Remote to build `2{}`` directly from the MAGPLANT 5000's storage.", name) : "Punch to activate building mode.");
         dialog.add_spacer("small");
         if (!linked && mag.remote) dialog.add_button("GetRemote", "Get Remote");
     }
@@ -979,13 +994,7 @@ void magplant_edit(ENetEvent &event, const ::hPipe &hPipe)
     if (button == "GetRemote")
     {
         if (machine.id != ID_MAGPLANT || mag.item == 0 || !mag.remote) return;
-        if (const int old = pPeer->have_slot(::slot(ID_MAGPLANT_REMOTE, 0)); old > 0) modify_item_inventory(event, ::slot(ID_MAGPLANT_REMOTE, static_cast<short>(-old)));
-        if (!pPeer->can_hold(ID_MAGPLANT_REMOTE, 1)) throw std::runtime_error("You don't have room in your backpack!");
-        modify_item_inventory(event, ::slot(ID_MAGPLANT_REMOTE, 1));
-        pPeer->magplant = pos;
-        pPeer->magplant_world = world->name;
-        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`wYou received a `2Magplant `wRemote!", 0u, 1u });
-        send_varlist(event.peer, { "OnPlanterActivated", static_cast<int>(mag.item), pos.x_int(), pos.y_int() });
+        magplant_give_remote(event, *world, pos);
         pPeer->mysql_update_all();
         return;
     }
