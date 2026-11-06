@@ -26,9 +26,7 @@ void lock_edit(ENetEvent& event, const ::hPipe &hPipe)
         if (lock == nullptr || (!pPeer->owns(lock->owner) && pPeer->role < MODERATOR)) return;
 
         lock->is_public = atoi(hPipe["checkbox_public"].c_str());
-        if (lock->is_public) // @note the client draws a public lock's border yellow instead of green
-             world->blocks[cord(pos.x, pos.y)].state[2] |= S_PUBLIC;
-        else world->blocks[cord(pos.x, pos.y)].state[2] &= ~S_PUBLIC;
+        world->blocks[cord(pos.x, pos.y)].state[2] &= ~S_PUBLIC; // @note the game crashes on an area lock tile flagged public
         const bool ignore_air = atoi(hPipe["checkbox_ignore"].c_str());
         if (fg == 4994/*Builder's Lock*/)
             lock->builder_mode = atoi(hPipe["checkbox_buildonly"].c_str()) ? 1 : atoi(hPipe["checkbox_breakonly"].c_str()) ? 2 : 0;
