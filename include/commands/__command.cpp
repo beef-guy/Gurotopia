@@ -20,6 +20,7 @@
 #include "action/growpass.hpp"
 #include "action/radiation.hpp"
 #include "action/carnival.hpp"
+#include "action/transform.hpp"
 #include "world_io.hpp"
 #include "https/server_data.hpp"
 
@@ -68,6 +69,8 @@ const std::unordered_map<std::string_view, ::cmd_entry> cmd_pool
 
     /* @note staff */
     {"/ghost", {ghost, MODERATOR}},
+    {"/transformflag", {transform_flag_command, DEVELOPER}}, // @note test an OnFlagMay2019 transform bit on yourself
+    {"/transformscan", {transform_scan_command, DEVELOPER}}, // @note try every transform bit, 3 seconds each
     {"/kick", {kick, MODERATOR}},
     {"/ban", {ban, MODERATOR}},
     {"/unban", {unban, MODERATOR}},

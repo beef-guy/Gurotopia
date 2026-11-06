@@ -15,6 +15,7 @@
 #include "include/action/fishing.hpp"
 #include "include/action/automation.hpp"
 #include "include/action/radiation.hpp"
+#include "include/action/transform.hpp"
 #include "include/action/fossils.hpp"
 #include "include/action/special_items.hpp"
 #include "include/action/carnival.hpp"
@@ -264,6 +265,7 @@ int main(int argc, char *argv[])
         fishing_tick(); // @note fish bites
         automation_tick(); // @note Tesseract Manipulator, Heart of Gaia, Techno-Organic Engine
         radiation_tick(); // @note Geiger Counters, the Irradiated mod, the Great Chameleon
+        transform_tick(); // @note /transformscan
         fossil_tick(); // @note rocks in busy worlds turn into Fossil Rocks
         special_tick(); // @note Freeze and Curse Wands wearing off, Challenge Timers, Game Generator games
         carnival_tick(); // @note Carnival games: timers, targets, platforms

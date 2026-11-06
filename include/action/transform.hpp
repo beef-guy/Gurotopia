@@ -3,8 +3,8 @@
 /*
 * @brief transform items: wear one, wrench yourself and press its Transform button (or use its key/crystal/compass on yourself),
 *        and the game client switches the item to its "transformed" look (Space Badger, Mask of The Dragon, Go-Go-Growformer!...).
-* @note the client does the drawing itself: the server only sends OnSetItemTransform(item id) / OnClearItemTransforms
-*       for that player (from the 5.60 client: NetAvatar::OnSetItemTransform asks the item's behaviour to transform).
+* @note the client does the drawing itself. the server sends OnFlagMay2019 (256 | one bit per transform family: space animals 1 << 18,
+*       dragon mask 1 << 19, Star Trek 1 << 21...), plus OnSetItemTransform(item id) / OnClearItemTransforms for newer items.
 * @note the buttons are the ones in the game folder: interface/large/gui_wrench_*transform*.rttex and friends.
 */
 
@@ -22,3 +22,12 @@ extern void transform_clothes_changed(ENetEvent &event, u_short was_wearing, u_s
 
 /* @brief this player just entered a world: show them everyone's transform, and show theirs to everyone */
 extern void transform_entered(ENetEvent &event);
+
+/* @brief /transformflag <bit> (developers): force OnFlagMay2019 = 256 | 1 << bit on yourself. "/transformflag off" to stop */
+extern void transform_flag_command(ENetEvent &event, const std::string_view text);
+
+/* @brief /transformscan (developers): try every flag bit on yourself, one every 3 seconds, to find an item's transform */
+extern void transform_scan_command(ENetEvent &event, const std::string_view text);
+
+/* @brief runs /transformscan. call often */
+extern void transform_tick();

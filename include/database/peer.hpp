@@ -153,6 +153,8 @@ public:
     bool disguised{};             // @note the Great Chameleon blended them into a block
     long long disguise_ended{};   // @note ms: when the disguise last ended
     u_short transformed{};        // @note action/transform.cpp: the worn item showing its transformed look (0 = none)
+    int flag_test{-1};            // @note /transformflag, /transformscan: forced OnFlagMay2019 bit (-1 = off)
+    long long flag_scan_next{};   // @note ms: when /transformscan tries the next bit (0 = not scanning)
     /* @note the Carnival (action/carnival.cpp): Golden Ticket Booth credit, games won and the Ringmaster's quest (saved as one column) */
     struct carnival_data
     {
