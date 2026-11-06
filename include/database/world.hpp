@@ -166,6 +166,13 @@ struct vending
     int earned{}; // @note World Locks waiting for the owner
 };
 
+/* @brief when a provider (Cow, Chicken, ATM, Science Station...) was last collected */
+struct provider
+{
+    ::pos pos{};
+    u_int tick{}; // @note ticks() when placed or last collected
+};
+
 /* @brief Storage Box Xtreme contents */
 struct storage
 {
@@ -214,6 +221,7 @@ public:
     std::vector<::vending> vendings{};
     std::vector<::storage> storages{};
     std::vector<::display> displays{};
+    std::vector<::provider> providers{};
     u_int xenonite{}; // @note the Xenonite Crystal's settings (xenonite:: in playmods.hpp). only one crystal per world
 
     /* @return the area lock that covers this tile, or nullptr */

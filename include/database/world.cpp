@@ -309,7 +309,9 @@ static void write_default_extra(::blob &blob, char type, const ::item &item)
         }
         case '\x09': /* provider: seconds since it was last collected */
         {
-            blob.u32(static_cast<u_int>(item.tick)); // @note always ready
+            auto prov = std::ranges::find(this->providers, block_pos, &::provider::pos);
+            blob.u32((prov != this->providers.end()) ? ticks() - prov->tick : static_cast<u_int>(item.tick)); // @note one placed before timers is ready
+            if (block.fg == 5318/*Winterfest Calendar - 2017*/) blob.u32(0); // @note the game reads one more u32 for this one
             break;
         }
         case '\x12': /* xenonite crystal: u8 + u32 (gtps-guide tile-extras 0x12). the powers are applied by the server, so both stay 0 */
@@ -627,7 +629,7 @@ namespace
         for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
         return true;
     }
-    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6 };
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7 };
 }
 
 /* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
@@ -666,6 +668,11 @@ namespace
     {
         blob.u8(EX_DISPLAY); blob.i16(display.pos.x_int()); blob.i16(display.pos.y_int());
         blob.u32(display.id);
+    }
+    for (const ::provider &prov : this->providers)
+    {
+        blob.u8(EX_PROVIDER); blob.i16(prov.pos.x_int()); blob.i16(prov.pos.y_int());
+        blob.u32(prov.tick);
     }
     if (this->xenonite != 0)
     {
@@ -745,6 +752,13 @@ void world::load_extras(::blob &blob)
                 u_int id{};
                 if (!blob.read_u32(id, pos)) return;
                 this->displays.emplace_back(id, tile);
+                break;
+            }
+            case EX_PROVIDER:
+            {
+                ::provider prov{.pos = tile};
+                if (!blob.read_u32(prov.tick, pos)) return;
+                this->providers.push_back(prov);
                 break;
             }
             case EX_XENONITE:

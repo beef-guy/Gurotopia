@@ -16,6 +16,7 @@
 #include "create_blast.hpp"
 #include "socialportal.hpp"
 #include "friends.hpp"
+#include "daily_quest.hpp"
 #include "megaphone.hpp"
 #include "tile_extras.hpp"
 
@@ -41,6 +42,7 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
     {"create_blast", std::bind(&create_blast, std::placeholders::_1, std::placeholders::_2)},
     {"socialportal", std::bind(&socialportal, std::placeholders::_1, std::placeholders::_2)},
     {"friends", std::bind(&friends, std::placeholders::_1, std::placeholders::_2)},
+    {"daily_quest", std::bind(&daily_quest, std::placeholders::_1, std::placeholders::_2)},
     {"friend_edit", std::bind(&friend_edit, std::placeholders::_1, std::placeholders::_2)},
     {"megaphone", std::bind(&megaphone, std::placeholders::_1, std::placeholders::_2)},
 

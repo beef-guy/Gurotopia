@@ -71,6 +71,7 @@ void mysql_gateway::integrity()
     if (!column_found("world", "access"))      alter_table("world", "access VARCHAR(512) DEFAULT ''"); // @note user ids, comma separated
     if (!column_found("world", "min_level"))   alter_table("world", "min_level INT DEFAULT 1");
     if (!column_found("world", "extras"))      alter_table("world", "extras MEDIUMBLOB"); // @note door targets, area locks, vending machines, storage boxes
+    if (!column_found("peer", "daily_quest"))  alter_table("peer", "daily_quest INT DEFAULT 0"); // @note day (yyyymmdd) the daily quest was last done
     if (!column_found("peer", "playtime"))     alter_table("peer", "playtime BIGINT DEFAULT 0"); // @note seconds played
 
     /* @note moderation: IP bans and a log of every staff action */
