@@ -156,6 +156,7 @@ public:
     std::vector<int> ignored{}; // @note user ids this player ignores (Ignore Player): their chat and messages are hidden. until log off
     std::vector<int> friend_requests{}; // @note user ids who asked to be friends this session
     u_char punch_range{}, build_range{}; // @note extra reach in tiles from clothing (set in on::SetClothing)
+    u_short mods{}; // @note clothing powers (mod:: in playmods.hpp), set in on::SetClothing
     u_char punch_effect{}; // @note last equipped clothing that has a effect. supporting 0-255 effects.
 
     int netid{}; // @note peer's netid is world identity. this will be useful for many packet sending

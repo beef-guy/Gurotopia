@@ -29,6 +29,7 @@ void on::SetClothing(ENetPeer *peer, bool sound)
     const ::cloth_effects fx = get_cloth_effects(pPeer->clothing, xenonite);
     pPeer->punch_range = fx.punch_range;
     pPeer->build_range = fx.build_range;
+    pPeer->mods = fx.mods;
 
     ::gamePacket gamePacket {
         /* @note 0x14 PACKET_SET_CHARACTER_STATE. byte 1: punch effect, byte 2: 0x80 + extra build range, byte 3: 0x80 + extra punch (Fist) range */
