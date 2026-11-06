@@ -4,6 +4,7 @@
 #include "tools/create_dialog.hpp"
 #include "tools/sound.hpp"
 #include "daily_quest.hpp"
+#include "commands/weather.hpp"
 
 #include "wrenchables.hpp"
 
@@ -220,6 +221,7 @@ void telephone(ENetEvent &event, const ::hPipe &hPipe)
         on::ConsoleMessage(event.peer, message);
         play_in_world(world->name, pPeer->netid, "audio/piano_nice.wav");
         pPeer->mysql_update_all();
+        sales_bgl(event, pos); // @note straight back, so another 100 can be converted with one more tap
     }
     else if (button.empty() || button == "Dial") // @note the Dial button
     {
@@ -478,6 +480,28 @@ namespace
     }
 }
 
+void donation_offer(ENetEvent &event, ::world &world, const ::pos &pos, short id)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    if (pPeer->have_slot(::slot(id, 0)) <= 0) return;
+    if (const std::string problem = gift_problem(*pPeer, world, pos, id); !problem.empty()) throw std::runtime_error(problem);
+    const ::item &item = id_to_item(id);
+    ::create_dialog dialog = ::create_dialog()
+        .set_default_color("`o")
+        .add_label_with_icon("big", std::format("`w{}``", item.raw_name), item.id)
+        .add_textbox("How many to put in the box as a gift? (Note: You will `4LOSE`` the items you give!)")
+        .add_text_input("count", "Count:", static_cast<short>(pPeer->have_slot(::slot(id, 0))), 3)
+        .add_text_input("note", "Optional Note:", "", 128)
+        .add_spacer("small")
+        .add_button("give", "`4Give the item(s)``")
+        .add_spacer("small")
+        .add_button("cancel", "`wCancel``");
+    dialog.embed_data("itemid", id)
+          .embed_data("tilex", pos.x_int())
+          .embed_data("tiley", pos.y_int());
+    send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("donation_give", "", "") });
+}
+
 void donation_edit(ENetEvent &event, const ::hPipe &hPipe)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
@@ -487,23 +511,7 @@ void donation_edit(ENetEvent &event, const ::hPipe &hPipe)
 
     if (const short id = static_cast<short>(atoi(hPipe["donate_item"].c_str())); id > 0)
     {
-        if (pPeer->have_slot(::slot(id, 0)) <= 0) return;
-        if (const std::string problem = gift_problem(*pPeer, *world, pos, id); !problem.empty()) throw std::runtime_error(problem);
-        const ::item &item = id_to_item(id);
-        ::create_dialog dialog = ::create_dialog()
-            .set_default_color("`o")
-            .add_label_with_icon("big", std::format("`w{}``", item.raw_name), item.id)
-            .add_textbox("How many to put in the box as a gift? (Note: You will `4LOSE`` the items you give!)")
-            .add_text_input("count", "Count:", static_cast<short>(pPeer->have_slot(::slot(id, 0))), 3)
-            .add_text_input("note", "Optional Note:", "", 128)
-            .add_spacer("small")
-            .add_button("give", "`4Give the item(s)``")
-            .add_spacer("small")
-            .add_button("cancel", "`wCancel``");
-        dialog.embed_data("itemid", id)
-              .embed_data("tilex", pos.x_int())
-              .embed_data("tiley", pos.y_int());
-        send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("donation_give", "", "") });
+        donation_offer(event, *world, pos, id);
         return;
     }
     if (!world->can_edit(*pPeer, pos, false)) return;
@@ -632,4 +640,238 @@ void shelf_edit(ENetEvent &event, const ::hPipe &hPipe)
     play_in_world(world->name, pPeer->netid, "audio/blorb.wav");
     pPeer->mysql_update_all();
     world->save();
+}
+
+/* ---------------- Heart Monitor ---------------- */
+
+void heart_monitors_refresh(int uid)
+{
+    for (::world &world : worlds)
+        for (const ::heart_monitor &heart : world.heart_monitors)
+            if (heart.uid == uid) world_tile_update(world, heart.pos);
+}
+
+/* ---------------- Mannequin ---------------- */
+
+namespace
+{
+    constexpr std::array<const char*, 9> slot_names{ "Hair", "Shirt", "Pants", "Shoes", "Face Item", "Hand Item", "Back Item", "Hat", "Necklace" };
+
+    ::mannequin &mannequin_at(::world &world, const ::pos &pos)
+    {
+        auto dummy = std::ranges::find(world.mannequins, pos, &::mannequin::pos);
+        if (dummy == world.mannequins.end()) dummy = world.mannequins.emplace(world.mannequins.end(), ::mannequin{.pos = pos});
+        return *dummy;
+    }
+
+    /* @brief give a worn item back. @return false if it doesn't fit */
+    bool take_off(ENetEvent &event, ::mannequin &dummy, int slot)
+    {
+        ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+        const short id = dummy.clothes[slot];
+        if (id == 0) return true;
+        if (!pPeer->can_hold(id, 1))
+        {
+            on::ConsoleMessage(event.peer, std::format("`4You don't have room for`` `w{}``.", id_to_item(id).raw_name));
+            return false;
+        }
+        modify_item_inventory(event, ::slot(id, 1));
+        dummy.clothes[slot] = 0;
+        return true;
+    }
+}
+
+void mannequin_offer(ENetEvent &event, ::world &world, const ::pos &pos, short id)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    const ::item &item = id_to_item(id);
+    if (!world.can_edit(*pPeer, pos, false)) { play_sfx(event.peer, "audio/cant_place_tile.wav"); return; }
+    if (item.type != type::CLOTHING || item.cloth_type >= 9) return;
+    if (item.cat & CAT_UNTRADEABLE || id == 5712/*Will of the Wild*/ || id == 10044/*Golem's Gift*/) throw std::runtime_error("That's too special to put on a mannequin!");
+    auto dummy = std::ranges::find(world.mannequins, pos, &::mannequin::pos);
+    if (dummy != world.mannequins.end() && dummy->clothes[item.cloth_type] == id) throw std::runtime_error("`2You gigle as you swap two identical items!");
+
+    ::create_dialog dialog = ::create_dialog()
+        .set_default_color("`o")
+        .add_label_with_icon("big", std::format("`w{}``", item.raw_name), item.id)
+        .add_spacer("small")
+        .add_textbox(std::format("Do you really want to put your {} on the Mannequin?", item.raw_name))
+        .add_spacer("small");
+    dialog.embed_data("itemid", id)
+          .embed_data("tilex", pos.x_int())
+          .embed_data("tiley", pos.y_int());
+    send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("mannequin_dress", "No", "Yes") });
+}
+
+void mannequin_dress(ENetEvent &event, const ::hPipe &hPipe)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    ::world *world = peer_world(pPeer);
+    ::pos pos{};
+    if (world == nullptr || !read_tile(hPipe, *world, type::MANNEQUIN, pos)) return;
+    if (!world->can_edit(*pPeer, pos, false)) return;
+    const short id = static_cast<short>(atoi(hPipe["itemid"].c_str()));
+    const ::item &item = id_to_item(id);
+    if (id <= 0 || item.type != type::CLOTHING || item.cloth_type >= 9 || (item.cat & CAT_UNTRADEABLE) || id == 5712 || id == 10044) return;
+    if (pPeer->have_slot(::slot(id, 0)) <= 0) return;
+
+    ::mannequin &dummy = mannequin_at(*world, pos);
+    if (dummy.clothes[item.cloth_type] == id) return;
+    if (!take_off(event, dummy, item.cloth_type)) return; // @note what it wore there comes back to you
+    modify_item_inventory(event, ::slot(id, -1));
+    dummy.clothes[item.cloth_type] = id;
+    update_tile(event, *world, pos);
+    play_in_world(world->name, pPeer->netid, "audio/change_clothes.wav");
+    pPeer->mysql_update_all();
+    world->save();
+}
+
+void mannequin_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    if (!world.can_edit(*pPeer, pos, false)) { play_sfx(event.peer, "audio/cant_place_tile.wav"); return; }
+    const ::item &block_item = id_to_item(world.blocks[cord(pos.x_int(), pos.y_int())].fg);
+    auto dummy = std::ranges::find(world.mannequins, pos, &::mannequin::pos);
+
+    ::create_dialog dialog = ::create_dialog()
+        .set_default_color("`o")
+        .add_label_with_icon("big", std::format("`wEdit {}``", block_item.raw_name), block_item.id)
+        .add_spacer("small")
+        .add_textbox("What would you like to write on its sign?")
+        .add_text_input("label", "", (dummy != world.mannequins.end()) ? dummy->label : "", 128)
+        .add_spacer("small");
+    bool wearing = false;
+    if (dummy != world.mannequins.end())
+        for (int i = 0; i < 9; ++i)
+        {
+            if (dummy->clothes[i] == 0) continue;
+            wearing = true;
+            dialog.add_button(std::format("take_{}", i), std::format("`o{}: `2{} `9(Click to remove)``", slot_names[i], id_to_item(dummy->clothes[i]).raw_name));
+        }
+    if (wearing) dialog.add_button("take_all", "Take off all clothes");
+    else dialog.add_smalltext("To dress it, use clothing from your backpack on the mannequin.");
+    dialog.embed_data("tilex", pos.x_int())
+          .embed_data("tiley", pos.y_int());
+    send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("mannequin", "Cancel", "OK") });
+}
+
+void mannequin_edit(ENetEvent &event, const ::hPipe &hPipe)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    ::world *world = peer_world(pPeer);
+    ::pos pos{};
+    if (world == nullptr || !read_tile(hPipe, *world, type::MANNEQUIN, pos)) return;
+    if (!world->can_edit(*pPeer, pos, false)) return;
+
+    ::mannequin &dummy = mannequin_at(*world, pos);
+    const std::string button = hPipe["buttonClicked"];
+    bool undressed = false;
+    for (int i = 0; i < 9; ++i)
+        if (button == "take_all" || button == std::format("take_{}", i))
+            if (dummy.clothes[i] != 0 && take_off(event, dummy, i)) undressed = true;
+    if (button.empty() || button == "OK") dummy.label = clean(hPipe["label"], 128);
+    update_tile(event, *world, pos);
+    if (undressed) play_in_world(world->name, pPeer->netid, "audio/change_clothes.wav");
+    pPeer->mysql_update_all();
+    world->save();
+}
+
+/* ---------------- Dice ---------------- */
+
+void dice_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    if (!world.can_edit(*pPeer, pos, false)) { play_sfx(event.peer, "audio/cant_place_tile.wav"); return; }
+    const ::block &block = world.blocks[cord(pos.x_int(), pos.y_int())];
+    const ::item &item = id_to_item(block.fg);
+    ::create_dialog dialog = ::create_dialog()
+        .set_default_color("`o")
+        .add_label_with_icon("big", std::format("`wEdit {}``", item.raw_name), item.id)
+        .add_spacer("small")
+        .add_checkbox("is_public", "Usable by public", block.state[2] & S_PUBLIC)
+        .add_checkbox("is_silenced", "Silenced", block.state[3] & S_SILENCED);
+    dialog.embed_data("tilex", pos.x_int())
+          .embed_data("tiley", pos.y_int());
+    send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("dice", "Cancel", "OK") });
+}
+
+void dice_edit(ENetEvent &event, const ::hPipe &hPipe)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    ::world *world = peer_world(pPeer);
+    ::pos pos{};
+    if (world == nullptr || !read_tile(hPipe, *world, type::RANDOM, pos)) return;
+    if (!world->can_edit(*pPeer, pos, false)) return;
+    ::block &block = world->blocks[cord(pos.x_int(), pos.y_int())];
+    if (hPipe["is_public"] == "1") block.state[2] |= S_PUBLIC; else block.state[2] &= ~S_PUBLIC;
+    if (hPipe["is_silenced"] == "1") block.state[3] |= S_SILENCED; else block.state[3] &= ~S_SILENCED;
+    update_tile(event, *world, pos);
+    world->save();
+}
+
+/* ---------------- Weather Machines with settings ---------------- */
+
+void weather_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    if (!world.can_edit(*pPeer, pos, false)) { play_sfx(event.peer, "audio/cant_place_tile.wav"); return; }
+    const ::item &machine = id_to_item(world.blocks[cord(pos.x_int(), pos.y_int())].fg);
+    auto w = std::ranges::find(world.weather_settings, pos, &::weather_setting::pos);
+
+    ::create_dialog dialog = ::create_dialog()
+        .set_default_color("`o")
+        .add_label_with_icon("big", std::format("`w{}``", machine.raw_name), machine.id)
+        .add_spacer("small");
+    if (machine.id == 5000/*Background*/)
+    {
+        const std::string current = (w != world.weather_settings.end()) ? id_to_item(static_cast<short>(w->item)).raw_name : "None";
+        dialog.add_textbox("`oYou can scan any Background Block to set it up in your weather machine.")
+              .add_spacer("small")
+              .add_item_picker("weather_item", std::format("`oItem: `2{}``", current), "Select any Background Block")
+              .add_spacer("small");
+    }
+    else if (machine.id == 3832/*Stuff*/)
+    {
+        const std::string current = id_to_item(static_cast<short>((w != world.weather_settings.end()) ? w->item : 2)).raw_name;
+        dialog.add_item_picker("weather_item", std::format("`oItem: `2{}``", current), "Select any item to rain down")
+              .add_text_input("gravity", "`oGravity:", std::to_string((w != world.weather_settings.end()) ? w->gravity : 50), 6);
+    }
+    else return; // @note the other machines have nothing to set
+    dialog.embed_data("tilex", pos.x_int())
+          .embed_data("tiley", pos.y_int());
+    send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("weather", "Cancel", "Okay") });
+}
+
+void weather_edit(ENetEvent &event, const ::hPipe &hPipe)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    ::world *world = peer_world(pPeer);
+    if (world == nullptr) return;
+    const ::pos pos{atoi(hPipe["tilex"].c_str()), atoi(hPipe["tiley"].c_str())};
+    if (!valid_tile(*world, pos) || !world->can_edit(*pPeer, pos, false)) return;
+    const short machine = world->blocks[cord(pos.x_int(), pos.y_int())].fg;
+    if (machine != 5000 && machine != 3832) return;
+
+    auto w = std::ranges::find(world->weather_settings, pos, &::weather_setting::pos);
+    if (w == world->weather_settings.end()) w = world->weather_settings.emplace(world->weather_settings.end(), ::weather_setting{.pos = pos, .item = (machine == 3832) ? 2u : 0u});
+
+    if (const short id = static_cast<short>(atoi(hPipe["weather_item"].c_str())); id > 0)
+    {
+        const ::item &item = id_to_item(id);
+        if (item.id == 0) return;
+        if (machine == 5000 && item.type != type::BACKGROUND) throw std::runtime_error("That's not a Background Block!");
+        w->item = static_cast<u_int>(id);
+    }
+    if (machine == 3832 && !hPipe["gravity"].empty()) w->gravity = std::clamp(atoi(hPipe["gravity"].c_str()), -500, 500);
+
+    update_tile(event, *world, pos);
+    if (world->weather == pos && (world->blocks[cord(pos.x_int(), pos.y_int())].state[2] & S_TOGGLE)) // @note running now: show the change straight away
+    {
+        peers(world->name, PeerSearch::WORLD, [machine](ENetPeer *peer)
+        {
+            send_varlist(peer, { "OnSetCurrentWeather", get_weather_id(machine) });
+        });
+    }
+    world->save();
+    if (!hPipe["weather_item"].empty()) weather_wrench(event, *world, pos); // @note an item was picked: show what it's set to now
 }

@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "action/dialog_return/wrenchables.hpp"
 
 #include "onVariant/RequestWorldSelectMenu.hpp"
 #include "onVariant/RequestGazette.hpp"
@@ -26,6 +27,7 @@ void action::enter_game(ENetEvent& event, const std::string& header)
         )
     );
     friends_alert(event.peer, true);
+    heart_monitors_refresh(static_cast<::peer*>(event.peer->data)->user_id); // @note their Heart Monitors start beating
     on::ConsoleMessage(event.peer, holiday_greeting().second);
     if (active_holiday == holiday::HALLOWEEN)
     {

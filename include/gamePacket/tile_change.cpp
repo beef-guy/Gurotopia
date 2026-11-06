@@ -92,8 +92,24 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 return; // @note avoid hitting the block
             }
 
+        /* @note tapping an item onto a Donation Box gifts it, like real Growtopia (anyone may, the world lock doesn't matter) */
+        if (gamePacket.id != 18 && gamePacket.id != 32 && id_to_item(block.fg).type == type::DONATION_BOX && 
+            !(item.type == type::BACKGROUND && block.bg == 0 && world->can_edit(*pPeer, gamePacket.punch, false)))
+        {
+            donation_offer(event, *world, gamePacket.punch, gamePacket.id);
+            return;
+        }
+        if (gamePacket.id != 18 && gamePacket.id != 32 && id_to_item(block.fg).type == type::MANNEQUIN && item.type == type::CLOTHING)
+        {
+            mannequin_offer(event, *world, gamePacket.punch, gamePacket.id); // @note clothing used on a Mannequin dresses it
+            return;
+        }
+        /* @note a dice the owner made "Usable by public" can be rolled by anyone, but only they can break it */
+        const bool public_roll = gamePacket.id == 18 && id_to_item(block.fg).type == type::RANDOM && (block.state[2] & S_PUBLIC) && 
+            !world->can_edit(*pPeer, gamePacket.punch, true);
+
         /* @note wrenching is checked per block below (anyone may wrench a vending machine to buy from it) */
-        if (gamePacket.id != 32 && !(item.cat & CAT_PUBLIC)) // @note if block is public skip validating if peer is owner or access
+        if (gamePacket.id != 32 && !(item.cat & CAT_PUBLIC) && !public_roll) // @note if block is public skip validating if peer is owner or access
             if (!world->can_edit(*pPeer, gamePacket.punch, gamePacket.id == 18))
             {
                 if (gamePacket.id == 18) play_sfx(event.peer, "audio/punch_locked.wav");
@@ -268,12 +284,19 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     break;
                 }
                 case type::WEATHER_MACHINE:
+                case type::SFX_WEATHER_MACHINE: // @note Heatwave, Background...
+                case type::SPRITE_WEATHER_MACHINE: // @note Stuff, Guild, Epoch
                 {
-                    ::block &weather_machine = world->blocks[cord(world->weather.x, world->weather.y)];
-
-                    if (!(block.state[2] & S_TOGGLE) && !(weather_machine.state[2] & S_TOGGLE)) weather_machine.state[2] &= ~S_TOGGLE; // @note so we can avoid the upcoming ^= if the weather machine is already toggled
-                    block.state[2] ^= S_TOGGLE; // @note if punched twice it can detoggle that is why we use ^= not |=
-                    
+                    if (world->weather != gamePacket.punch && valid_tile(*world, world->weather)) // @note only one machine runs at a time
+                    {
+                        ::block &other = world->blocks[cord(world->weather.x_int(), world->weather.y_int())];
+                        if (other.state[2] & S_TOGGLE)
+                        {
+                            other.state[2] &= ~S_TOGGLE;
+                            world_tile_update(*world, world->weather);
+                        }
+                    }
+                    block.state[2] ^= S_TOGGLE; // @note punching it again turns it off
                     world->weather = gamePacket.punch;
                     
                     peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [block, item](ENetPeer *peer)
@@ -317,6 +340,13 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                         throw std::runtime_error("Take the items off the shelf first!");
                     break;
                 }
+                case type::MANNEQUIN:
+                {
+                    auto dummy = std::ranges::find(world->mannequins, gamePacket.punch, &::mannequin::pos);
+                    if (dummy != world->mannequins.end() && std::ranges::any_of(dummy->clothes, [](short id) { return id != 0; }))
+                        throw std::runtime_error("Take its clothes off first!");
+                    break;
+                }
                 case type::DONATION_BOX:
                 {
                     auto box = std::ranges::find(world->donation_boxes, gamePacket.punch, &::donation_box::pos);
@@ -344,6 +374,12 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     break;
                 }
             }
+            if (public_roll)
+            {
+                tile_apply_damage(event, std::move(gamePacket), block, apply_damage_value);
+                block.hits[0] = 0; // @note rolling a public dice never breaks it
+                return;
+            }
             tile_apply_damage(event, std::move(gamePacket), block, apply_damage_value);
 
             if (block.hits[0] >= item.hits) block.fg = 0, block.hits[0] = 0;
@@ -362,6 +398,9 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 std::erase_if(world->mailboxes, [&](const ::mailbox &box) { return box.pos == gamePacket.punch; });
                 std::erase_if(world->donation_boxes, [&](const ::donation_box &box) { return box.pos == gamePacket.punch; });
                 std::erase_if(world->shelves, [&](const ::shelf &shelf) { return shelf.pos == gamePacket.punch; });
+                std::erase_if(world->heart_monitors, [&](const ::heart_monitor &heart) { return heart.pos == gamePacket.punch; });
+                std::erase_if(world->mannequins, [&](const ::mannequin &dummy) { return dummy.pos == gamePacket.punch; });
+                std::erase_if(world->weather_settings, [&](const ::weather_setting &w) { return w.pos == gamePacket.punch; });
                 if (is_tile_lock(item.id)) remove_area_lock(event, *world, gamePacket.punch);
                 if (item.type == type::XENONITE && world->xenonite != 0)
                 {
@@ -926,6 +965,22 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     shelf_wrench(event, *world, gamePacket.punch);
                     break;
                 }
+                case type::MANNEQUIN:
+                {
+                    mannequin_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
+                case type::RANDOM:
+                {
+                    dice_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
+                case type::SFX_WEATHER_MACHINE:
+                case type::SPRITE_WEATHER_MACHINE:
+                {
+                    weather_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
                 case type::FOREGROUND:
                 {
                     if (item.id == 3898/*Telephone*/) telephone_wrench(event, *world, gamePacket.punch);
@@ -1066,6 +1121,19 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 case type::DISPLAY_BLOCK:
                 {
                     tile_update = true; // @note these carry data the client needs (empty at first)
+                    break;
+                }
+                case type::HEART_MONITOR:
+                {
+                    std::erase_if(world->heart_monitors, [&](const ::heart_monitor &heart) { return heart.pos == gamePacket.punch; });
+                    world->heart_monitors.push_back(::heart_monitor{gamePacket.punch, pPeer->user_id, pPeer->growid}); // @note it follows whoever placed it
+                    tile_update = true;
+                    break;
+                }
+                case type::MANNEQUIN:
+                {
+                    std::erase_if(world->mannequins, [&](const ::mannequin &dummy) { return dummy.pos == gamePacket.punch; });
+                    tile_update = true;
                     break;
                 }
                 case type::MAILBOX:
