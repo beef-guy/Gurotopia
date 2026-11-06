@@ -925,7 +925,7 @@ void magplant_give_remote(ENetEvent &event, ::world &world, const ::pos &pos)
     pPeer->magplant = pos;
     pPeer->magplant_world = world.name;
     send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`wYou received a `2Magplant `wRemote!", 0u, 1u });
-    send_varlist(event.peer, { "OnPlanterActivated", static_cast<int>(mag->item), pos.x_int(), pos.y_int() });
+    send_varlist(event.peer, { "OnPlanterActivated", static_cast<u_int>(mag->item), static_cast<u_int>(pos.x_int()), static_cast<u_int>(pos.y_int()) }, pPeer->netid); // @note the game reads three uints
     pPeer->mysql_update_all();
 }
 
@@ -1077,8 +1077,8 @@ void magplant_edit(ENetEvent &event, const ::hPipe &hPipe)
 
 namespace
 {
-    /* @brief a grid of item icons with their counts, most first */
-    std::string count_grid(std::map<short, int> counts)
+    /* @brief one small icon line per item with its count, most first. tapping one points the arrow at it */
+    std::string count_list(std::map<short, int> counts, const std::string &prefix)
     {
         std::vector<std::pair<short, int>> sorted(counts.begin(), counts.end());
         std::ranges::sort(sorted, [](const auto &a, const auto &b) { return a.second != b.second ? a.second > b.second : a.first < b.first; });
@@ -1086,10 +1086,10 @@ namespace
         std::size_t shown = 0;
         for (const auto &[id, count] : sorted)
         {
-            if (++shown > 250) break; // @note keep the dialog small enough for the game
-            rows += std::format("add_button_with_icon|scan_{}||staticBlueFrame|{}|{}|\n", id, id, count);
+            if (++shown > 200) break; // @note keep the dialog small enough for the game
+            if (prefix.empty()) rows += std::format("add_label_with_icon|small|`w{}``: {}|left|{}|\n", id_to_item(id).raw_name, count, id);
+            else rows += std::format("add_label_with_icon_button|small|`w{}``: {}|left|{}|{}{}|\n", id_to_item(id).raw_name, count, id, prefix, id);
         }
-        if (!rows.empty()) rows += "add_button_with_icon||END_LIST|noflags|0||\n";
         return rows;
     }
 
@@ -1158,7 +1158,8 @@ void growscan_edit(ENetEvent &event, const ::hPipe &hPipe)
             .add_label_with_icon("big", "`wWorld Blocks``", machine.id)
             .add_spacer("small")
             .add_textbox(std::format("`w{}`` has `w{}`` blocks of `w{}`` kinds.", world->name, total, counts.size()))
-            .add_raw(count_grid(std::move(counts)))
+            .add_spacer("small")
+            .add_raw(count_list(std::move(counts), ""))
             .add_spacer("small")
             .add_button("back", "`wBack``");
         send_growscan(event, pos, dialog, "Close", "");
@@ -1178,14 +1179,23 @@ void growscan_edit(ENetEvent &event, const ::hPipe &hPipe)
             .add_label_with_icon("big", "`wFloating Items``", machine.id)
             .add_spacer("small");
         if (counts.empty()) dialog.add_textbox("`oThere are no floating items in this world.``");
-        else dialog.add_textbox(std::format("`oThere are `w{}`` floating items (`w{}`` kinds) in `w{}``.``", total, counts.size(), world->name))
-                   .add_raw(count_grid(std::move(counts)));
+        else dialog.add_textbox(std::format("`oThere are `w{}`` floating items (`w{}`` kinds) in `w{}``. Tap one to point at it.``", total, counts.size(), world->name))
+                   .add_spacer("small")
+                   .add_raw(count_list(std::move(counts), "findf_"));
         dialog.add_spacer("small")
               .add_button("back", "`wBack``");
         send_growscan(event, pos, dialog, "Close", "");
         return;
     }
-    if (button == "back" || button.starts_with("scan_"))
+    if (button.starts_with("findf_")) // @note a green arrow points at the item (PACKET_ACTIVE_ARROW_TO_ITEM)
+    {
+        const int id = atoi(button.c_str() + 6);
+        if (id <= 0 || id_to_item(static_cast<short>(id)).id == 0) return;
+        ::gamePacket arrow{.type = 0x25 | (1/*nearest dropped item with this id*/ << 8), .netid = id};
+        send_data(*event.peer, compress_state(arrow));
+        return;
+    }
+    if (button == "back")
     {
         growscan_wrench(event, *world, pos);
         return;

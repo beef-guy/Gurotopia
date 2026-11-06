@@ -1209,11 +1209,6 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
             if (item.type != type::BACKGROUND && get_type(item) != '\x00') tile_update = true; // @note send the block's data right away, the game may crash on it without
             (item.type == type::BACKGROUND) ? block.bg = gamePacket.id : block.fg = gamePacket.id;
             use_one(item.id);
-            if (remote_from != nullptr) // @note the game takes the remote out of the hand when it builds: give it straight back so it stays selected
-            {
-                ::gamePacket back{.type = (1 << 24) | 0x000d, .id = 5640};
-                send_data(*event.peer, compress_state(back));
-            }
             if (place_area_lock)
             {
                 ::area_lock &lock = world->area_locks.emplace_back(::area_lock{.pos = gamePacket.punch, .owner = pPeer->user_id});
