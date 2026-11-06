@@ -50,6 +50,10 @@ extern void ring_progress(ENetPeer *peer, int task, long long amount);
 extern std::string carnival_serialize(const ::peer &peer);
 extern void carnival_load(::peer &peer, const std::string &text);
 
+/* @brief Goals & Quests (wrench menu): one line about the Ringmaster's quest, and the quest page */
+extern std::string carnival_goal_line(const ::peer &peer);
+extern void carnival_goal_dialog(ENetPeer *peer);
+
 /* @brief dialog_return handlers */
 extern void carnival_booth_edit(ENetEvent &event, const ::hPipe &hPipe);
 extern void carnival_ring_edit(ENetEvent &event, const ::hPipe &hPipe);

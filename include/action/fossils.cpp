@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "tools/time.hpp"
 #include "action/carnival.hpp"
 #include "action/growpass.hpp"
 
@@ -290,5 +291,29 @@ void ready_command(ENetEvent &event, const std::string_view)
         world_tile_update(*world, m.pos);
         ++done;
     }
-    on::ConsoleMessage(event.peer, std::format("`2{}`` Fossil Prep Station{} and Geiger Charger{} finished.", done, done == 1 ? "" : "s", done == 1 ? "" : "s"));
+    /* @note providers (Cows, Chickens, Coffee Makers...) and trees are ready right away too */
+    int providers = 0, trees = 0;
+    for (std::size_t i = 0; i < world->blocks.size(); ++i)
+    {
+        const ::item &item = id_to_item(world->blocks[i].fg);
+        const ::pos tile{static_cast<int>(i % 100), static_cast<int>(i / 100)};
+        if (item.type == type::PROVIDER)
+        {
+            auto prov = std::ranges::find(world->providers, tile, &::provider::pos);
+            if (prov == world->providers.end()) prov = world->providers.insert(world->providers.end(), ::provider{ .pos = tile });
+            prov->tick = ticks() - static_cast<u_int>(std::max(item.tick, 0));
+            world_tile_update(*world, tile);
+            ++providers;
+        }
+        else if (item.type == type::SEED)
+        {
+            auto tree = std::ranges::find(world->trees, tile, &::tree::pos);
+            if (tree == world->trees.end()) continue;
+            tree->tick = ticks() - static_cast<u_int>(std::max(item.tick, 0));
+            world_tile_update(*world, tile);
+            ++trees;
+        }
+    }
+    on::ConsoleMessage(event.peer, std::format("`2{}`` Fossil Prep Station{} and Geiger Charger{} finished, `2{}`` provider{} and `2{}`` tree{} ready.",
+        done, done == 1 ? "" : "s", done == 1 ? "" : "s", providers, providers == 1 ? "" : "s", trees, trees == 1 ? "" : "s"));
 }
