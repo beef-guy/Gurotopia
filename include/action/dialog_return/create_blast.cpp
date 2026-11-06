@@ -19,25 +19,24 @@ void create_blast(ENetEvent& event, const ::hPipe &hPipe)
     }
     for (char &c : world_name) c = std::toupper(c); // @note start -> START
 
-    switch (id)
+    if (!blast::is_world_blast(id) || pPeer->have_slot(::slot(static_cast<short>(id), 0)) == 0) return;
+    if (id == 830/*Beach Blast*/ && pPeer->have_slot(::slot(834, 0)) < 100)
     {
-        case 1402: // @note Thermonuclear Blast
-        {
-            if (pPeer->have_slot(::slot(id, 0)) == 0) return;
-            if (::world::exists(world_name)) // @note checks saved worlds too, a blast must never wipe someone's world
-            {
-                send_varlist(event.peer, { "OnTextOverlay", "That world already exists. Try another name." });
-                return;
-            }
-            action::quit_to_exit(event, "", true);
-            {
-                ::world world{world_name}; // @note we don't need emplace into worlds since no one is in the world yet!
-                blast::thermonuclear(world);
-            } // @note save the world and continue in action::join_request. seems tedious so i might change later.
-            modify_item_inventory(event, ::slot(id, -1));
-            break;
-        }
-        default: return;
+        send_varlist(event.peer, { "OnTextOverlay", "You need 100 Fireworks to detonate this!" });
+        return;
     }
+    if (::world::exists(world_name)) // @note checks saved worlds too, a blast must never wipe someone's world
+    {
+        send_varlist(event.peer, { "OnTextOverlay", "That world already exists. Try another name." });
+        return;
+    }
+    action::quit_to_exit(event, "", true);
+    {
+        ::world world{world_name}; // @note we don't need emplace into worlds since no one is in the world yet!
+        if (id == 1402) blast::thermonuclear(world); // @note Thermonuclear Blast
+        else blast::themed(world, id);
+    } // @note save the world and continue in action::join_request. seems tedious so i might change later.
+    modify_item_inventory(event, ::slot(static_cast<short>(id), -1));
+    if (id == 830) modify_item_inventory(event, ::slot(834, -100)); // @note Beach Blast burns 100 Fireworks
     action::join_request(event, "", world_name);
 }

@@ -328,9 +328,10 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     block.state[2] ^= S_TOGGLE; // @note punching it again turns it off
                     world->weather = gamePacket.punch;
                     
-                    peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [block, item](ENetPeer *peer)
+                    const u_short base = world->base_weather; // @note turning the machine off brings back the blast world's own weather
+                    peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [block, item, base](ENetPeer *peer)
                     {
-                        send_varlist(peer, { "OnSetCurrentWeather", (block.state[2] & S_TOGGLE) ? get_weather_id(item.id) : 0 });
+                        send_varlist(peer, { "OnSetCurrentWeather", (block.state[2] & S_TOGGLE) ? get_weather_id(item.id) : static_cast<int>(base) });
                     });
                     break;
                 }
@@ -566,8 +567,9 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         }
         else if (item.type == type::CONSUMEABLE) 
         {
-            if (item.raw_name.find(" Blast") != std::string::npos)
+            if (blast::is_world_blast(item.id))
             {
+                if (item.id == 830/*Beach Blast*/ && pPeer->have_slot(::slot(834, 0)) < 100) throw std::runtime_error("You need 100 Fireworks to detonate this!");
                 send_varlist(event.peer, {
                     "OnDialogRequest",
                     std::format(
