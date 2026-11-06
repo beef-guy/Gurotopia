@@ -13,6 +13,7 @@
 #include "include/tools/terminal.hpp"
 #include "include/database/platform.hpp"
 #include "include/action/fishing.hpp"
+#include "include/action/automation.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -247,6 +248,7 @@ int main(int argc, char *argv[])
         if (enet_host_service(host, &event, 100/*ms*/) > 0 && event.type < eventType_pool.size())
             eventType_pool[event.type](event);
         fishing_tick(); // @note fish bites
+        automation_tick(); // @note Tesseract Manipulator, Heart of Gaia, Techno-Organic Engine
 
         if (clock::now() - last_save >= std::chrono::seconds(60)) // @note so a crash or force stop loses at most a minute
         {
