@@ -380,6 +380,11 @@ static void write_default_extra(::blob &blob, char type, const ::item &item)
             for (int i = 0; i < 4; ++i) blob.u32((shelf != this->shelves.end()) ? shelf->items[i] : 0);
             break;
         }
+        case '\x42': /* growscan 9000: usable by public */
+        {
+            blob.u8((block.state[2] & S_PUBLIC) ? 1 : 0);
+            break;
+        }
         case '\x3e': /* magplant: item, count, collecting, building mode, capacity */
         {
             auto mag = std::ranges::find(this->magplants, block_pos, &::magplant::pos);

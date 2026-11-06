@@ -9,6 +9,7 @@
 #include "wrenchables.hpp"
 
 #include <algorithm>
+#include <map>
 
 /*
 * @note Telephone, Mailbox, Bulletin Board and Donation Box, following real Growtopia.
@@ -876,7 +877,7 @@ void weather_edit(ENetEvent &event, const ::hPipe &hPipe)
     if (!hPipe["weather_item"].empty()) weather_wrench(event, *world, pos); // @note an item was picked: show what it's set to now
 }
 
-/* ---------------- ID_MAGPLANT 5000, Gaia's Beacon, Unstable Tesseract ---------------- */
+/* ---------------- MAGPLANT 5000, Gaia's Beacon, Unstable Tesseract ---------------- */
 /* @note texts and rules from github.com/cppdecl/Nomikai (BlockWrenchListener.hh, DialogCloseListener.hh "Magplant") */
 
 namespace
@@ -911,6 +912,21 @@ namespace
         if (machine == ID_GAIAS_BEACON && item.type != type::SEED) return "This item is not compatible with this machine.";
         return "";
     }
+}
+
+void magplant_give_remote(ENetEvent &event, ::world &world, const ::pos &pos)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    auto mag = std::ranges::find(world.magplants, pos, &::magplant::pos);
+    if (mag == world.magplants.end() || mag->item == 0) return;
+    if (const int old = pPeer->have_slot(::slot(ID_MAGPLANT_REMOTE, 0)); old > 0) modify_item_inventory(event, ::slot(ID_MAGPLANT_REMOTE, static_cast<short>(-old)));
+    if (!pPeer->can_hold(ID_MAGPLANT_REMOTE, 1)) throw std::runtime_error("You don't have room in your backpack!");
+    modify_item_inventory(event, ::slot(ID_MAGPLANT_REMOTE, 1));
+    pPeer->magplant = pos;
+    pPeer->magplant_world = world.name;
+    send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`wYou received a `2Magplant `wRemote!", 0u, 1u });
+    send_varlist(event.peer, { "OnPlanterActivated", static_cast<int>(mag->item), pos.x_int(), pos.y_int() });
+    pPeer->mysql_update_all();
 }
 
 void magplant_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
@@ -951,7 +967,7 @@ void magplant_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
         dialog.add_label("small", std::format("Building Mode: {}", mag.remote ? "ACTIVE" : "`6DISABLED"));
         if (owner || (mag.remote && !linked))
             dialog.add_label("small", mag.remote ? 
-                std::format("Use the ID_MAGPLANT 5000 Remote to build `2{}`` directly from the ID_MAGPLANT 5000's storage.", name) : "Punch to activate building mode.");
+                std::format("Use the MAGPLANT 5000 Remote to build `2{}`` directly from the MAGPLANT 5000's storage.", name) : "Punch to activate building mode.");
         dialog.add_spacer("small");
         if (!linked && mag.remote) dialog.add_button("GetRemote", "Get Remote");
     }
@@ -979,13 +995,7 @@ void magplant_edit(ENetEvent &event, const ::hPipe &hPipe)
     if (button == "GetRemote")
     {
         if (machine.id != ID_MAGPLANT || mag.item == 0 || !mag.remote) return;
-        if (const int old = pPeer->have_slot(::slot(ID_MAGPLANT_REMOTE, 0)); old > 0) modify_item_inventory(event, ::slot(ID_MAGPLANT_REMOTE, static_cast<short>(-old)));
-        if (!pPeer->can_hold(ID_MAGPLANT_REMOTE, 1)) throw std::runtime_error("You don't have room in your backpack!");
-        modify_item_inventory(event, ::slot(ID_MAGPLANT_REMOTE, 1));
-        pPeer->magplant = pos;
-        pPeer->magplant_world = world->name;
-        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`wYou received a `2Magplant `wRemote!", 0u, 1u });
-        send_varlist(event.peer, { "OnPlanterActivated", static_cast<int>(mag.item), pos.x_int(), pos.y_int() });
+        magplant_give_remote(event, *world, pos);
         pPeer->mysql_update_all();
         return;
     }
@@ -1060,5 +1070,133 @@ void magplant_edit(ENetEvent &event, const ::hPipe &hPipe)
     if (!changed) return;
     update_tile(event, *world, pos);
     pPeer->mysql_update_all();
+    world->save();
+}
+
+/* ---------------- GrowScan 9000 ---------------- */
+
+namespace
+{
+    /* @brief a grid of item icons with their counts, most first */
+    std::string count_grid(std::map<short, int> counts)
+    {
+        std::vector<std::pair<short, int>> sorted(counts.begin(), counts.end());
+        std::ranges::sort(sorted, [](const auto &a, const auto &b) { return a.second != b.second ? a.second > b.second : a.first < b.first; });
+        std::string rows{};
+        std::size_t shown = 0;
+        for (const auto &[id, count] : sorted)
+        {
+            if (++shown > 250) break; // @note keep the dialog small enough for the game
+            rows += std::format("add_button_with_icon|scan_{}||staticBlueFrame|{}|{}|\n", id, id, count);
+        }
+        if (!rows.empty()) rows += "add_button_with_icon||END_LIST|noflags|0||\n";
+        return rows;
+    }
+
+    void send_growscan(ENetEvent &event, const ::pos &pos, ::create_dialog &dialog, const std::string &close, const std::string &ok)
+    {
+        dialog.embed_data("tilex", pos.x_int())
+              .embed_data("tiley", pos.y_int());
+        send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("growscan", close, ok) });
+    }
+
+    bool growscan_usable(const ::peer &peer, ::world &world, const ::pos &pos)
+    {
+        return world.can_edit(peer, pos, false) || (world.blocks[cord(pos.x_int(), pos.y_int())].state[2] & S_PUBLIC);
+    }
+}
+
+void growscan_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    if (!growscan_usable(*pPeer, world, pos))
+    {
+        play_sfx(event.peer, "audio/cant_place_tile.wav");
+        throw std::runtime_error("This GrowScan 9000 isn't usable by the public.");
+    }
+    const ::item &machine = id_to_item(world.blocks[cord(pos.x_int(), pos.y_int())].fg);
+    const bool owner = world.can_edit(*pPeer, pos, false);
+
+    ::create_dialog dialog = ::create_dialog()
+        .set_default_color("`o")
+        .add_label_with_icon("big", std::format("`w{}``", machine.raw_name), machine.id)
+        .add_spacer("small")
+        .add_textbox(std::format("`oThis amazing machine can scan `w{}`` for blocks or floating items! What would you like to see?``", world.name))
+        .add_button("scan_blocks", "`wWorld Blocks``")
+        .add_button("scan_floating", "`wFloating Items``");
+    if (owner)
+    {
+        dialog.add_spacer("small")
+              .add_checkbox("is_public", "`oUsable by public``", world.blocks[cord(pos.x_int(), pos.y_int())].state[2] & S_PUBLIC);
+        send_growscan(event, pos, dialog, "Close", "OK");
+        return;
+    }
+    send_growscan(event, pos, dialog, "Close", "");
+}
+
+void growscan_edit(ENetEvent &event, const ::hPipe &hPipe)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    ::world *world = peer_world(pPeer);
+    ::pos pos{};
+    if (world == nullptr || !read_tile(hPipe, *world, type::GROWSCAN, pos)) return;
+    if (!growscan_usable(*pPeer, *world, pos)) return;
+    const ::item &machine = id_to_item(world->blocks[cord(pos.x_int(), pos.y_int())].fg);
+    const std::string button = hPipe["buttonClicked"];
+
+    if (button == "scan_blocks")
+    {
+        std::map<short, int> counts{};
+        int total = 0;
+        for (const ::block &block : world->blocks)
+        {
+            if (block.fg != 0) ++counts[block.fg], ++total;
+            if (block.bg != 0) ++counts[block.bg], ++total;
+        }
+        ::create_dialog dialog = ::create_dialog()
+            .set_default_color("`o")
+            .add_label_with_icon("big", "`wWorld Blocks``", machine.id)
+            .add_spacer("small")
+            .add_textbox(std::format("`w{}`` has `w{}`` blocks of `w{}`` kinds.", world->name, total, counts.size()))
+            .add_raw(count_grid(std::move(counts)))
+            .add_spacer("small")
+            .add_button("back", "`wBack``");
+        send_growscan(event, pos, dialog, "Close", "");
+        return;
+    }
+    if (button == "scan_floating")
+    {
+        std::map<short, int> counts{};
+        int total = 0;
+        for (const ::object &object : world->objects)
+        {
+            counts[static_cast<short>(object.id)] += object.count;
+            total += object.count;
+        }
+        ::create_dialog dialog = ::create_dialog()
+            .set_default_color("`o")
+            .add_label_with_icon("big", "`wFloating Items``", machine.id)
+            .add_spacer("small");
+        if (counts.empty()) dialog.add_textbox("`oThere are no floating items in this world.``");
+        else dialog.add_textbox(std::format("`oThere are `w{}`` floating items (`w{}`` kinds) in `w{}``.``", total, counts.size(), world->name))
+                   .add_raw(count_grid(std::move(counts)));
+        dialog.add_spacer("small")
+              .add_button("back", "`wBack``");
+        send_growscan(event, pos, dialog, "Close", "");
+        return;
+    }
+    if (button == "back" || button.starts_with("scan_"))
+    {
+        growscan_wrench(event, *world, pos);
+        return;
+    }
+    if (!world->can_edit(*pPeer, pos, false) || hPipe["is_public"].empty()) return;
+    ::block &block = world->blocks[cord(pos.x_int(), pos.y_int())];
+    const bool was = block.state[2] & S_PUBLIC;
+    const bool now = hPipe["is_public"] == "1";
+    if (was == now) return;
+    if (now) block.state[2] |= S_PUBLIC;
+    else block.state[2] &= ~S_PUBLIC;
+    update_tile(event, *world, pos);
     world->save();
 }
