@@ -2,6 +2,10 @@
 
 #include "onVariant/ConsoleMessage.hpp"
 #include "onVariant/SetBux.hpp"
+#include "onVariant/SetClothing.hpp"
+#include "onVariant/Action.hpp"
+#include "commands/punch.hpp" // @note get_punch_id()
+#include "database/playmods.hpp"
 #include "tools/create_dialog.hpp"
 #include "tools/random.hpp"
 #include "tools/sound.hpp"
@@ -951,12 +955,13 @@ namespace
         dialog(p, d.end_dialog("carnival_ring", "Goodbye", ""));
     }
 
-    void give_ring(ENetEvent &event, ::world *world, short not_this = 0)
+    /* @return the ring given, 0 if none */
+    short give_ring(ENetEvent &event, ::world *world, short not_this = 0)
     {
         ::peer *pp = peer_of(event.peer);
         std::vector<short> pool = ring_pool();
         if (not_this != 0 && pool.size() > 1) std::erase(pool, not_this);
-        if (pool.empty()) return;
+        if (pool.empty()) return 0;
         const short ring = pool[RandomRange(0, static_cast<int>(pool.size()))];
         if (world != nullptr) give_or_drop(event, *world, ring, 1);
         else modify_item_inventory(event, ::slot(ring, 1));
@@ -967,6 +972,24 @@ namespace
             world_message(world->name, std::format("`5[``{} got a `w{}`` from the Ringmaster!`5]``", pp->display_growid, id_to_item(ring).raw_name));
         }
         play_sfx(event.peer, "audio/fanfare.wav");
+        return ring;
+    }
+
+    /* @brief put the new ring on straight away (if it made it into the backpack) */
+    void wear_ring(ENetEvent &event, short ring)
+    {
+        ::peer *pp = peer_of(event.peer);
+        const ::item &item = id_to_item(ring);
+        if (ring == 0 || item.cloth_type >= pp->clothing.size() || pp->have_slot(::slot(ring, 0)) == 0) return;
+        float &worn = pp->clothing[item.cloth_type];
+        if (worn == ring) return;
+        if (worn != 0) playmod_message(event.peer, static_cast<u_short>(worn), false);
+        worn = static_cast<float>(ring);
+        playmod_message(event.peer, static_cast<u_short>(ring), true);
+        pp->update_effects();
+        if (u_short punch_id = get_punch_id(static_cast<u_int>(ring)); punch_id != 0) pp->punch_effect = punch_id;
+        send_varlist(event.peer, { "OnEquipNewItem", ring }, pp->netid);
+        on::SetClothing(event.peer, true);
     }
 
     void advance(ENetEvent &event, ::world *world)
@@ -976,7 +999,9 @@ namespace
         if (c.step >= QUEST_STEPS)
         {
             c = { .credit = c.credit, .wins = c.wins };
-            give_ring(event, world);
+            const short ring = give_ring(event, world);
+            wear_ring(event, ring); // @note karim: the finished quest puts the ring on you and you cheer
+            if (pp->netid != 0) on::Action(event, "/cheer");
         }
         else
         {

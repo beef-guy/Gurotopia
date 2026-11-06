@@ -45,7 +45,7 @@ void help_return(ENetEvent& event, const std::string_view text)
     std::string list{};
     for (std::string_view name : names) list += std::format("{} ", name);
     send_gameMessage(event.peer, {.message = std::format("action|log\nmsg|>> Commands: {}", list)});
-    send_gameMessage(event.peer, {.message = "action|log\nmsg|>> Emotes: /wave /dance /love /sleep /facepalm /fp /smh /yes /no /omg /idk /shrug /furious /rolleyes /foldarms /stubborn /fold /dab /sassy /dance2 /march /grumpy /shy"});
+    send_gameMessage(event.peer, {.message = "action|log\nmsg|>> Emotes: /wave /dance /love /sleep /facepalm /fp /smh /yes /no /omg /idk /shrug /furious /rolleyes /foldarms /stubborn /fold /dab /sassy /dance2 /march /grumpy /shy /cheer"});
 }
 
 const std::unordered_map<std::string_view, ::cmd_entry> cmd_pool
@@ -94,5 +94,5 @@ const std::unordered_map<std::string_view, ::cmd_entry> cmd_pool
     {"/wave", {on::Action}}, {"/dance", {on::Action}}, {"/love", {on::Action}}, {"/sleep", {on::Action}}, {"/facepalm", {on::Action}}, {"/fp", {on::Action}},
     {"/smh", {on::Action}}, {"/yes", {on::Action}}, {"/no", {on::Action}}, {"/omg", {on::Action}}, {"/idk", {on::Action}}, {"/shrug", {on::Action}},
     {"/furious", {on::Action}}, {"/rolleyes", {on::Action}}, {"/foldarms", {on::Action}}, {"/fa", {on::Action}}, {"/stubborn", {on::Action}}, {"/fold", {on::Action}},
-    {"/dab", {on::Action}}, {"/sassy", {on::Action}}, {"/dance2", {on::Action}}, {"/march", {on::Action}}, {"/grumpy", {on::Action}}, {"/shy", {on::Action}}
+    {"/dab", {on::Action}}, {"/sassy", {on::Action}}, {"/dance2", {on::Action}}, {"/march", {on::Action}}, {"/grumpy", {on::Action}}, {"/shy", {on::Action}}, {"/cheer", {on::Action}}
 };
