@@ -35,6 +35,8 @@ namespace
     constexpr short EVIL_EYE       = 1226;
     constexpr short FUNHOUSE_MIRROR = 1872;
     constexpr short CARNIVAL_WALLPAPER = 1878;
+    constexpr short CARNIVAL_AWNING = 1880;
+    constexpr short CARNIVAL_PIPE  = 2238;
     constexpr short CARNIVAL_BLOCK = 1882;
     constexpr short CARNIVAL_SIGN  = 1906;
     constexpr short BULLSEYE       = 1908;
@@ -159,18 +161,23 @@ namespace
         int seconds;      // @note my pick: time limit
         int min_players;  // @note wiki: Brutal Bounce needs 2, Death Race 5000 needs 4 ("at least three other players")
     };
-    constexpr int HUB = 51; // @note the row people walk on in the middle of the carnival
+    /*
+    * @note my own layout: every game is its own striped building up in the night sky, standing on stilts over a walkway.
+    *   three walkways (y 21, 44 and the ground at 57) are joined by Carnival Ladders. each building's Carnival Tent stands
+    *   on the walkway right under it. the plaza on the ground has the main door, the Ringmaster's stage and both booths.
+    */
+    constexpr int WALK_TOP = 21, WALK_MID = 44, GROUND = 57;
     const room_def ROOMS[] = {
-        { GULCH,         "Growganoth Gulch", 3,  HUB, 1,  11, 9,  42, 2,  41, {1884/*Red Pennant*/, 1880/*Carnival Awning*/, 1936/*Blazing Electro Wings*/}, 60, 1 },
-        { RACE,          "Death Race 5000",  10, HUB, 11, 11, 49, 25, 12, 24, {2238/*Carnival Pipe*/, 2220/*Tiny Tank*/, 2216/*Edvoid's Fire-Nado*/}, 120, 4 },
-        { MIRROR,        "Mirror Maze",      17, HUB, 81, 1,  98, 19, 82, 18, {1882/*Carnival Block*/, 1872/*Funhouse Mirror*/, 1942/*Calliope*/}, 60, 1 },
-        { CONCENTRATION, "Concentration",    24, HUB, 41, 1,  59, 9,  42, 8,  {1888/*Green Pennant*/, 1928/*Ringmaster Hat*/, 1944/*Diamond Diaper*/}, 60, 1 },
-        { SHOOTING,      "Shooting Gallery", 31, HUB, 1,  1,  19, 9,  10, 8,  {1890/*Yellow Pennant*/, 1894/*Lion Block*/, 1892/*Lion Taming Whip*/}, 45, 1 },
-        { SHOOTING,      "Shooting Gallery", 69, HUB, 21, 1,  39, 9,  30, 8,  {1886/*Blue Pennant*/, 1896/*Elephant Block*/, 1934/*Orbs Of Elixir*/}, 45, 1 },
-        { CONCENTRATION, "Concentration",    76, HUB, 61, 1,  79, 9,  62, 8,  {1914/*Carnival Platform*/, 1906/*Carnival Sign*/, 1938/*Diamond Wings*/}, 60, 1 },
-        { BOUNCE,        "Brutal Bounce",    83, HUB, 11, 27, 49, 42, 30, 41, {2568/*Carnival Spikeball*/, 2570/*Carny Vest*/, 2572/*Flame Scythe*/}, 120, 2 },
-        { SPIKY,         "Spiky Survivor",   90, HUB, 51, 11, 79, 42, 65, 20, {7178/*Carnival Ladders*/, 7176/*Dragon Block*/, 7136/*Ethereal Rainbow Dragon*/}, 60, 1 },
-        { GULCH,         "Growganoth Gulch", 96, HUB, 90, 21, 98, 42, 91, 41, {1878/*Carnival Wallpaper*/, 1930/*Ringmaster Suit*/, 1940/*Diamond Rocket Shoes*/}, 60, 1 },
+        { GULCH,         "Growganoth Gulch", 10, GROUND - 1,   0,  22, 8,  53, 1,  52, {1884/*Red Pennant*/, 1880/*Carnival Awning*/, 1936/*Blazing Electro Wings*/}, 60, 1 },
+        { RACE,          "Death Race 5000",  3,  WALK_TOP - 1, 1,  3,  39, 17, 2,  16, {2238/*Carnival Pipe*/, 2220/*Tiny Tank*/, 2216/*Edvoid's Fire-Nado*/}, 120, 4 },
+        { MIRROR,        "Mirror Maze",      12, WALK_MID - 1, 10, 22, 27, 40, 11, 39, {1882/*Carnival Block*/, 1872/*Funhouse Mirror*/, 1942/*Calliope*/}, 60, 1 },
+        { CONCENTRATION, "Concentration",    44, WALK_TOP - 1, 42, 9,  60, 17, 43, 16, {1888/*Green Pennant*/, 1928/*Ringmaster Hat*/, 1944/*Diamond Diaper*/}, 60, 1 },
+        { SHOOTING,      "Shooting Gallery", 16, GROUND - 1,   12, 45, 30, 53, 21, 52, {1890/*Yellow Pennant*/, 1894/*Lion Block*/, 1892/*Lion Taming Whip*/}, 45, 1 },
+        { SHOOTING,      "Shooting Gallery", 65, WALK_TOP - 1, 63, 9,  81, 17, 72, 16, {1886/*Blue Pennant*/, 1896/*Elephant Block*/, 1934/*Orbs Of Elixir*/}, 45, 1 },
+        { CONCENTRATION, "Concentration",    83, GROUND - 1,   68, 45, 86, 53, 69, 52, {1914/*Carnival Platform*/, 1906/*Carnival Sign*/, 1938/*Diamond Wings*/}, 60, 1 },
+        { BOUNCE,        "Brutal Bounce",    32, WALK_MID - 1, 30, 25, 68, 40, 49, 39, {2568/*Carnival Spikeball*/, 2570/*Carny Vest*/, 2572/*Flame Scythe*/}, 120, 2 },
+        { SPIKY,         "Spiky Survivor",   72, WALK_MID - 1, 70, 22, 89, 40, 79, 23, {7178/*Carnival Ladders*/, 7176/*Dragon Block*/, 7136/*Ethereal Rainbow Dragon*/}, 60, 1 },
+        { GULCH,         "Growganoth Gulch", 88, GROUND - 1,   91, 22, 99, 53, 92, 52, {1878/*Carnival Wallpaper*/, 1930/*Ringmaster Suit*/, 1940/*Diamond Rocket Shoes*/}, 60, 1 },
         { WASTE,         "Waste a Ticket",   98, 0,  0,  0,  0,  0,  0,  0,  {0, 0, 0}, 0, 1 } // @note up in the top right corner: only floating gets you there
     };
     constexpr std::size_t ROOM_COUNT = sizeof(ROOMS) / sizeof(ROOMS[0]);
@@ -178,6 +185,8 @@ namespace
     constexpr int SHOOTING_TARGETS = 3; // @note my pick: Bullseyes up at once
     constexpr int CARD_COUNT = 16;
     constexpr int RING_X = 53, BOOTH_LEFT_X = 46, BOOTH_RIGHT_X = 56, DOOR_X = 50;
+    constexpr short CARNIVAL_LADDERS = 7178;
+    constexpr short NIGHT = 2; // @note base weather: the night sky (Weather Machine - Night)
 
     ::pos landing_of(const room_def &room) { return ::pos{ (room.tent_x >= 97) ? room.tent_x - 1 : room.tent_x + 1, room.tent_y }; }
     bool inside(const room_def &room, int x, int y) { return x > room.x0 && x < room.x1 && y > room.y0 && y < room.y1; }
@@ -246,28 +255,29 @@ namespace
             }
             case RACE: // @note a starting pen behind a gate, then death spikes, lava and walls to the finish
             {
-                const int floor = room.y1 - 1;
+                const int floor = room.y1 - 1, o = room.x0 - 11; // @note the course was drawn for x0 = 11
                 for (int y = room.y0 + 1; y < room.y1; ++y) put(world, race_gate(room).x_int(), y, CARNIVAL_BLOCK);
-                for (int x : { 18, 23, 33, 41, 46 }) put(world, x, floor, DEATH_SPIKES);
-                for (int x : { 27, 28, 37, 38, 39 }) put(world, x, floor, LAVA);
-                for (int x : { 20, 30, 44 }) { put(world, x, floor, CARNIVAL_BLOCK); put(world, x, floor - 1, CARNIVAL_BLOCK); }
-                for (int x = 25; x <= 29; ++x) put(world, x, floor - 4, DEATH_SPIKES); // @note jump too high over the lava and you hit these
-                for (int x = 32; x <= 40; ++x) put(world, x, floor - 2, CARNIVAL_PLATFORM); // @note a ledge over the lava
-                for (int x = 35; x <= 39; ++x) put(world, x, room.y0 + 1, DEATH_SPIKES);
+                for (int x : { 18, 23, 33, 41, 46 }) put(world, x + o, floor, DEATH_SPIKES);
+                for (int x : { 27, 28, 37, 38, 39 }) put(world, x + o, floor, LAVA);
+                for (int x : { 20, 30, 44 }) { put(world, x + o, floor, CARNIVAL_BLOCK); put(world, x + o, floor - 1, CARNIVAL_BLOCK); }
+                for (int x = 25; x <= 29; ++x) put(world, x + o, floor - 4, DEATH_SPIKES); // @note jump too high over the lava and you hit these
+                for (int x = 32; x <= 40; ++x) put(world, x + o, floor - 2, CARNIVAL_PLATFORM); // @note a ledge over the lava
+                for (int x = 35; x <= 39; ++x) put(world, x + o, room.y0 + 1, DEATH_SPIKES);
                 put(world, room.x1 - 1, floor, BULLSEYE); // @note the finish line
                 break;
             }
             case BOUNCE:
             {
-                for (int x = 18; x <= 24; ++x) put(world, x, 37, CARNIVAL_PLATFORM);
-                for (int x = 36; x <= 42; ++x) put(world, x, 37, CARNIVAL_PLATFORM);
-                for (int x = 27; x <= 33; ++x) put(world, x, 33, CARNIVAL_PLATFORM);
+                const int ox = room.x0 - 11, oy = room.y1 - 42; // @note drawn for x0 = 11, y1 = 42
+                for (int x = 18; x <= 24; ++x) put(world, x + ox, 37 + oy, CARNIVAL_PLATFORM);
+                for (int x = 36; x <= 42; ++x) put(world, x + ox, 37 + oy, CARNIVAL_PLATFORM);
+                for (int x = 27; x <= 33; ++x) put(world, x + ox, 33 + oy, CARNIVAL_PLATFORM);
                 break;
             }
             case SPIKY: // @note floating platforms over a floor of Carnival Spikeballs
             {
                 for (int x = room.x0 + 1; x < room.x1; ++x) put(world, x, room.y1 - 1, CARNIVAL_SPIKEBALL);
-                for (int y : { room.y1 - 5, room.y1 - 9, room.y1 - 13, room.y1 - 17 })
+                for (int y = room.y1 - 5; y >= room.y0 + 4; y -= 4)
                     for (int x = room.x0 + 1; x < room.x1; ++x)
                         if ((x + y) % 4 != 0) put(world, x, y, CREEP_PLATFORM);
                 break;
@@ -286,36 +296,68 @@ namespace
         world.lobster_traps.clear(); world.auto_machines.clear(); world.timed_machines.clear(); world.krankens.clear();
         world.vaults.clear(); world.game_tiles.clear(); world.game_generators.clear(); world.challenge_timers.clear(); world.ovens.clear();
         world.weather = ::pos{-1, -1};
-        world.base_weather = 0;
+        world.base_weather = NIGHT;
         world.xenonite = 0;
         world.is_public = false;
 
-        for (int y = HUB + 1; y < 60; ++y)
-            for (int x = 0; x < 100; ++x) put(world, x, y, (y >= HUB + 3) ? BEDROCK : CARNIVAL_BLOCK);
-        for (int y = 44; y <= HUB; ++y)
-            for (int x = 0; x < 100; ++x) put(world, x, y, 0, CARNIVAL_WALLPAPER);
-        for (int x = 0; x < 100; x += 2) put(world, x, 44, PENNANTS[(x / 2) % 4]); // @note bunting over the midway
+        auto backdrop = [&](int x, int y, short bg) { if (x >= 0 && x < 100 && y >= 0 && y < 60) world.blocks[tile_index(x, y)].bg = bg; };
+        auto empty = [&](int x, int y) { return x >= 0 && x < 100 && y >= 0 && y < 60 && world.blocks[tile_index(x, y)].fg == 0; };
+
+        /* @note the ground and the two walkways up in the air */
+        for (int x = 0; x < 100; ++x)
+        {
+            put(world, x, GROUND, CARNIVAL_BLOCK);
+            for (int y = GROUND + 1; y < 60; ++y) put(world, x, y, BEDROCK);
+        }
+        for (int x = 0; x <= 90; ++x) put(world, x, WALK_TOP, CARNIVAL_PLATFORM);
+        for (int x = 9; x <= 90; ++x) put(world, x, WALK_MID, CARNIVAL_PLATFORM);
+        for (int x = 94; x < 100; ++x) put(world, x, 1, CARNIVAL_PLATFORM); // @note the plank for Waste a Ticket
 
         for (const room_def &room : ROOMS) build_room(world, room);
 
-        /* @note the Hall of Mirrors around the main door: walk past and look funny */
-        for (int y = 46; y <= HUB; ++y)
-            for (int x = DOOR_X - 3; x <= DOOR_X + 2; ++x) put(world, x, y, world.blocks[tile_index(x, y)].fg, FUNHOUSE_MIRROR);
+        for (const room_def &room : ROOMS)
+        {
+            if (room.kind == WASTE) continue;
+            for (int x = room.x0; x <= room.x1; x += 2) // @note pennants along the roof
+                if (empty(x, room.y0 - 1)) put(world, x, room.y0 - 1, PENNANTS[(x / 2) % 4]);
+            for (int x = room.x0; x <= room.x1; ++x) // @note striped stilts down to the walkway
+            {
+                if (x != room.x0 && x != room.x1 && (x - room.x0) % 6 != 0) continue;
+                for (int y = room.y1 + 1; y <= room.tent_y; ++y) backdrop(x, y, CARNIVAL_PIPE);
+            }
+        }
 
-        put(world, DOOR_X, HUB, MAIN_DOOR);
-        put(world, DOOR_X, HUB + 1, BEDROCK);
-        world.doors.emplace_back("EXIT", "", "", ::pos{DOOR_X, HUB});
-        world.spawn = ::pos{DOOR_X, HUB}.by_32(false);
+        /* @note ladders: ground to the middle walkway, middle to the top */
+        for (int x : { 36, 64 })
+            for (int y = WALK_MID - 1; y < GROUND; ++y) put(world, x, y, CARNIVAL_LADDERS);
+        for (int x : { 29, 69 })
+            for (int y = WALK_TOP - 1; y < WALK_MID; ++y) put(world, x, y, CARNIVAL_LADDERS);
 
-        put(world, RING_X, HUB, THE_RINGMASTER);
-        sign(world, RING_X, HUB - 2, CARNIVAL_SIGN, "The Ringmaster's Quest For The Ring");
+        /* @note the plaza: the Ringmaster's stage under a striped awning, the booths either side, the main door in the middle */
+        for (int x = 42; x <= 60; ++x)
+        {
+            put(world, x, 50, CARNIVAL_AWNING);
+            if (x % 2 == 0) put(world, x, 49, PENNANTS[(x / 2) % 4]);
+            for (int y = 51; y < GROUND; ++y) backdrop(x, y, (x == 42 || x == 60) ? CARNIVAL_PIPE : CARNIVAL_WALLPAPER);
+        }
+        for (int y = 53; y < GROUND; ++y) /* @note the Hall of Mirrors around the main door: walk past and look funny */
+            for (int x = DOOR_X - 3; x <= DOOR_X + 2; ++x) backdrop(x, y, FUNHOUSE_MIRROR);
+
+        put(world, DOOR_X, GROUND - 1, MAIN_DOOR);
+        put(world, DOOR_X, GROUND, BEDROCK);
+        world.doors.emplace_back("EXIT", "", "", ::pos{DOOR_X, GROUND - 1});
+        world.spawn = ::pos{DOOR_X, GROUND - 1}.by_32(false);
+
+        put(world, RING_X, GROUND - 1, THE_RINGMASTER);
+        sign(world, RING_X, GROUND - 3, CARNIVAL_SIGN, "The Ringmaster's Quest For The Ring");
         for (int x : { BOOTH_LEFT_X, BOOTH_RIGHT_X })
         {
-            put(world, x, HUB, GOLDEN_TICKET_BOOTH);
-            sign(world, x, HUB - 2, CARNIVAL_SIGN, "Golden Tickets! 100 rarity of any items, or 30 per World Lock");
+            put(world, x, GROUND - 1, GOLDEN_TICKET_BOOTH);
+            sign(world, x, GROUND - 3, CARNIVAL_SIGN, "Golden Tickets! 100 rarity of any items, or 30 per World Lock");
         }
-        put(world, 40, HUB, CALLIOPE);
-        put(world, 62, HUB, CALLIOPE);
+        for (const auto &[x, y] : { std::pair{40, GROUND - 1}, {62, GROUND - 1}, {5, GROUND - 1}, {95, GROUND - 1},
+                                    {41, WALK_TOP - 1}, {62, WALK_TOP - 1}, {86, WALK_TOP - 1}, {20, WALK_MID - 1}, {50, WALK_MID - 1}, {80, WALK_MID - 1} })
+            if (empty(x, y)) put(world, x, y, CALLIOPE);
 
         for (const room_def &room : ROOMS)
         {
