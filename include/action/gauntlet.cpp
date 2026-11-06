@@ -73,15 +73,39 @@ namespace
         }
     }
 
-    /* @brief the punch shows on the block (the game draws the gauntlet's glow when a tile is hit) */
-    void punch_visual(ENetEvent &event, const ::gamePacket &gamePacket)
+    /*
+    * @brief SELECT_TILE_INDEX (0x26): the game draws the green "swap" icon on `main` and the dashed outline on every tile in `others`.
+    * @note tile indexes (y * 100 + x). -1 clears it. it fades by itself after 30 seconds. only the holder sees it.
+    */
+    void select_tiles(ENetPeer *peer, int main, const std::vector<int> &others = {})
     {
-        ::peer *pPeer = static_cast<::peer*>(event.peer->data);
-        ::gamePacket hit = gamePacket;
-        hit.type = 0x000008; // @note PACKET_TILE_APPLY_DAMAGE, the block's hit counter is not touched
-        hit.id = 6;
-        hit.netid = pPeer->netid;
-        send_gamePacket(*event.peer, hit);
+        ::blob blob = compress_state(::gamePacket{
+            .type = 0x26,
+            .netid = main,
+            .state = (int)gamePacketState::EXTENDED,
+            .size = static_cast<u_int>(others.empty() ? 0 : 4 + 4 * others.size())
+        });
+        if (!others.empty())
+        {
+            blob.i32(static_cast<int>(others.size()));
+            for (int index : others) blob.i32(index);
+        }
+        send_data(*peer, blob);
+    }
+
+    /* @brief ITEM_EFFECT (0x13): a small copy of the block flies from one tile to the other, everyone in the world sees it */
+    void fly_block(const ::world &world, short id, const ::pos &from, const ::pos &to)
+    {
+        if (id == 0) return;
+        ::blob blob = compress_state(::gamePacket{
+            .type  = 0x13,
+            .uid   = -1,
+            .delay = 200,
+            .pos   = ::pos{to.x * 32.0f + 16.0f, to.y * 32.0f + 16.0f},
+            .speed = ::pos{from.x * 32.0f + 16.0f, from.y * 32.0f + 16.0f},
+            .punch = ::pos{static_cast<int>(id), static_cast<int>(id)}
+        });
+        peers(world.name, PeerSearch::WORLD, [&blob](ENetPeer *peer) { send_data(*peer, blob); });
     }
 
     struct picked { std::string world; ::pos pos; };
@@ -180,6 +204,7 @@ bool gauntlet_punch(ENetEvent &event, ::world &world, const ::gamePacket &gamePa
     {
         holding.erase(held); // @note left the world, or the block is gone
         held = holding.end();
+        select_tiles(event.peer, -1);
     }
 
     if (held == holding.end()) // @note first punch: pick the block up
@@ -194,17 +219,27 @@ bool gauntlet_punch(ENetEvent &event, ::world &world, const ::gamePacket &gamePa
             return true;
         }
         holding[pPeer->user_id] = picked{ world.name, gamePacket.punch };
-        punch_visual(event, gamePacket);
-        bubble(event, std::format("`2{}`` picked up! Punch where it should go.", id_to_item(target.fg).raw_name));
+
+        /* @note every block it could swap with, within reach, gets the dashed outline */
+        std::vector<int> others{};
+        const ::pos standing = pPeer->pos.by_32(true);
+        const int reach = 6 + std::max(pPeer->punch_range, pPeer->build_range);
+        for (int y = std::max(0, standing.y_int() - reach); y <= standing.y_int() + reach; ++y)
+            for (int x = std::max(0, standing.x_int() - reach); x <= standing.x_int() + reach; ++x)
+            {
+                if (!valid_tile(world, ::pos{x, y}) || (x == gamePacket.punch.x && y == gamePacket.punch.y)) continue;
+                if (allowed(world.blocks[cord(x, y)].fg)) others.push_back(cord(x, y));
+            }
+        select_tiles(event.peer, cord(gamePacket.punch.x, gamePacket.punch.y), others);
         play_sfx(event.peer, "audio/punch_locked.wav");
         return true;
     }
 
     const ::pos from = held->second.pos;
     holding.erase(held);
+    select_tiles(event.peer, -1); // @note the green marks go away
     if (from == gamePacket.punch) // @note punched the same block again: put it down
     {
-        bubble(event, "Never mind.");
         return true;
     }
     if (target.fg != 0 && !allowed(target.fg))
@@ -226,7 +261,8 @@ bool gauntlet_punch(ENetEvent &event, ::world &world, const ::gamePacket &gamePa
     target.state[3] = (t3 & ~move3) | (s3 & move3);
 
     swap_tile_data(world, from, gamePacket.punch);
-    punch_visual(event, gamePacket);
+    fly_block(world, target.fg, from, gamePacket.punch);
+    fly_block(world, source.fg, gamePacket.punch, from);
     send_tile_update(event, ::gamePacket{.id = source.fg, .punch = from}, source, world);
     send_tile_update(event, ::gamePacket{.id = target.fg, .punch = gamePacket.punch}, target, world);
     play_in_world(world.name, pPeer->netid, "audio/punch_locked.wav");
