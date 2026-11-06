@@ -112,6 +112,9 @@ public:
     /* @return true if `uid` is this peer and they're not in /playermode */
     bool owns(int uid) const { return !this->player_mode && uid != 0 && uid == this->user_id; }
     std::array<float, 10ull> clothing{}; // @note peer's clothing {id, clothing::}
+    std::vector<int> friends{}; // @note user ids of friends (loaded on log in)
+    std::vector<int> friend_requests{}; // @note user ids who asked to be friends this session
+    u_char punch_range{}, build_range{}; // @note extra reach in tiles from clothing (set in on::SetClothing)
     u_char punch_effect{}; // @note last equipped clothing that has a effect. supporting 0-255 effects.
 
     int netid{}; // @note peer's netid is world identity. this will be useful for many packet sending

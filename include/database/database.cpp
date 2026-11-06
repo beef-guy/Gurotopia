@@ -82,6 +82,13 @@ void mysql_gateway::integrity()
         "by_uid INT DEFAULT 0"
     ")");
     mysql_query(mysql,
+        "CREATE TABLE IF NOT EXISTS friends ("
+        "uid INT NOT NULL,"
+        "friend_uid INT NOT NULL,"
+        "since TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "PRIMARY KEY (uid, friend_uid)"
+    ")"); // @note one row each way: a->b and b->a
+    mysql_query(mysql,
         "CREATE TABLE IF NOT EXISTS mod_log ("
         "id INT AUTO_INCREMENT PRIMARY KEY,"
         "at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"

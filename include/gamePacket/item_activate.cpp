@@ -3,6 +3,7 @@
 #include "onVariant/SetClothing.hpp"
 #include "commands/punch.hpp"
 #include "onVariant/ConsoleMessage.hpp"
+#include "database/playmods.hpp"
 
 #include "item_activate.hpp"
 
@@ -17,7 +18,12 @@ void item_activate(ENetEvent& event, ::gamePacket gamePacket)
     {
         float &current_cloth = pPeer->clothing[item.cloth_type]; // @note ID of the current clothing being changed
 
+        const u_short was_wearing = static_cast<u_short>(current_cloth);
         current_cloth = (current_cloth == gamePacket.id) ? 0 : gamePacket.id;
+
+        /* @note "(Double Jump mod added)" / "removed", like the real game */
+        if (was_wearing != 0) playmod_message(event.peer, was_wearing, false);
+        if (current_cloth != 0) playmod_message(event.peer, static_cast<u_short>(current_cloth), true);
 
         pPeer->update_effects();
         
