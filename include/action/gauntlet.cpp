@@ -38,21 +38,50 @@ namespace
         return 0;
     }
 
-    /* @return true for blocks that carry no extra data (doors, signs, locks, machines, trees... stay where they are) */
+    /* @return true for blocks the gauntlet can move. locks, the Main Door, bedrock and MAGPLANTs (their remotes point at them) stay put */
     bool movable(const ::item &item)
     {
-        if (item.id == 0 || item.id == 6/*Main Door*/ || item.id == 8/*Bedrock*/ || item.id == 3760/*Data Bedrock*/ || item.id == 7372/*Data Bedrock*/) return false;
-        if (item.cat & CAT_RETURN) return false;
+        if (item.id == 0 || item.id == 8/*Bedrock*/ || item.id == 3760/*Data Bedrock*/ || item.id == 7372/*Data Bedrock*/) return false;
         switch (item.type)
         {
-            case type::FOREGROUND: case type::PLATFORM: case type::DEADLY: case type::TRAMPOLINE: case type::BOUNCY:
-            case type::SLIPPERY: case type::FIRE_PAIN: case type::STING_PAIN: case type::ANIMATED:
-            case type::TOGGLEABLE_BLOCK: case type::TOGGLEABLE_ANIMATED_BLOCK: case type::TOGGLEABLE_DEADLY:
-            case type::TOGGLEABLE_MULTI_FRAME_BLOCK: case type::PUSHING_BLOCK: case type::STEAM_BLOCK:
-            case type::LEMON_JELLY_BLOCK: case type::DISAPPEAR_WHEN_STEPPED_ON: case type::PUDDLE_BLOCK: case type::ACID:
-                return true;
+            case type::LOCK: case type::MAIN_DOOR: case type::MAGPLANT: case type::STRONG: case type::BACKGROUND:
+                return false;
         }
-        return false;
+        return true;
+    }
+
+    /* @brief everything the world keeps by tile position (door ids, vending stock, heart monitor owner...) moves along */
+    void swap_tile_data(::world &world, const ::pos &a, const ::pos &b)
+    {
+        auto swap_in = [&a, &b](auto &list)
+        {
+            for (auto &entry : list)
+            {
+                if (entry.pos == a) entry.pos = b;
+                else if (entry.pos == b) entry.pos = a;
+            }
+        };
+        swap_in(world.doors); swap_in(world.random_blocks); swap_in(world.signs); swap_in(world.trees);
+        swap_in(world.vendings); swap_in(world.storages); swap_in(world.displays); swap_in(world.providers);
+        swap_in(world.mailboxes); swap_in(world.donation_boxes); swap_in(world.shelves); swap_in(world.heart_monitors);
+        swap_in(world.mannequins); swap_in(world.weather_settings); swap_in(world.fish_tanks); swap_in(world.fish_mounts);
+        swap_in(world.lobster_traps); swap_in(world.auto_machines); swap_in(world.timed_machines);
+        for (auto &[pos, life] : world.fossil_life)
+        {
+            if (pos == a) pos = b;
+            else if (pos == b) pos = a;
+        }
+    }
+
+    /* @brief the punch shows on the block (the game draws the gauntlet's glow when a tile is hit) */
+    void punch_visual(ENetEvent &event, const ::gamePacket &gamePacket)
+    {
+        ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+        ::gamePacket hit = gamePacket;
+        hit.type = 0x000008; // @note PACKET_TILE_APPLY_DAMAGE, the block's hit counter is not touched
+        hit.id = 6;
+        hit.netid = pPeer->netid;
+        send_gamePacket(*event.peer, hit);
     }
 
     struct picked { std::string world; ::pos pos; };
@@ -159,12 +188,13 @@ bool gauntlet_punch(ENetEvent &event, ::world &world, const ::gamePacket &gamePa
         if (!allowed(target.fg))
         {
             const ::item &item = id_to_item(target.fg);
-            if (!movable(item)) return false; // @note doors, locks, machines, trees... punch as normal
+            if (!movable(item)) return false; // @note locks, bedrock... punch as normal
             static constexpr const char *names[] { "", "Earth", "Wind", "", "Fire", "", "", "", "Water" };
             bubble(event, std::format("Your gauntlet isn't strong enough to move blocks with {} Chi yet!", names[block_chi(item)]));
             return true;
         }
         holding[pPeer->user_id] = picked{ world.name, gamePacket.punch };
+        punch_visual(event, gamePacket);
         bubble(event, std::format("`2{}`` picked up! Punch where it should go.", id_to_item(target.fg).raw_name));
         play_sfx(event.peer, "audio/punch_locked.wav");
         return true;
@@ -186,7 +216,7 @@ bool gauntlet_punch(ENetEvent &event, ::world &world, const ::gamePacket &gamePa
     ::block &source = world.blocks[cord(from.x_int(), from.y_int())];
     std::swap(source.fg, target.fg);
     source.hits[0] = target.hits[0] = 0;
-    constexpr u_char keep2 = S_PARENT | S_EXTRA | S_LOCKED | S_PUBLIC; // @note area lock and tile flags stay with the tile
+    constexpr u_char keep2 = S_PARENT; // @note area lock membership stays with the tile, the block's own flags move with it
     const u_char s2 = source.state[2], t2 = target.state[2];
     source.state[2] = (s2 & keep2) | (t2 & ~keep2);
     target.state[2] = (t2 & keep2) | (s2 & ~keep2);
@@ -195,6 +225,8 @@ bool gauntlet_punch(ENetEvent &event, ::world &world, const ::gamePacket &gamePa
     source.state[3] = (s3 & ~move3) | (t3 & move3);
     target.state[3] = (t3 & ~move3) | (s3 & move3);
 
+    swap_tile_data(world, from, gamePacket.punch);
+    punch_visual(event, gamePacket);
     send_tile_update(event, ::gamePacket{.id = source.fg, .punch = from}, source, world);
     send_tile_update(event, ::gamePacket{.id = target.fg, .punch = gamePacket.punch}, target, world);
     play_in_world(world.name, pPeer->netid, "audio/punch_locked.wav");
