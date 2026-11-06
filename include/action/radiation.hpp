@@ -5,7 +5,7 @@
 *   - hold a Geiger Counter: it pings red, yellow, then green as you get closer to the world's hidden radiation source.
 *     stand still on it to find something. the counter goes dead and you're Irradiated for 30 minutes.
 *   - hold a Dead Geiger Counter for 30 minutes to charge it, or tap it into a Geiger Charger (60 minutes).
-*   - hold the Great Chameleon and stand still: you blend into the block behind you.
+*   - hold the Great Chameleon and stand still in front of a foreground block: you blend into it.
 */
 
 constexpr short GEIGER_COUNTER      = 2204;
@@ -30,6 +30,9 @@ extern std::string radiation_effects(const ::peer &peer);
 
 /* @brief give an item, or drop it at the player's feet if the backpack is full */
 extern void give_or_drop(ENetEvent &event, ::world &world, short id, short count);
+
+/* @return true (after telling them) while a player can't pick up items: disguised, or just un-disguised */
+extern bool chameleon_pickup_blocked(ENetPeer *peer);
 
 /* @brief /geiger (developers): where this world's radiation source is */
 extern void geiger_command(ENetEvent &event, const std::string_view text);

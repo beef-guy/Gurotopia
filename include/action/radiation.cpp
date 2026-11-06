@@ -19,6 +19,7 @@ namespace
     constexpr long long CHARGER_SECONDS    = 60 * 60; // @note "half the speed of hand-charging"
     constexpr long long STILL_MS           = 1500;    // @note how long to stand on the source to find it
     constexpr long long CHAMELEON_MS       = 3000;    // @note how long to stand still before blending in
+    constexpr long long CHAMELEON_PICKUP_MS = 2000;   // @note no picking things up right after the disguise
     constexpr float GEIGER_PARTICLE        = 114.0f;
 
     long long now_ms()
@@ -107,6 +108,7 @@ namespace
     void disguise(ENetPeer *peer, ::world &world, int id)
     {
         ::peer *pPeer = static_cast<::peer*>(peer->data);
+        if (pPeer->disguised && id == 0) pPeer->disguise_ended = now_ms();
         pPeer->disguised = (id != 0);
         peers(world.name, PeerSearch::WORLD, [&](ENetPeer *p) { send_varlist(p, { "OnDisguiseChanged", id }, pPeer->netid); });
     }
@@ -309,13 +311,14 @@ void radiation_tick()
         }
         else if (!pPeer->disguised && now - pPeer->still_since >= CHAMELEON_MS)
         {
-            /* @note blend into what's behind the player: the foreground they stand in, else the background */
-            const ::pos here = tile_of(*pPeer);
+            /* @note blend into the foreground block the player stands in front of (like a pillar or a sign).
+            *        the game only keeps the disguise when the tile at the player's position (pos / 32) has that foreground,
+            *        then hides the body (the eyes stay) and draws the block there. nothing to blend into: nothing happens. */
+            const ::pos here{ std::floor(pPeer->pos.x / 32.0f), std::floor(pPeer->pos.y / 32.0f) };
             if (valid_tile(*world, here))
             {
                 const ::block &block = world->blocks[cord(here.x_int(), here.y_int())];
-                const int id = (block.fg != 0) ? block.fg : block.bg;
-                if (id != 0) disguise(peer, *world, id);
+                if (block.fg != 0) disguise(peer, *world, block.fg);
             }
         }
     });
@@ -328,4 +331,12 @@ void geiger_command(ENetEvent &event, const std::string_view)
     if (world == nullptr) return on::ConsoleMessage(event.peer, "Enter a world first.");
     if (!valid_tile(*world, world->geiger)) new_source(*world);
     on::ConsoleMessage(event.peer, std::format("`2The radiation source in this world is at {}, {}.``", world->geiger.x_int(), world->geiger.y_int()));
+}
+
+bool chameleon_pickup_blocked(ENetPeer *peer)
+{
+    const ::peer *pPeer = static_cast<::peer*>(peer->data);
+    if (!pPeer->disguised && (pPeer->disguise_ended == 0 || now_ms() - pPeer->disguise_ended >= CHAMELEON_PICKUP_MS)) return false;
+    send_varlist(peer, { "OnTalkBubble", pPeer->netid, "You can't pickup items right after the disguise! Wait for couple of seconds", 0u, 1u });
+    return true;
 }
