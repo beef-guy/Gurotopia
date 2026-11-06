@@ -507,8 +507,8 @@ void mailrewards(ENetEvent& event, const std::string_view text)
 {
     const std::vector<std::string> list = words(text);
     const int format = list.empty() ? 0 : atoi(list[0].c_str());
-    if (format < 1 || format > 8)
-        return reply(event, std::format("Mail reward format: `w{}``. Usage: /mailrewards <1-8>", mail_rewards));
+    if (list.empty() || format < 0 || format > 8)
+        return reply(event, std::format("Mail reward format: `w{}``. Usage: /mailrewards <0-8>. 0 = rewards in the mail text, paid when opened", mail_rewards));
     mail_rewards = format;
     reply(event, std::format("`2Mail reward format is now {}.`` Close and open your mailbox to see it.", format));
 }

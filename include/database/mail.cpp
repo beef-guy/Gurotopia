@@ -10,7 +10,7 @@
 #include "mail.hpp"
 
 std::string mail_layout = "id,icon,icon,status,expires,status";
-int mail_rewards = 1; // @note spots 0, 1, 2, 7, 8, 9 of a packed mail
+int mail_rewards = 0; // @note 0: rewards written in the mail and paid on opening it // @note spots 0, 1, 2, 7, 8, 9 of a packed mail
 
 namespace
 {
