@@ -110,8 +110,20 @@ namespace
         ::peer *pPeer = static_cast<::peer*>(peer->data);
         if (pPeer->disguised && id == 0) pPeer->disguise_ended = now_ms();
         pPeer->disguised = (id != 0);
-        peers(world.name, PeerSearch::WORLD, [&](ENetPeer *p) { send_varlist(p, { "OnDisguiseChanged", id }, pPeer->netid); });
-        on::SetClothing(peer); // @note keep the game's "only eyes" look (0x14) in the character state we send, or it gets undone
+        /* @note disguised: no clothes at all, so the whole body is the block (the face stays). after: the real clothes again */
+        const auto c = [&](int slot) { return pPeer->disguised ? 0.0f : pPeer->clothing[slot]; };
+        const VariantList clothes = {
+            "OnSetClothing",
+            CL_Vec3f{c(clothing::HAIR), c(clothing::SHIRT), c(clothing::LEGS)},
+            CL_Vec3f{c(clothing::FEET), c(clothing::FACE), c(clothing::HAND)},
+            CL_Vec3f{c(clothing::BACK), c(clothing::HEAD), c(clothing::CHARM)},
+            (pPeer->state & S_GHOST) ? -140 : pPeer->skin_color,
+            CL_Vec3f{c(clothing::ANCES), 0.0f, 0.0f}
+        };
+        peers(world.name, PeerSearch::WORLD, [&](ENetPeer *p) {
+            send_varlist(p, { "OnDisguiseChanged", id }, pPeer->netid);
+            send_varlist(p, clothes, pPeer->netid);
+        });
     }
 
     void found_something(ENetPeer *peer, ::world &world)
@@ -312,10 +324,8 @@ void radiation_tick()
         }
         else if (!pPeer->disguised && now - pPeer->still_since >= CHAMELEON_MS)
         {
-            /* @note blend into the foreground block the player stands in front of (like a pillar or a sign).
-            *        the game only keeps the disguise when the tile at the player's position (pos / 32) has that foreground,
-            *        then hides the body (the eyes stay) and draws the block there. nothing to blend into: nothing happens. */
-            const ::pos here{ std::floor(pPeer->pos.x / 32.0f), std::floor(pPeer->pos.y / 32.0f) };
+            /* @note turn into the block the player is standing on (Dirt -> a Dirt player). nothing under the feet: nothing happens */
+            const ::pos here{ std::floor((pPeer->pos.x + 16.0f) / 32.0f), std::floor((pPeer->pos.y + 16.0f) / 32.0f) + 1.0f };
             if (valid_tile(*world, here))
             {
                 const ::block &block = world->blocks[cord(here.x_int(), here.y_int())];

@@ -9,13 +9,14 @@ void on::SetClothing(ENetPeer *peer, bool sound)
 {
     ::peer *pPeer = static_cast<::peer*>(peer->data);
 
+    const auto c = [pPeer](int slot) { return pPeer->disguised ? 0.0f : pPeer->clothing[slot]; }; // @note the Great Chameleon: no clothes while disguised
     send_varlist(peer, {
         "OnSetClothing", 
-        CL_Vec3f{pPeer->clothing[clothing::HAIR], pPeer->clothing[clothing::SHIRT], pPeer->clothing[clothing::LEGS]}, 
-        CL_Vec3f{pPeer->clothing[clothing::FEET], pPeer->clothing[clothing::FACE], pPeer->clothing[clothing::HAND]}, 
-        CL_Vec3f{pPeer->clothing[clothing::BACK], pPeer->clothing[clothing::HEAD], pPeer->clothing[clothing::CHARM]}, 
+        CL_Vec3f{c(clothing::HAIR), c(clothing::SHIRT), c(clothing::LEGS)}, 
+        CL_Vec3f{c(clothing::FEET), c(clothing::FACE), c(clothing::HAND)}, 
+        CL_Vec3f{c(clothing::BACK), c(clothing::HEAD), c(clothing::CHARM)}, 
         (pPeer->state & S_GHOST) ? -140 : pPeer->skin_color,
-        CL_Vec3f{pPeer->clothing[clothing::ANCES], sound ? 1.0f : 0.0f, 0.0f} // @note y != 0: the client plays audio/change_clothes.wav
+        CL_Vec3f{c(clothing::ANCES), sound ? 1.0f : 0.0f, 0.0f} // @note y != 0: the client plays audio/change_clothes.wav
     }, pPeer->netid);
 
     /* @note powers from worn clothing (double jump, speedy, ...). @todo playmods from consumables */
@@ -34,7 +35,7 @@ void on::SetClothing(ENetPeer *peer, bool sound)
         .type = static_cast<int>(0x14u | (u_int(pPeer->punch_effect) << 8) | (u_int(0x80 + fx.build_range) << 16) | (u_int(0x80 + fx.punch_range) << 24)),
         .netid = pPeer->netid,
         .waterspeed = fx.water_speed,
-        .id = pPeer->state | ((fx.mods & M_DOUBLE_JUMP) ? S_DOUBLE_JUMP : 0) | (irradiated(*pPeer) ? S_IRRADIATED : 0) | (pPeer->disguised ? 0x14 : 0)/*the Great Chameleon: what the game sets itself on OnDisguiseChanged*/, // @note 04 invisible (only eyes/mouth), 08 no arms, 16 no face, 32 invisible (only legs/arms), 64 devil horns, 128 angel halo, 2048 frozen, 4096 gray skin?,8192 ducttape, 16384 Onion effect, 32768 stars effect, 65536 zombie, 131072 hit by lava, 262144 shadow effect, 524288 irradiated effect, 1048576 spotlight, 2097152 pineapple thingy
+        .id = pPeer->state | ((fx.mods & M_DOUBLE_JUMP) ? S_DOUBLE_JUMP : 0) | (irradiated(*pPeer) ? S_IRRADIATED : 0), // @note 04 invisible (only eyes/mouth), 08 no arms, 16 no face, 32 invisible (only legs/arms), 64 devil horns, 128 angel halo, 2048 frozen, 4096 gray skin?,8192 ducttape, 16384 Onion effect, 32768 stars effect, 65536 zombie, 131072 hit by lava, 262144 shadow effect, 524288 irradiated effect, 1048576 spotlight, 2097152 pineapple thingy
         .pos = ::pos{ 1200.0f/*acceleration*/, fx.punch_strength },
         .speed = ::pos{ fx.speed, fx.gravity },
         .punch = ::pos{ pPeer->hair_color, 0x00000000u } // @todo can this even be unsigned?
