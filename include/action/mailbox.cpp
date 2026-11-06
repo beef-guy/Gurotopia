@@ -72,8 +72,22 @@ namespace
         return ((format >= 3 && format <= 5) || format == 8) ? "[" + out + "]" : "{" + out + "}";
     }
 
+    /* @note 0 (the default): the client's reward box shows every item as "Blank", so the rewards are written in the
+    *   mail instead and paid when the mail is opened. 1-8 try the reward box again (see /mailrewards) */
+    bool hidden_rewards() { return mail_rewards == 0; }
+
+    std::string reward_lines(const ::mail_row &row)
+    {
+        if (row.rewards.empty()) return "";
+        std::string text = "\n\n`wReward:``";
+        for (const auto &[id, count] : row.rewards)
+            text += (id == MAIL_GEMS) ? std::format(" `2{} Gems``", count) : std::format(" `2{} {}``", count, id_to_item(static_cast<u_short>(id)).raw_name);
+        return text + (row.status == 0 ? "\n`5(yours as soon as you open this mail)``" : "\n`5(collected)``");
+    }
+
     void pack_rewards(msgpack &pack, const ::mail_row &row)
     {
+        if (hidden_rewards()) { pack.string("{}"); return; }
         if (mail_rewards == 6 || mail_rewards == 7) // @note a MessagePack map instead of JSON text
         {
             pack.map(row.rewards.size());
@@ -113,7 +127,7 @@ namespace
         pack.integer(value(2));
         pack.string(row.title);
         pack.string(row.body.substr(0, 60)); // @note the short text in the list
-        pack.string(row.body);
+        pack.string(hidden_rewards() ? row.body + reward_lines(row) : row.body);
         pack_rewards(pack, row);
         pack.integer(value(3));
         pack.integer(value(4));
@@ -227,7 +241,11 @@ void action::mailbox_readmessage(ENetEvent& event, const std::string& header)
     const int id = atoi(::hPipe{ header }["messageID"].c_str());
 
     std::optional<::mail_row> row = find_mail(pPeer->user_id, id);
-    if (row && row->status == 0 && row->rewards.empty()) set_status(row->id, 1); // @note mails with rewards are read by claiming them
+    if (row && row->status == 0)
+    {
+        if (row->rewards.empty()) set_status(row->id, 1);
+        else if (hidden_rewards() && claim(event, row->id) == 1) play_sfx(event.peer, "audio/cash_register.wav"); // @note opening the mail collects what's in it
+    }
     send_varlist(event.peer, { "OnRequestReadMailMsg" });
     mail_button(event.peer);
 }
