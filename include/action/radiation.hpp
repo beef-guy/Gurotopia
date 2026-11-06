@@ -5,7 +5,7 @@
 *   - hold a Geiger Counter: it pings red, yellow, then green as you get closer to the world's hidden radiation source.
 *     stand still on it to find something. the counter goes dead and you're Irradiated for 30 minutes.
 *   - hold a Dead Geiger Counter for 30 minutes to charge it, or tap it into a Geiger Charger (60 minutes).
-*   - hold the Great Chameleon and stand still in front of a foreground block: you blend into it.
+*   - hold the Great Chameleon and stand still: you turn into the block you're standing on.
 */
 
 constexpr short GEIGER_COUNTER      = 2204;
