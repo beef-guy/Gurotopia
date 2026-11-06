@@ -23,6 +23,7 @@
 #include "action/fishing.hpp"
 #include "action/automation.hpp"
 #include "action/event_buttons.hpp"
+#include "action/profile.hpp"
 
 #include "__dialog_return.hpp"
 
@@ -74,5 +75,8 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
     {"growscan", std::bind(&growscan_edit, std::placeholders::_1, std::placeholders::_2)},
     {"fish_tank", std::bind(&fish_tank_edit, std::placeholders::_1, std::placeholders::_2)},
     {"fish_mount", std::bind(&fish_mount_edit, std::placeholders::_1, std::placeholders::_2)},
-    {"lobster_trap", std::bind(&lobster_trap_edit, std::placeholders::_1, std::placeholders::_2)}
+    {"lobster_trap", std::bind(&lobster_trap_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"online_status", std::bind(&online_status, std::placeholders::_1, std::placeholders::_2)},
+    {"notebook_edit", std::bind(&notebook_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"daily_bonus", std::bind(&daily_bonus, std::placeholders::_1, std::placeholders::_2)}
 };

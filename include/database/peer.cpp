@@ -106,6 +106,12 @@ void peer::mysql_select_all(bool by_user_id)
     this->playtime     = this->mysql_select<long long>("playtime", "", by_user_id);
     this->daily_quest  = this->mysql_select<signed>("daily_quest", "", by_user_id);
     this->piggy_bank   = this->mysql_select<long long>("piggy_bank", "", by_user_id);
+    this->wardrobe       = this->mysql_select<std::string>("wardrobe", "", by_user_id);
+    this->wardrobe_slots = std::clamp(this->mysql_select<signed>("wardrobe_slots", "", by_user_id), 2, 6);
+    this->notebook       = this->mysql_select<std::string>("notebook", "", by_user_id);
+    this->daily_bonus    = this->mysql_select<signed>("daily_bonus", "", by_user_id);
+    this->bonus_streak   = this->mysql_select<signed>("bonus_streak", "", by_user_id);
+    this->online_status  = std::clamp(this->mysql_select<signed>("online_status", "", by_user_id), 0, 2);
     this->login_at     = std::time(nullptr);
     this->skin_color   = static_cast<u_int>(this->mysql_select<long long>("skin_color", "", by_user_id));
     const std::string clothing = this->mysql_select<std::string>("clothing", "", by_user_id);

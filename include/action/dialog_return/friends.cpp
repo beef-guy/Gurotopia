@@ -5,6 +5,7 @@
 #include "action/friends.hpp"
 #include "commands/warp.hpp"
 #include "tools/create_dialog.hpp"
+#include "action/profile.hpp"
 
 #include <algorithm>
 
@@ -29,8 +30,8 @@ static void show_friend(ENetEvent& event, int uid)
         .add_spacer("small")
         .add_textbox(
             (pOthers == nullptr) ? std::format("{} is `4offline``.", row->growid) :
-            (in_world) ? std::format("{} is `2online`` in `5{}``.", row->growid, pOthers->recent_worlds.back()) :
-                         std::format("{} is `2online`` but not in a world.", row->growid))
+            (in_world) ? std::format("{} is `2online``{} in `5{}``.", row->growid, online_status_text(*pOthers), pOthers->recent_worlds.back()) :
+                         std::format("{} is `2online``{} but not in a world.", row->growid, online_status_text(*pOthers)))
         .add_spacer("small");
 
     if (in_world && pOthers->recent_worlds.back() != pPeer->recent_worlds.back())

@@ -75,6 +75,12 @@ void mysql_gateway::integrity()
     if (!column_found("world", "extras"))      alter_table("world", "extras MEDIUMBLOB"); // @note door targets, area locks, vending machines, storage boxes
     if (!column_found("peer", "daily_quest"))  alter_table("peer", "daily_quest INT DEFAULT 0"); // @note day (yyyymmdd) the daily quest was last done
     if (!column_found("peer", "playtime"))     alter_table("peer", "playtime BIGINT DEFAULT 0"); // @note seconds played
+    if (!column_found("peer", "wardrobe"))       alter_table("peer", "wardrobe VARCHAR(1024) DEFAULT ''"); // @note saved outfits
+    if (!column_found("peer", "wardrobe_slots")) alter_table("peer", "wardrobe_slots INT DEFAULT 2");
+    if (!column_found("peer", "notebook"))       alter_table("peer", "notebook VARCHAR(1024) DEFAULT ''");
+    if (!column_found("peer", "daily_bonus"))    alter_table("peer", "daily_bonus INT DEFAULT 0");  // @note yyyymmdd last claimed
+    if (!column_found("peer", "bonus_streak"))   alter_table("peer", "bonus_streak INT DEFAULT 0");
+    if (!column_found("peer", "online_status"))  alter_table("peer", "online_status INT DEFAULT 0"); // @note 0 online, 1 busy, 2 away
     if (!column_found("peer", "piggy_bank"))   alter_table("peer", "piggy_bank BIGINT DEFAULT 0"); // @note gems in the Piggy Bank
 
     mail_create_table();             // @note Growmail

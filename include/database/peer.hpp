@@ -113,6 +113,13 @@ public:
     bool owns(int uid) const { return !this->player_mode && uid != 0 && uid == this->user_id; }
     std::array<float, 10ull> clothing{}; // @note peer's clothing {id, clothing::}
     int daily_quest{}; // @note day (yyyymmdd, UTC) Crazy Jim's daily quest was last done
+    /* @note self wrench menu (action/profile.cpp) */
+    std::string wardrobe{};   // @note saved outfits: 10 item ids each, "id,id,...;id,id,..."
+    int wardrobe_slots{2};    // @note outfits unlocked
+    std::string notebook{};   // @note the player's own notes
+    int daily_bonus{};        // @note day (yyyymmdd, UTC) the daily bonus was last claimed
+    int bonus_streak{};       // @note days in a row the daily bonus was claimed
+    int online_status{};      // @note 0 online, 1 busy, 2 away
     ::pos magplant{-1, -1}; // @note the MAGPLANT 5000 this player's remote builds from (not saved)
     std::string magplant_world{};
     struct

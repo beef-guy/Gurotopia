@@ -4,6 +4,7 @@
 #include "action/trade.hpp"
 #include "friends.hpp"
 #include "daily_quest.hpp"
+#include "action/profile.hpp"
 #include "onVariant/ConsoleMessage.hpp"
 #include "tools/create_dialog.hpp"
 #include <algorithm>
@@ -97,6 +98,7 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
             )
         });
     }
+    else if (profile_button(event, hPipe["buttonClicked"])) {} // @note Wardrobe, Daily Bonus, Notebook, Growmojis, Trades...
     else if (const auto it = rml_pages.find(hPipe["buttonClicked"]); it != rml_pages.end())
     {
         send_varlist(event.peer, { "OnDialogRequestRML", it->second });
