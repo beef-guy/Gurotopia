@@ -929,6 +929,27 @@ void magplant_give_remote(ENetEvent &event, ::world &world, const ::pos &pos)
     pPeer->mysql_update_all();
 }
 
+void magplant_take_remote(ENetEvent &event)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    if (pPeer == nullptr) return;
+    pPeer->magplant = ::pos{-1, -1};
+    pPeer->magplant_world.clear();
+    if (const int have = pPeer->have_slot(::slot(ID_MAGPLANT_REMOTE, 0)); have > 0)
+        modify_item_inventory(event, ::slot(ID_MAGPLANT_REMOTE, static_cast<short>(-have)));
+}
+
+void magplant_remotes_off(::world &world, const ::pos &pos)
+{
+    peers(world.name, PeerSearch::WORLD, [&](ENetPeer *peer)
+    {
+        ::peer *pPeer = static_cast<::peer*>(peer->data);
+        if (pPeer->magplant_world != world.name || pPeer->magplant != pos) return;
+        ENetEvent fake{.peer = peer};
+        magplant_take_remote(fake);
+    });
+}
+
 void magplant_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
