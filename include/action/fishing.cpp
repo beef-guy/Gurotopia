@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "action/carnival.hpp"
 #include "action/growpass.hpp"
 
 #include "onVariant/ConsoleMessage.hpp"
@@ -227,6 +228,7 @@ namespace
         say(event.peer, pPeer, std::format("You caught a {}`2{} lb. {}``!", q.empty() ? "" : std::format("`9{}`` ", q), c.lbs, id_to_item(c.item).raw_name));
         pPeer->add_xp(event, 1 + c.lbs / 20);
         grow_pass_points(event.peer, 2);
+        ring_progress(event.peer, RT_FISH_LBS, c.lbs);
     }
 
     ::world *world_of(::peer *pPeer)

@@ -18,6 +18,7 @@
 #include "action/fossils.hpp"
 #include "action/growpass.hpp"
 #include "action/radiation.hpp"
+#include "action/carnival.hpp"
 #include "https/server_data.hpp"
 
 #include <algorithm>
@@ -60,6 +61,7 @@ const std::unordered_map<std::string_view, ::cmd_entry> cmd_pool
     {"/skin", {skin}},
     {"/news", {news}},
     {"/weather", {weather}}, // @note only changes the weather on the player's own screen
+    {"/carnival", {carnival_command}}, // @note when the Carnival is in town. developers: /carnival on|off|auto
 
     /* @note staff */
     {"/ghost", {ghost, MODERATOR}},

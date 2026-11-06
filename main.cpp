@@ -17,6 +17,7 @@
 #include "include/action/radiation.hpp"
 #include "include/action/fossils.hpp"
 #include "include/action/special_items.hpp"
+#include "include/action/carnival.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -255,6 +256,7 @@ int main(int argc, char *argv[])
         radiation_tick(); // @note Geiger Counters, the Irradiated mod, the Great Chameleon
         fossil_tick(); // @note rocks in busy worlds turn into Fossil Rocks
         special_tick(); // @note Freeze and Curse Wands wearing off, Challenge Timers, Game Generator games
+        carnival_tick(); // @note Carnival games: timers, targets, platforms
 
         if (clock::now() - last_save >= std::chrono::seconds(60)) // @note so a crash or force stop loses at most a minute
         {

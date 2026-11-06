@@ -3,6 +3,7 @@
 #include "action/join_request.hpp"
 #include "action/quit_to_exit.hpp"
 #include "tools/sound.hpp"
+#include "action/carnival.hpp"
 
 #include "tile_activate.hpp"
 
@@ -20,6 +21,12 @@ void tile_activate(ENetEvent& event, ::gamePacket gamePacket)
     /* @note doors and checkpoints work by walking into them, so the player has to be right there */
     const ::pos standing = pPeer->pos.by_32(true);
     if (pPeer->role < MODERATOR && (std::abs(gamePacket.punch.x - standing.x) > 2.0f || std::abs(gamePacket.punch.y - standing.y) > 2.0f)) return;
+
+    if (carnival_activate(event, *world, gamePacket.punch)) // @note a Carnival Tent: 1 Golden Ticket to play
+    {
+        send_gamePacket(*event.peer, gamePacket);
+        return;
+    }
 
     ::block &block = world->blocks[cord(gamePacket.punch.x, gamePacket.punch.y)];
     const ::item &item = id_to_item(block.fg);

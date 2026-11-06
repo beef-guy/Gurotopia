@@ -8,6 +8,8 @@
 #include "commands/punch.hpp"
 #include "tools/string.hpp"
 #include "tools/auth.hpp"
+#include "tools/random.hpp"
+#include "action/carnival.hpp"
 
 #include "peer.hpp"
 
@@ -121,6 +123,7 @@ void peer::mysql_select_all(bool by_user_id)
     this->geiger_charge    = std::max(this->mysql_select<signed>("geiger_charge", "", by_user_id), 0);
     this->irradiated_until = this->mysql_select<long long>("irradiated_until", "", by_user_id);
     this->cursed_until = this->mysql_select<long long>("cursed_until", "", by_user_id);
+    carnival_load(*this, this->mysql_select<std::string>("carnival", "", by_user_id));
     this->login_at     = std::time(nullptr);
     this->skin_color   = static_cast<u_int>(this->mysql_select<long long>("skin_color", "", by_user_id));
     const std::string clothing = this->mysql_select<std::string>("clothing", "", by_user_id);
@@ -194,6 +197,7 @@ void peer::load_clothing(const std::string &text)
 void peer::mysql_update_all()
 {
     if (this->growid.empty()) return;
+    this->mysql_update("carnival", carnival_serialize(*this)); // @note action/carnival.cpp
 
     ::hStmt hStmt{ "UPDATE peer SET inventory = ?, gems = ?, level = ?, xp = ?, wl_storage = ?, clothing = ?, skin_color = ?, playtime = ?, daily_quest = ?, geiger_charge = ?, irradiated_until = ? WHERE growid = ?" };
     const ::blob inventory = this->serialize_inventory();
@@ -322,6 +326,8 @@ bool peer::can_hold(short id, int count)
 
 void peer::add_xp(ENetEvent &event, u_short value) 
 {
+    if (std::ranges::find(this->clothing, 1996.0f/*Ring of Wisdom*/) != this->clothing.end() && RandomRange(0, 10) == 0) value *= 2; // @note wiki: 10% chance of double XP
+    ring_progress(event.peer, RT_XP, value);
     u_int &lvl = this->level.front();
     u_int &xp = this->level.back() += value; // @note factor the new xp amount
 

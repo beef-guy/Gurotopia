@@ -26,6 +26,7 @@
 #include "action/profile.hpp"
 #include "action/gauntlet.hpp"
 #include "action/special_items.hpp"
+#include "action/carnival.hpp"
 #include "action/cooking.hpp"
 #include "database/playmods.hpp"
 
@@ -93,6 +94,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
 
         if (gamePacket.id != 18 && gamePacket.id != 32 && pPeer->have_slot(::slot(gamePacket.id, 0)) == 0) return; // @note can only use items peer has
 
+        if (carnival_tile_change(event, *world, gamePacket)) return; // @note Carnival games, the Ringmaster, Golden Ticket Booths (the carnival can't be edited)
         if (fishing_tile_change(event, *world, gamePacket)) return; // @note casting bait, or punching to reel in
         if (radiation_tile_change(event, *world, gamePacket)) return; // @note Geiger Charger
         if (fossil_tile_change(event, *world, gamePacket)) return; // @note Rock Hammer, Fossil Brush, Fossil Prep Station
@@ -309,6 +311,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                                 break;
                             }
                         }
+                        ring_progress(event.peer, RT_PROVIDERS, 1);
                         send_tile_update(event, std::move(gamePacket), block, *world); // @note restart the countdown on the provider
 
                         pPeer->add_xp(event, 1);
@@ -325,6 +328,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                         add_break_drop(event, ::slot(item.id - 1, RandomRange(1, tree->fruit*3)), gamePacket.punch.by_32(), *world); // @note fruit (from tree)
                         daily_challenge_harvest(event, static_cast<short>(item.id - 1));
                         grow_pass_harvest(event.peer);
+                        ring_progress(event.peer, RT_HARVEST_RARITY, item.rarity);
                     }
                     break;
                 }
@@ -594,6 +598,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
 
                 pPeer->add_xp(event, std::trunc(1.0f + item.rarity / 5.0f));
                 if (item.type != type::SEED) grow_pass_break(event.peer);
+                if (item.type != type::SEED) ring_progress(event.peer, RT_BREAK, 1), ring_progress(event.peer, RT_BREAK_RARITY, item.rarity);
             }
         } // @note delete im, id
         else if (item.cloth_type != clothing::NONE) 
@@ -1262,6 +1267,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 case type::SEED:
                 {
                     world->trees.emplace_back(ticks(), RandomRange(1, 3), gamePacket.punch);
+                    ring_progress(event.peer, RT_PLANT_RARITY, item.rarity);
                     block.state[2] = (block.state[2] & S_PARENT) | 0x11; // @todo
                     tile_update = true;
                     break;

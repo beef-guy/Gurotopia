@@ -11,6 +11,7 @@
 #include "tools/time.hpp"
 #include "quit_to_exit.hpp"
 #include "special_items.hpp"
+#include "carnival.hpp"
 
 #include "join_request.hpp"
 
@@ -68,6 +69,7 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
             }
             throw std::runtime_error(why);
         }
+        carnival_prepare(world); // @note CARNIVAL is built fresh for its first visitor
         {
             ::blob blob = compress_state(::gamePacket{ .type = 0x04, /*PACKET_SEND_MAP_DATA*/ .state = (int)gamePacketState::EXTENDED });
             blob.push_back(world.serialize());
