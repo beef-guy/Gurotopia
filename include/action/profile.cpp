@@ -151,17 +151,18 @@ namespace
         std::ranges::sort(free_list, {}, &std::pair<std::string_view, std::string_view>::second);
 
         int unlocked = static_cast<int>(free_list.size()), total = static_cast<int>(free_list.size());
-        std::string grid{};
+        std::string grid{}, locked{};
         for (const growmoji &g : growmoji_items)
         {
             if (!emoticon.contains(g.code)) continue;
             const bool have = growmoji_unlocked(*pPeer, g.code);
             ++total;
             if (have) ++unlocked;
-            grid += std::format("add_button_with_icon|gmoji_{}|{}{}``|{}|{}||\n",
-                g.code, have ? "`2" : "`o", g.code, have ? "staticBlueFrame" : "staticGreyFrame", g.item);
+            const std::string &name = id_to_item(g.item).raw_name;
+            if (have) grid += std::format("add_label_with_icon|small|{} `2({})``|left|{}|\n", emoticon[g.code], g.code, g.item);
+            else locked += std::format("add_label_with_icon|small|`s({})`` - use a `w{}`` to unlock|left|{}|\n", g.code, name, g.item);
         }
-        grid += "add_button_with_icon||END_LIST|noflags|0||\n";
+        grid += locked; // @note unlocked first
 
         std::string free_rows{};
         for (std::size_t i = 0; i < free_list.size(); i += 4)
@@ -178,7 +179,7 @@ namespace
                 .add_label_with_icon("big", "`wGrowmojis``", 5770)
                 .add_spacer("small")
                 .add_textbox(std::format("You have unlocked `2{}/{}`` Growmojis.", unlocked, total))
-                .add_smalltext("Type a Growmoji's name in brackets in chat to use it, like `w(smile)``. Find a Growmoji item and use it on yourself to unlock that Growmoji forever. Tap one to see more.")
+                .add_smalltext("Type a Growmoji's name in brackets in chat to use it, like `w(smile)``. Use a Growmoji item on yourself to unlock that Growmoji forever.")
                 .add_spacer("small")
                 .add_label("small", "`wCollectable Growmojis``")
                 .add_raw(grid)
