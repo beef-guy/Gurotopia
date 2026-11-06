@@ -97,7 +97,12 @@ void block::reset()
     ::block copy = block;
     copy.state[2] &= ~S_EXTRA;
     if (type > '\x00') copy.state[2] |= S_EXTRA; // @note real servers flag every tile that carries extra data
-    if (is_tile_lock(block.fg)) copy.state[2] &= ~S_PUBLIC; // @note the game crashes on an area lock tile flagged public
+    if (is_tile_lock(block.fg)) // @note a public area lock's border is drawn yellow. the game picks red or green itself from the owner and access list
+    {
+        const auto lock = std::ranges::find(this->area_locks, block_pos, &::area_lock::pos);
+        if (lock != this->area_locks.end() && lock->is_public) copy.state[2] |= S_PUBLIC;
+        else copy.state[2] &= ~S_PUBLIC;
+    }
     if (copy.state[2] & S_PARENT) // @note a parent that isn't an area lock any more would crash the game
     {
         const int parent = copy.state[0] | (copy.state[1] << 8);
@@ -126,25 +131,24 @@ void block::reset()
             blob.push_back((sign != this->signs.end()) ? sign->to_blob() : ::sign("", block_pos).to_blob());
             break;
         }
-        case '\x03': /* lock: settings, owner, access count, access, minimum level, 7 unknown */
+        case '\x03': /* lock: settings, owner, access count, access */
         {
             if (is_tile_lock(block.fg))
             {
                 auto lock = std::ranges::find(this->area_locks, block_pos, &::area_lock::pos);
                 if (lock != this->area_locks.end())
                 {
-                    blob.u8(lock->ignore_air ? 0x01 : 0x00);
+                    blob.u8(0x01/*area lock*/ | (lock->ignore_air ? 0x20/*ignore empty air*/ : 0x00)); // @note the same bits as the World Lock's music bits; source: github.com/cppdecl/Nomikai Src/World/REFERENCE_enums.h
                     blob.i32(lock->owner);
                     blob.i32(static_cast<int>(lock->access.size()));
                     for (const int uid : lock->access) blob.i32(uid);
                 }
                 else
                 {
-                    blob.u8(0x00);
+                    blob.u8(0x01/*area lock*/);
                     blob.i32(0);
                     blob.i32(0);
                 }
-                blob.u8(0x00);
             }
             else
             {
@@ -153,9 +157,10 @@ void block::reset()
                 blob.i32(this->owner);
                 blob.i32(static_cast<int>(std::ranges::count_if(this->access, [](int uid) { return uid > 0; })));
                 for (const int uid : this->access) if (uid > 0) blob.i32(uid); // @note the access list follows its count
-                blob.u8(this->minimum_entry_level);
             }
-            for (int pad = 0; pad < 7; ++pad) blob.u8(0x00);
+            /* @note nothing else follows. a real world (version 12+) adds two u32s here, but this server sends version 0,
+             * so the game reads no more bytes. sending them shifted every later tile and broke worlds with locks.
+             * source: github.com/voidkle/gtps-guide guide/tile-extras.md (0x03 Lock) */
             break;
         }
         case '\x04': /* seed */
@@ -565,7 +570,6 @@ void world::load_extras(::blob &blob)
                 lock.is_public = is_public, lock.ignore_air = ignore_air, lock.builder_mode = mode;
                 if (valid_tile(*this, tile) && is_tile_lock(this->blocks[cord(x, y)].fg))
                 {
-                    this->blocks[cord(x, y)].state[2] &= ~S_PUBLIC; // @note the game crashes on an area lock tile flagged public
                     this->area_locks.push_back(std::move(lock));
                 }
                 break;
