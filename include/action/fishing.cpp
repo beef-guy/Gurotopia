@@ -279,6 +279,21 @@ bool fishing_tile_change(ENetEvent &event, ::world &world, const ::gamePacket &g
     }
     if (!is_bait(static_cast<short>(gamePacket.id))) return false;
 
+    if (valid_tile(world, gamePacket.punch) && id_to_item(world.blocks[cord(gamePacket.punch.x_int(), gamePacket.punch.y_int())].fg).type == type::LOBSTER_TRAP)
+    { // @note using bait on a Lobster Trap loads it with 5 (the client doesn't open a wrench menu for traps)
+        if (!world.can_edit(*pPeer, gamePacket.punch, false)) throw std::runtime_error("That's not your trap!");
+        auto found = std::ranges::find(world.lobster_traps, gamePacket.punch, &::lobster_trap::pos);
+        if (found == world.lobster_traps.end()) found = world.lobster_traps.emplace(world.lobster_traps.end(), ::lobster_trap{.pos = gamePacket.punch});
+        if (found->count > 0) throw std::runtime_error("The trap is already baited. Punch it now and then to check it!");
+        const short bait = static_cast<short>(gamePacket.id);
+        if (pPeer->have_slot(::slot(bait, 0)) < 5) throw std::runtime_error("You need 5 of that bait to load the trap!");
+        modify_item_inventory(event, ::slot(bait, -5));
+        found->bait = bait, found->count = 5, found->checked = ticks();
+        say(event.peer, pPeer, std::format("You loaded the trap with 5 `2{}``. Punch it now and then to check it!", id_to_item(bait).raw_name));
+        world.save();
+        return true;
+    }
+
     const ::pos standing = pPeer->pos.by_32(true);
     const ::pos target = gamePacket.punch;
     if (water_at(world, target) == water::NONE) return false; // @note not water: the bait does nothing here

@@ -34,6 +34,7 @@
 
 #include "mailbox.hpp"
 #include "event_buttons.hpp"
+#include "profile.hpp"
 
 #include "quit.hpp"
 
@@ -82,6 +83,15 @@ std::unordered_map<std::string, std::function<void(ENetEvent&, const std::string
     {"action|mailbox_readmessage", std::bind(&action::mailbox_readmessage, std::placeholders::_1, std::placeholders::_2)},
     {"action|mailbox_claimreward", std::bind(&action::mailbox_claimreward, std::placeholders::_1, std::placeholders::_2)},
     {"action|mailbox_claimrewardsmany", std::bind(&action::mailbox_claimrewardsmany, std::placeholders::_1, std::placeholders::_2)},
+
+    /* @note self wrench menu: the game's own Wardrobe screen and the Daily Bonus menu */
+    {"action|wardrobe_preset_load", std::bind(&action::wardrobe_preset_load, std::placeholders::_1, std::placeholders::_2)},
+    {"action|wardrobe_save_ui", std::bind(&action::wardrobe_save_ui, std::placeholders::_1, std::placeholders::_2)},
+    {"action|wardrobe_load_ui", std::bind(&action::wardrobe_load_ui, std::placeholders::_1, std::placeholders::_2)},
+    {"action|wardrobe_unequip_all", std::bind(&action::wardrobe_unequip_all, std::placeholders::_1, std::placeholders::_2)},
+    {"action|wardrobe_purchase_slot", std::bind(&action::wardrobe_purchase_slot, std::placeholders::_1, std::placeholders::_2)},
+    {"action|dailyrewardmenu", std::bind(&action::dailyrewardmenu, std::placeholders::_1, std::placeholders::_2)},
+    {"action|claimdailyreward", std::bind(&action::claimdailyreward, std::placeholders::_1, std::placeholders::_2)},
 
     {"action|quit", std::bind(&action::quit, std::placeholders::_1, std::placeholders::_2)}
 };
