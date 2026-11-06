@@ -66,14 +66,18 @@ namespace
                 case 4:  out += std::format("{{\"id\":{},\"count\":{}}}", id, count); break;
                 case 5:  out += std::format("[{},{}]", id, count); break;
                 case 8:  out += std::format("{{\"ItemId\":{},\"Count\":{}}}", id, count); break;
+                case 9:  out += std::format("{{\"{}\":{}}}", id, count); break;
                 default: out += std::format("\"{}\":{}", id, count); break;
             }
         }
-        return ((format >= 3 && format <= 5) || format == 8) ? "[" + out + "]" : "{" + out + "}";
+        return ((format >= 3 && format <= 5) || format >= 8) ? "[" + out + "]" : "{" + out + "}";
     }
 
-    /* @note 0 (the default): the client's reward box shows every item as "Blank", so the rewards are written in the
-    *   mail instead and paid when the mail is opened. 1-8 try the reward box again (see /mailrewards) */
+    /*
+    * @note 9 (the default) is what the client reads (found in libgrowtopia.so 5.61): a JSON array of one-key objects,
+    *   [{"242":5},{"112":1000}]. for each element it takes the first key (atoi) as the item and its value as the count.
+    *   0 writes the rewards in the mail text instead and pays them when the mail is opened. see /mailrewards
+    */
     bool hidden_rewards() { return mail_rewards == 0; }
 
     std::string reward_lines(const ::mail_row &row)
