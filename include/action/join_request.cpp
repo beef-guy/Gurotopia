@@ -147,6 +147,12 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
             "OnSetFeatureEnableFlags",
             "EA4PAgcGAQoDEAQRBQ0JCAw="
         });
+        if (pPeer->magplant_world == world.name) // @note the game forgets the remote's machine when it loads a world
+        {
+            auto mag = std::ranges::find(world.magplants, pPeer->magplant, &::magplant::pos);
+            if (mag != world.magplants.end() && mag->remote && mag->item != 0)
+                send_varlist(event.peer, { "OnPlanterActivated", static_cast<u_int>(mag->item), static_cast<u_int>(mag->pos.x_int()), static_cast<u_int>(mag->pos.y_int()) }, pPeer->netid);
+        }
         peers(world.name, PeerSearch::WORLD, [&](ENetPeer *peer)
         {
             const ::peer *pOthers = static_cast<::peer*>(peer->data);
