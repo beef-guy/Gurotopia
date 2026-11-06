@@ -993,6 +993,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     if (world->owner == 0 || !pPeer->owns(world->owner)) throw std::runtime_error("You can only place a Xenonite Crystal in a world you've locked.");
                     if (std::ranges::find(world->blocks, item.id, &::block::fg) != world->blocks.end()) throw std::runtime_error("This world already has a Xenonite Crystal!");
                     world->xenonite = 0; // @note a new crystal starts with nothing set
+                    tile_update = true; // @note the game needs the crystal's extra data straight away
                     break;
                 }
                 case type::SEED:

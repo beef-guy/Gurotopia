@@ -20,6 +20,7 @@ char get_type(const ::item &item)
         case type::DISPLAY_BLOCK: return '\x17';
         case type::VENDING_MACHINE: return '\x18';
         case type::STORAGE_BOX: return '\x36';
+        case type::XENONITE: return '\x12'; // @note the game crashes on a crystal tile without its extra data
     }
     return '\x00';
 }
@@ -178,6 +179,12 @@ void block::reset()
         case '\x09': /* provider: seconds since it was last collected */
         {
             blob.u32(static_cast<u_int>(item.tick)); // @note always ready
+            break;
+        }
+        case '\x12': /* xenonite crystal: u8 + u32 (gtps-guide tile-extras 0x12). the powers are applied by the server, so both stay 0 */
+        {
+            blob.u8(0);
+            blob.u32(0);
             break;
         }
         case '\x17': /* display block */
