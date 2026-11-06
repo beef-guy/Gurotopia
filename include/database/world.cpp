@@ -97,6 +97,12 @@ void block::reset()
     ::block copy = block;
     copy.state[2] &= ~S_EXTRA;
     if (type > '\x00') copy.state[2] |= S_EXTRA; // @note real servers flag every tile that carries extra data
+    if (is_tile_lock(block.fg)) copy.state[2] &= ~S_PUBLIC; // @note the game crashes on an area lock tile flagged public
+    if (copy.state[2] & S_PARENT) // @note a parent that isn't an area lock any more would crash the game
+    {
+        const int parent = copy.state[0] | (copy.state[1] << 8);
+        if (parent < 0 || parent >= static_cast<int>(this->blocks.size()) || !is_tile_lock(this->blocks[parent].fg)) copy.state[2] &= ~S_PARENT;
+    }
     if (!(copy.state[2] & S_PARENT)) copy.state[0] = copy.state[1] = 0;
     blob.push_back(copy.to_blob());
 
@@ -559,7 +565,7 @@ void world::load_extras(::blob &blob)
                 lock.is_public = is_public, lock.ignore_air = ignore_air, lock.builder_mode = mode;
                 if (valid_tile(*this, tile) && is_tile_lock(this->blocks[cord(x, y)].fg))
                 {
-                    if (lock.is_public) this->blocks[cord(x, y)].state[2] |= S_PUBLIC; // @note yellow border
+                    this->blocks[cord(x, y)].state[2] &= ~S_PUBLIC; // @note the game crashes on an area lock tile flagged public
                     this->area_locks.push_back(std::move(lock));
                 }
                 break;
