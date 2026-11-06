@@ -19,6 +19,7 @@
 #include "action/dialog_return/tile_extras.hpp"
 #include "action/dialog_return/wrenchables.hpp"
 #include "action/fishing.hpp"
+#include "action/automation.hpp"
 
 #include "tile_change.hpp"
 
@@ -398,6 +399,14 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     if (lobster_trap_punch(event, *world, gamePacket.punch)) return; // @note a baited trap is checked, not broken
                     break;
                 }
+                case type::AUTO_BREAK_BLOCK:
+                case type::AUTO_BREAK_TREE:
+                case type::AUTO_BREAK:
+                {
+                    try { auto_machine_punch(event, *world, gamePacket.punch, block.hits[0] + 1 >= item.hits); }
+                    catch (...) { block.hits[0] = 0; throw; }
+                    break;
+                }
                 case type::FISH_TANK_PORT:
                 {
                     auto tank = std::ranges::find(world->fish_tanks, gamePacket.punch, &::fish_tank::pos);
@@ -463,6 +472,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 std::erase_if(world->fish_tanks, [&](const ::fish_tank &tank) { return tank.pos == gamePacket.punch; });
                 std::erase_if(world->fish_mounts, [&](const ::fish_mount &mount) { return mount.pos == gamePacket.punch; });
                 std::erase_if(world->lobster_traps, [&](const ::lobster_trap &trap) { return trap.pos == gamePacket.punch; });
+                std::erase_if(world->auto_machines, [&](const ::auto_machine &m) { return m.pos == gamePacket.punch; });
                 if (is_tile_lock(item.id)) remove_area_lock(event, *world, gamePacket.punch);
                 if (item.type == type::XENONITE && world->xenonite != 0)
                 {
@@ -1068,6 +1078,13 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     lobster_trap_wrench(event, *world, gamePacket.punch);
                     break;
                 }
+                case type::AUTO_BREAK_BLOCK:
+                case type::AUTO_BREAK_TREE:
+                case type::AUTO_BREAK:
+                {
+                    auto_machine_wrench(event, *world, gamePacket.punch);
+                    break;
+                }
                 case type::FOREGROUND:
                 {
                     if (item.id == 3898/*Telephone*/) telephone_wrench(event, *world, gamePacket.punch);
@@ -1246,6 +1263,14 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 case type::MAGPLANT:
                 {
                     std::erase_if(world->magplants, [&](const ::magplant &mag) { return mag.pos == gamePacket.punch; });
+                    tile_update = true;
+                    break;
+                }
+                case type::AUTO_BREAK_BLOCK:
+                case type::AUTO_BREAK_TREE:
+                case type::AUTO_BREAK:
+                {
+                    std::erase_if(world->auto_machines, [&](const ::auto_machine &m) { return m.pos == gamePacket.punch; });
                     tile_update = true;
                     break;
                 }

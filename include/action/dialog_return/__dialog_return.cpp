@@ -21,6 +21,7 @@
 #include "tile_extras.hpp"
 #include "wrenchables.hpp"
 #include "action/fishing.hpp"
+#include "action/automation.hpp"
 #include "action/event_buttons.hpp"
 
 #include "__dialog_return.hpp"
@@ -68,6 +69,7 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
     {"dice", std::bind(&dice_edit, std::placeholders::_1, std::placeholders::_2)},
     {"weather", std::bind(&weather_edit, std::placeholders::_1, std::placeholders::_2)},
     {"magplant", std::bind(&magplant_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"auto_machine", std::bind(&auto_machine_edit, std::placeholders::_1, std::placeholders::_2)},
     {"growscan", std::bind(&growscan_edit, std::placeholders::_1, std::placeholders::_2)},
     {"fish_tank", std::bind(&fish_tank_edit, std::placeholders::_1, std::placeholders::_2)},
     {"fish_mount", std::bind(&fish_mount_edit, std::placeholders::_1, std::placeholders::_2)},

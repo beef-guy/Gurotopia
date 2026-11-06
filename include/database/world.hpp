@@ -277,6 +277,18 @@ struct lobster_trap
     u_int checked{}; // @note ticks()
 };
 
+/* @brief Tesseract Manipulator, Heart of Gaia, Techno-Organic Engine: gem-fuelled machines that break or harvest a target */
+struct auto_machine
+{
+    ::pos pos{};
+    int gems{};
+    short target{}; // @note a block (Tesseract) or a seed (Heart of Gaia); the Techno-Organic Engine takes either
+    bool on{};
+    short item{};   // @note Techno-Organic Engine: the drop it keeps
+    int count{};
+    long long next{}; // @note not saved: when it acts next (ms)
+};
+
 /* @brief Storage Box Xtreme contents */
 struct storage
 {
@@ -336,6 +348,7 @@ public:
     std::vector<::fish_tank> fish_tanks{};
     std::vector<::fish_mount> fish_mounts{};
     std::vector<::lobster_trap> lobster_traps{};
+    std::vector<::auto_machine> auto_machines{};
     u_int xenonite{}; // @note the Xenonite Crystal's settings (xenonite:: in playmods.hpp). only one crystal per world
 
     /* @return the area lock that covers this tile, or nullptr */

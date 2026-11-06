@@ -416,6 +416,26 @@ static void write_default_extra(::blob &blob, char type, const ::item &item)
             blob.u32(static_cast<u_int>(magplant_limit(block.fg)));
             break;
         }
+        case '\x45': /* tesseract manipulator / heart of gaia: gems, ?, target (the "on" u32 is only read for world version > 7) */
+        case '\x46':
+        case '\x47': /* techno-organic engine: the same, then its storage: item, count, ?, look, target offset, ? */
+        {
+            auto m = std::ranges::find(this->auto_machines, block_pos, &::auto_machine::pos);
+            const bool found = m != this->auto_machines.end();
+            blob.u32(found ? static_cast<u_int>(m->gems) : 0);
+            blob.u32(0);
+            blob.u32(found ? static_cast<u_int>(m->target) : 0);
+            if (type == '\x47')
+            {
+                blob.u32(found ? static_cast<u_int>(m->item) : 0);
+                blob.u32(found ? static_cast<u_int>(m->count) : 0);
+                blob.u8(0);
+                blob.u8(found && m->count > 0);
+                blob.u32(0);
+                blob.u32(0);
+            }
+            break;
+        }
         case '\x36': /* storage box: the client only needs to know it exists */
         {
             blob.i16(0);
@@ -711,7 +731,7 @@ namespace
         for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
         return true;
     }
-    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17 };
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17, EX_AUTO = 18 };
 }
 
 /* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
@@ -831,6 +851,12 @@ namespace
         if (trap.count <= 0) continue;
         blob.u8(EX_LOBSTER_TRAP); blob.i16(trap.pos.x_int()); blob.i16(trap.pos.y_int());
         blob.i16(trap.bait); blob.i32(trap.count); blob.u32(trap.checked);
+    }
+    for (const ::auto_machine &m : this->auto_machines)
+    {
+        if (m.gems <= 0 && m.target == 0 && m.count <= 0) continue;
+        blob.u8(EX_AUTO); blob.i16(m.pos.x_int()); blob.i16(m.pos.y_int());
+        blob.i32(m.gems); blob.i16(m.target); blob.u8(m.on); blob.i16(m.item); blob.i32(m.count);
     }
     if (this->xenonite != 0)
     {
@@ -1000,6 +1026,20 @@ void world::load_extras(::blob &blob)
                 ::lobster_trap trap{.pos = tile};
                 if (!blob.read_i16(trap.bait, pos) || !blob.read_i32(trap.count, pos) || !blob.read_u32(trap.checked, pos)) return;
                 if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::LOBSTER_TRAP) this->lobster_traps.push_back(trap);
+                break;
+            }
+            case EX_AUTO:
+            {
+                ::auto_machine m{.pos = tile};
+                u_char on{};
+                if (!blob.read_i32(m.gems, pos) || !blob.read_i16(m.target, pos) || !blob.read_u8(on, pos) || !blob.read_i16(m.item, pos) || !blob.read_i32(m.count, pos)) return;
+                m.on = on;
+                m.gems = std::max(0, m.gems), m.count = std::max(0, m.count);
+                if (valid_tile(*this, tile))
+                {
+                    const auto kind = id_to_item(this->blocks[cord(x, y)].fg).type;
+                    if (kind == type::AUTO_BREAK_BLOCK || kind == type::AUTO_BREAK_TREE || kind == type::AUTO_BREAK) this->auto_machines.push_back(m);
+                }
                 break;
             }
             case EX_SHELF:
