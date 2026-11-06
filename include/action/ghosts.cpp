@@ -39,6 +39,7 @@ namespace
     constexpr float BEAM_LENGTH         = 7.0f * 32.0f;
     constexpr float BEAM_WIDTH          = 30.0f;
     constexpr float GLOVE_REACH         = 48.0f;
+    constexpr float SUCK_SPEED          = 140.0f; // @note how fast a jar pulls a ghost in (pixels a second)
 
     long long now_ms()
     {
@@ -246,6 +247,7 @@ namespace
 
         for (::ghost &g : world.ghosts)
         {
+            if (g.into_jar != 0) continue; // @note already going into a jar
             const auto [gx, gy] = where(g, now);
             float along{};
             if (seg_distance(gx, gy, cx, cy, ex, ey, &along) > BEAM_WIDTH) continue;
@@ -290,6 +292,7 @@ namespace
         std::vector<u_char> hit{};
         for (const ::ghost &g : world.ghosts)
         {
+            if (g.into_jar != 0) continue;
             const auto [gx, gy] = where(g, now);
             if (std::hypot(gx - px, gy - py) <= GLOVE_REACH) hit.push_back(g.id);
         }
@@ -357,7 +360,7 @@ namespace
             .add_label_with_icon("big", "`wSpirit Storage Unit``", SPIRIT_STORAGE_UNIT)
             .add_textbox(std::format("`2Spirit Storage``: {} ghost{} stored, `w{}%`` full.", ghosts, (ghosts == 1) ? "" : "s", percent))
             .add_spacer("small")
-            .add_smalltext("Drop Ghosts-In-A-Jar in front of it to store them. Every ghost fills it 5%.")
+            .add_smalltext("Drop Ghosts-In-A-Jar in front of it, then send Steam into it to store them. Every ghost fills it 5%.")
             .add_smalltext(percent >= 100 ?
                 "`4It's overloaded!`` Every ghost you add now could make it explode. The fuller it is when it blows, the better the prize." :
                 "Past 100% it starts to overload, and every new ghost might make it explode. The fuller it is when it blows, the better the prize.");
@@ -367,10 +370,31 @@ namespace
 
 float ghost_speed_factor(const ::peer &peer)
 {
+    return (peer.slimed_until > now_ms()) ? 0.5f : 1.0f; // @note slimed: half speed. a Mind Ghost doesn't slow you, it swaps your controls (ghost_flags2)
+}
+
+int ghost_flags2(const ::peer &peer)
+{
+    return (peer.mind_until > now_ms()) ? CHAR_FLAG2_MIND_CONTROL : 0;
+}
+
+u_int ghost_skin(const ::peer &peer, u_int skin)
+{
     const long long now = now_ms();
-    if (peer.mind_until > now) return -1.0f; // @note Mind Ghost: left is right
-    if (peer.slimed_until > now) return 0.5f;
-    return 1.0f;
+    if (peer.mind_until > now) return 0xD86CB4FFu;  // @note purple, the Mind Ghost's colour (0xBBGGRRAA like every skin colour)
+    if (peer.slimed_until > now) return 0x4AD86EFFu; // @note slime green
+    return skin;
+}
+
+std::string ghost_effects(const ::peer &peer)
+{
+    const long long now = now_ms();
+    std::string lines{};
+    if (peer.slimed_until > now)
+        lines += std::format("add_label_with_icon|small|`wSlimed`` `o({} secs left)``|left|{}|\n", (peer.slimed_until - now + 999) / 1000, ECTOPLASM);
+    if (peer.mind_until > now)
+        lines += std::format("add_label_with_icon|small|`wMind Control`` `o({} secs left)``|left|{}|\n", (peer.mind_until - now + 999) / 1000, MIND_GHOST_IN_A_JAR);
+    return lines;
 }
 
 bool ghost_tile_change(ENetEvent &event, ::world &world, const ::gamePacket &gamePacket)
@@ -467,37 +491,56 @@ void ghost_npc_packet(ENetEvent &event, ::gamePacket gamePacket)
     glove_punch(event, *world, gx, gy);
 }
 
+namespace
+{
+    /* @brief a ghost touching this player slimes them (or swaps their controls). @return true if it did */
+    bool ghost_touch(ENetPeer *peer, ::world &world, long long now)
+    {
+        ::peer *pPeer = static_cast<::peer*>(peer->data);
+        if (pPeer == nullptr || pPeer->netid == 0 || world.ghosts.empty()) return false;
+        if (pPeer->state & S_GHOST) return false; // @note /ghost: walking through everything
+
+        /* @note the player's body is about 20x30 in the middle of their 32x32 tile, a ghost about 28x28 around its point */
+        const float px = pPeer->pos.x + 16.0f, py = pPeer->pos.y + 17.0f;
+        const bool king = wearing(*pPeer, 8496/*Ghostking's Glory*/);
+        for (const ::ghost &g : world.ghosts)
+        {
+            if (g.id == 0 || g.into_jar != 0) continue;
+            const auto [gx, gy] = where(g, now);
+            if (std::abs(gx - px) > 24.0f || std::abs(gy - py) > 29.0f) continue;
+
+            if (g.kind == NPC_MIND_GHOST)
+            {
+                if (king || wearing(*pPeer, 6092/*Foil Hat*/) || wearing(*pPeer, 6374/*Alien Mind Protector*/)) continue;
+                const bool fresh = pPeer->mind_until <= now;
+                pPeer->mind_until = now + SLIME_MS; // @note touching it again keeps it going
+                if (!fresh) continue;
+                on::ConsoleMessage(peer, "`oA Mind Ghost got into your head! Left is right and right is left! (`$Mind Control`o mod added, `$6 secs`o left)``");
+                send_varlist(peer, { "OnTalkBubble", pPeer->netid, "`5Whoa... my head!``", 0u, 1u });
+            }
+            else
+            {
+                if (king || wearing(*pPeer, RUBBER_BOOTS)) continue;
+                const bool fresh = pPeer->slimed_until <= now;
+                pPeer->slimed_until = now + SLIME_MS;
+                if (!fresh) continue;
+                on::ConsoleMessage(peer, "`oYou've been slimed! You feel sluggish. (`$Slimed`o mod added, `$6 secs`o left)``");
+                send_varlist(peer, { "OnTalkBubble", pPeer->netid, "`2I got slimed!``", 0u, 1u });
+            }
+            play_in_world(world.name, pPeer->netid, "audio/boo_evil_laugh.wav");
+            on::SetClothing(peer, false, true); // @note everyone sees the new colour
+            return true;
+        }
+        return false;
+    }
+}
+
 void ghost_moved(ENetEvent &event)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
     ::world *world = world_of(*pPeer);
-    if (world == nullptr || world->ghosts.empty()) return;
-    if (pPeer->state & S_GHOST) return; // @note /ghost: walking through everything
-    const long long now = now_ms();
-    if (pPeer->slimed_until > now || pPeer->mind_until > now) return;
-    const auto [cx, cy] = centre(*pPeer);
-    for (const ::ghost &g : world->ghosts)
-    {
-        const auto [gx, gy] = where(g, now);
-        if (std::abs(gx - cx) > 22.0f || std::abs(gy - cy) > 26.0f) continue;
-
-        const bool king = wearing(*pPeer, 8496/*Ghostking's Glory*/);
-        if (g.kind == NPC_MIND_GHOST)
-        {
-            if (king || wearing(*pPeer, 6092/*Foil Hat*/) || wearing(*pPeer, 6374/*Alien Mind Protector*/)) continue;
-            pPeer->mind_until = now + SLIME_MS;
-            send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`5A Mind Ghost got in my head!`` Left is right!", 0u, 1u });
-        }
-        else
-        {
-            if (king || wearing(*pPeer, RUBBER_BOOTS)) continue;
-            pPeer->slimed_until = now + SLIME_MS;
-            send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`2I got slimed!``", 0u, 1u });
-        }
-        play_sfx(event.peer, "audio/boo_evil_laugh.wav");
-        on::SetClothing(event.peer);
-        return;
-    }
+    if (world == nullptr) return;
+    ghost_touch(event.peer, *world, now_ms());
 }
 
 void ghost_entered(ENetEvent &event, ::world &world)
@@ -533,20 +576,44 @@ void ghost_entered(ENetEvent &event, ::world &world)
     for (const ::ghost_jar &jar : world.ghost_jars) if (!jar.done) send_jar(world, jar, EV_ADD, event.peer);
 }
 
-int ssu_take_jars(ENetEvent &event, ::world &world, const ::pos &tile, short item, int count)
+int ssu_steamed(::world &world, const ::pos &tile)
 {
-    if (item != GHOST_IN_A_JAR && item != MIND_GHOST_IN_A_JAR) return 0;
     if (!valid_tile(world, tile)) return 0;
     ::block &block = world.blocks[cord(tile.x_int(), tile.y_int())];
     if (block.fg != SPIRIT_STORAGE_UNIT) return 0;
+    ENetPeer *someone = anyone_in(world);
+    if (someone == nullptr) return 0;
+    ENetEvent event{ .peer = someone };
 
-    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    /* @note "Drop Ghosts-In-A-Jar in front of it, then provide it with Steam power": jars lying on its tile or right next to it */
+    const auto near_unit = [&tile](const ::object &o) {
+        for (const ::pos at : { o.pos.by_32(true), ::pos{ o.pos.x + 8.0f, o.pos.y + 8.0f }.by_32(true) })
+            if (at.y == tile.y && std::abs(at.x - tile.x) <= 1.0f) return true;
+        return false;
+    };
+    int jars = 0;
+    std::vector<u_int> used{};
+    for (const ::object &o : world.objects)
+        if ((o.id == GHOST_IN_A_JAR || o.id == MIND_GHOST_IN_A_JAR) && near_unit(o)) jars += o.count, used.push_back(o.uid);
+    if (jars == 0) return 0;
+    for (const u_int uid : used)
+    {
+        std::erase_if(world.objects, [uid](const ::object &o) { return o.uid == uid; });
+        remove_object(event, static_cast<int>(uid));
+    }
+
     auto ssu = std::ranges::find(world.spirit_units, tile, &::spirit_unit::pos);
     if (ssu == world.spirit_units.end()) ssu = world.spirit_units.insert(world.spirit_units.end(), ::spirit_unit{ .pos = tile });
 
-    const bool command = wearing(*pPeer, 9098/*Ghostking's Command*/) && pPeer->owns(world.owner);
+    /* @note Ghostking's Command: the world owner wearing it here halves the risk below 200% */
+    bool command = false;
+    peers(world.name, PeerSearch::WORLD, [&](ENetPeer *p) {
+        const ::peer *pp = static_cast<::peer*>(p->data);
+        if (wearing(*pp, 9098) && pp->owns(world.owner)) command = true;
+    });
+    const float x = tile.x * 32.0f + 16.0f, y = tile.y * 32.0f + 16.0f;
     int taken = 0;
-    while (taken < count)
+    while (taken < jars)
     {
         ++taken;
         ++ssu->ghosts;
@@ -554,15 +621,15 @@ int ssu_take_jars(ENetEvent &event, ::world &world, const ::pos &tile, short ite
         const float chance = explode_chance(percent, command);
         if (chance > 0.0f && static_cast<float>(RandomRange(0, 9999)) < chance * 10000.0f)
         {
-            /* @note boom: the unit is wrecked and gives a prize for how full it was */
+            /* @note boom: the unit is wrecked and gives a prize for how full it was. jars it hadn't taken yet fall back out */
             const short prize = roll_ssu_prize(percent);
             world.spirit_units.erase(ssu);
             block.fg = DESTROYED_SSU;
             block.hits[0] = 0;
             world_tile_update(world, tile);
-            const float x = tile.x * 32.0f + 16.0f, y = tile.y * 32.0f + 16.0f;
-            play_in_world(world.name, pPeer->netid, "audio/bigboom.wav");
+            sound_near(world, x, y, "audio/bigboom.wav");
             drop_at(world, prize, 1, x, y);
+            if (jars - taken > 0) drop_at(world, GHOST_IN_A_JAR, jars - taken, x + 32.0f, y);
             peers(world.name, PeerSearch::WORLD, [&](ENetPeer *peer) {
                 on::ConsoleMessage(peer, std::format("`4The Spirit Storage Unit exploded at {}%!`` Out of the wreck came a `2{}``!", percent, id_to_item(prize).raw_name));
             });
@@ -572,9 +639,10 @@ int ssu_take_jars(ENetEvent &event, ::world &world, const ::pos &tile, short ite
     }
     const int percent = ssu->ghosts * 5;
     world_tile_update(world, tile);
-    play_in_world(world.name, pPeer->netid, (percent > 100) ? "audio/boo_pke_warning_light.wav" : "audio/boo_ghost_trap.wav");
-    send_varlist(event.peer, { "OnTalkBubble", pPeer->netid,
-        std::format("`2Stored {} ghost{}!`` The Spirit Storage Unit is `w{}%`` full{}", taken, (taken == 1) ? "" : "s", percent, (percent > 100) ? " - `4it's overloading!``" : "."), 0u, 1u });
+    sound_near(world, x, y, (percent > 100) ? "audio/boo_pke_warning_light.wav" : "audio/boo_ghost_trap.wav");
+    peers(world.name, PeerSearch::WORLD, [&](ENetPeer *peer) {
+        on::ConsoleMessage(peer, std::format("`2The Spirit Storage Unit stored {} ghost{}!`` It's `w{}%`` full{}", taken, (taken == 1) ? "" : "s", percent, (percent > 100) ? " - `4it's overloading!``" : "."));
+    });
     world.save();
     return taken;
 }
@@ -596,12 +664,18 @@ void ghost_tick()
     {
         ::peer *pp = static_cast<::peer*>(p->data);
         if (pp == nullptr) return;
-        if ((pp->slimed_until != 0 && now >= pp->slimed_until) || (pp->mind_until != 0 && now >= pp->mind_until))
+        bool changed = false;
+        if (pp->slimed_until != 0 && now >= pp->slimed_until)
         {
-            if (now >= pp->slimed_until) pp->slimed_until = 0;
-            if (now >= pp->mind_until) pp->mind_until = 0;
-            if (pp->netid != 0) on::SetClothing(p);
+            pp->slimed_until = 0, changed = true;
+            on::ConsoleMessage(p, "`oThe slime dries up. (`$Slimed`o mod removed)``");
         }
+        if (pp->mind_until != 0 && now >= pp->mind_until)
+        {
+            pp->mind_until = 0, changed = true;
+            on::ConsoleMessage(p, "`oYour mind is your own again. (`$Mind Control`o mod removed)``");
+        }
+        if (changed && pp->netid != 0) on::SetClothing(p, false, true);
     });
 
     static long long last_spawn_roll{};
@@ -622,29 +696,45 @@ void ghost_tick()
 
         /* @note Ghost Jars and Ghost Traps */
         bool caught_any = false;
+        for (auto g = world.ghosts.begin(); g != world.ghosts.end();)
+        {
+            if (g->into_jar == 0 || now < g->in_jar_at) { ++g; continue; }
+            auto jar = std::ranges::find(world.ghost_jars, g->into_jar, &::ghost_jar::id);
+            if (jar == world.ghost_jars.end()) { g->into_jar = 0; ++g; continue; }
+            /* @note in it goes: the game takes both away with the jar's puff (NPC event SUCKED: count1 the ghost, object type the jar) */
+            to_world(world, npc(EV_SUCKED, jar->id, g->id, jar->x, jar->y, jar->x, jar->y, 0.0f));
+            world.npc_removals.emplace_back(now + 800, std::array<u_char, 2>{ g->id, jar->id }); // @note in case the game kept either
+            sound_near(world, jar->x, jar->y, "audio/boo_ghost_trap.wav");
+            drop_at(world, (g->kind == NPC_MIND_GHOST) ? MIND_GHOST_IN_A_JAR : GHOST_IN_A_JAR, 1, jar->x, jar->y);
+            jar->done = true;
+            caught_any = true;
+            g = world.ghosts.erase(g);
+        }
         for (::ghost_jar &jar : world.ghost_jars)
         {
-            if (jar.done) continue;
+            if (jar.done || jar.pulling) continue;
             const long long age = now - jar.placed;
             if (age >= JAR_ARMS_MS && age <= JAR_ARMS_MS + JAR_LASTS_MS)
             {
                 const bool trap = jar.item == GHOST_TRAP; // @note "an enhanced field that is larger than a ghost jar"
                 const float half = trap ? 48.0f : 26.0f, up = trap ? 128.0f : 88.0f;
                 auto g = std::ranges::find_if(world.ghosts, [&](const ::ghost &g) {
+                    if (g.into_jar != 0 || g.id == 0) return false;
                     const auto [gx, gy] = where(g, now);
                     return std::abs(gx - jar.x) <= half && gy <= jar.y + 16.0f && gy >= jar.y - up; // @note a ghost above it
                 });
                 if (g != world.ghosts.end())
                 {
-                    const u_char kind = g->kind;
-                    const ::blob blob = npc(EV_SUCKED, jar.id, g->id, jar.x, jar.y, jar.x, jar.y, 0.0f);
-                    to_world(world, blob);
-                    world.npc_removals.emplace_back(now + 1200, std::array<u_char, 2>{ g->id, jar.id });
-                    world.ghosts.erase(g);
-                    jar.done = true;
-                    caught_any = true;
-                    sound_near(world, jar.x, jar.y, "audio/boo_ghost_trap.wav");
-                    drop_at(world, (kind == NPC_MIND_GHOST) ? MIND_GHOST_IN_A_JAR : GHOST_IN_A_JAR, 1, jar.x, jar.y);
+                    /* @note the jar pulls it in: it flies into the jar fast, then goes in (ghost_tick finishes it) */
+                    const auto [gx, gy] = where(*g, now);
+                    const float length = std::hypot(jar.x - gx, jar.y - gy);
+                    set_course(*g, jar.x, jar.y - 4.0f, SUCK_SPEED, now);
+                    g->into_jar = jar.id;
+                    g->in_jar_at = now + std::max<long long>(250, static_cast<long long>(length / SUCK_SPEED * 1000.0f));
+                    g->held_until = 0;
+                    jar.pulling = true;
+                    send_ghost(world, *g, EV_MOVE, now);
+                    sound_near(world, jar.x, jar.y, "audio/boo_proton_glove.wav");
                     continue;
                 }
             }
@@ -657,6 +747,9 @@ void ghost_tick()
         std::erase_if(world.ghost_jars, [](const ::ghost_jar &j) { return j.done; });
         if (caught_any) world.save();
 
+        /* @note ghosts drift into people standing still too, not only people walking into them */
+        if (!world.ghosts.empty()) peers(world.name, PeerSearch::WORLD, [&world, now](ENetPeer *p) { ghost_touch(p, world, now); });
+
         /* @note ghosts float about. Ghostking's Glory: "All ghosts flock to the holder" */
         const ::peer *king = nullptr;
         peers(world.name, PeerSearch::WORLD, [&king](ENetPeer *p) {
@@ -665,7 +758,7 @@ void ghost_tick()
         });
         for (::ghost &g : world.ghosts)
         {
-            if (g.id == 0 || g.held_until > now || now < g.next) continue;
+            if (g.id == 0 || g.into_jar != 0 || g.held_until > now || now < g.next) continue;
             float nx{}, ny{};
             float speed = ghost_speed(g.kind);
             if (king != nullptr)

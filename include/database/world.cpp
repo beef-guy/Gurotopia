@@ -327,6 +327,12 @@ static void write_default_extra(::blob &blob, char type, const ::item &item)
             blob.u32(0);
             break;
         }
+        case '\x26': /* steam engine: its heat in degrees */
+        {
+            auto engine = std::ranges::find(this->steam_engines, block_pos, &::steam_engine::pos);
+            blob.u32((engine != this->steam_engines.end()) ? static_cast<u_int>(std::max(0, engine->heat)) : 0);
+            break;
+        }
         case '\x29': /* spirit storage unit: ghosts stored */
         {
             auto ssu = std::ranges::find(this->spirit_units, block_pos, &::spirit_unit::pos);
@@ -773,7 +779,7 @@ namespace
         for (char &c : text) blob.read_u8(reinterpret_cast<u_char&>(c), pos);
         return true;
     }
-    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17, EX_AUTO = 18, EX_BASE_WEATHER = 19, EX_TIMED = 20, EX_KRANKEN = 21, EX_VAULT = 22, EX_GAME_TILE = 23, EX_GAME_RULES = 24, EX_CHALLENGE = 25, EX_WORLD_BAN = 26, EX_OVEN = 27, EX_SPIRIT = 28, EX_GHOSTS = 29 };
+    enum extra_kind : u_char { EX_DOOR = 1, EX_AREA_LOCK = 2, EX_VENDING = 3, EX_STORAGE = 4, EX_DISPLAY = 5, EX_XENONITE = 6, EX_PROVIDER = 7, EX_MAILBOX = 8, EX_DONATION = 9, EX_SHELF = 10, EX_HEART = 11, EX_MANNEQUIN = 12, EX_WEATHER = 13, EX_MAGPLANT = 14, EX_FISH_TANK = 15, EX_FISH_MOUNT = 16, EX_LOBSTER_TRAP = 17, EX_AUTO = 18, EX_BASE_WEATHER = 19, EX_TIMED = 20, EX_KRANKEN = 21, EX_VAULT = 22, EX_GAME_TILE = 23, EX_GAME_RULES = 24, EX_CHALLENGE = 25, EX_WORLD_BAN = 26, EX_OVEN = 27, EX_SPIRIT = 28, EX_GHOSTS = 29, EX_STEAM_ENGINE = 30 };
 }
 
 /* @note door targets, area locks, vending machines, storage boxes and display blocks. one record each: kind, x, y, data */
@@ -955,6 +961,13 @@ namespace
         if (ssu.ghosts <= 0) continue;
         blob.u8(EX_SPIRIT); blob.i16(ssu.pos.x_int()); blob.i16(ssu.pos.y_int());
         blob.i32(ssu.ghosts);
+    }
+    for (const ::steam_engine &engine : this->steam_engines)
+    {
+        if (engine.heat <= 0) continue;
+        blob.u8(EX_STEAM_ENGINE); blob.i16(engine.pos.x_int()); blob.i16(engine.pos.y_int());
+        blob.i32(engine.heat);
+        blob.i64(engine.cooled);
     }
     {
         /* @note the ghosts here (kind and tile only) and when the world was last open, so ghosts can move in while it's empty */
@@ -1271,6 +1284,13 @@ void world::load_extras(::blob &blob)
                     g.y = g.dy = gy * 32.0f + 16.0f;
                     this->ghosts.push_back(g); // @note action/ghosts.cpp gives it an NPC id when someone comes in
                 }
+                break;
+            }
+            case EX_STEAM_ENGINE:
+            {
+                ::steam_engine engine{.pos = tile};
+                if (!blob.read_i32(engine.heat, pos) || !blob.read_i64(engine.cooled, pos)) return;
+                if (valid_tile(*this, tile) && id_to_item(this->blocks[cord(x, y)].fg).type == type::STEAM_ENGINE) this->steam_engines.push_back(engine);
                 break;
             }
             case EX_WORLD_BAN:

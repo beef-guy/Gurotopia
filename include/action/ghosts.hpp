@@ -9,7 +9,7 @@
 *   - Neutron Gun + Neutron Pack: punching fires a beam that grabs ghosts and pulls them in. Crossing beams with someone kills you both.
 *   - Ghost Jar / Ghost Trap: set it down, it switches on after 2 seconds and sucks in a ghost above it for 5 seconds.
 *     The ghost comes out as a Ghost-In-A-Jar (or Mind-Ghost-In-A-Jar).
-*   - Ghost-In-A-Jar: throw it to let the ghost out, or drop it in front of a Spirit Storage Unit to store it for good.
+*   - Ghost-In-A-Jar: throw it to let the ghost out, or drop it in front of a Spirit Storage Unit and send steam into the unit to store it.
 *   - Spirit Storage Unit: each ghost fills it 5%. Over 100% every new ghost may blow it up, and the fuller it was, the better the prize.
 *   - Neutron Power Glove + Neutron Pack: punch ghosts to banish them. Ghost-Be-Gone, or calling 52368 for 15 World Locks, clears them all.
 * the ghosts are NPCs the game draws and moves itself (game packet 0x22). Packet layout and NPC numbers were read from the game client.
@@ -27,6 +27,10 @@ constexpr short GHOST_BE_GONE        = 6066;
 constexpr short MIND_GHOST_IN_A_JAR  = 6080;
 constexpr short GHOST_TRAP           = 6082;
 constexpr short NEUTRON_POWER_GLOVE  = 6086;
+constexpr short ECTOPLASM            = 3728;
+
+/* @note SET_CHARACTER_STATE's second flag set (int at 0xc). read from the game's own CHAR_FLAG2_ name table */
+constexpr int CHAR_FLAG2_MIND_CONTROL = 0x1000;
 
 /* @return true when this tile change was handled here (a jar set down, a beam fired, a jar thrown, the SSU wrenched...) */
 extern bool ghost_tile_change(ENetEvent &event, ::world &world, const ::gamePacket &gamePacket);
@@ -40,8 +44,8 @@ extern void ghost_entered(ENetEvent &event, ::world &world);
 /* @brief game packet 0x22 from the game: punching a ghost with the Neutron Power Glove */
 extern void ghost_npc_packet(ENetEvent &event, ::gamePacket gamePacket);
 
-/* @brief Ghost-In-A-Jars dropped on a Spirit Storage Unit's tile go in. @return how many it took */
-extern int ssu_take_jars(ENetEvent &event, ::world &world, const ::pos &tile, short item, int count);
+/* @brief steam reached this Spirit Storage Unit: the Ghost-In-A-Jars lying in front of it go in. @return how many it took */
+extern int ssu_steamed(::world &world, const ::pos &tile);
 
 /* @brief a block was broken or placed here: a Spirit Storage Unit there starts empty */
 extern void ghost_tile_cleared(::world &world, const ::pos &pos);
@@ -49,8 +53,17 @@ extern void ghost_tile_cleared(::world &world, const ::pos &pos);
 /* @brief every ghost in this world disappears. @return how many there were */
 extern int ghosts_clear(::world &world);
 
-/* @return how much slower (or turned around) a slimed player moves: 1 = normal */
+/* @return how much slower a slimed player moves: 1 = normal */
 extern float ghost_speed_factor(const ::peer &peer);
+
+/* @return CHAR_FLAG2_MIND_CONTROL while a Mind Ghost has swapped their left and right, else 0 */
+extern int ghost_flags2(const ::peer &peer);
+
+/* @return the skin colour to show: green while slimed, purple while a Mind Ghost is in their head, else `skin` */
+extern u_int ghost_skin(const ::peer &peer, u_int skin);
+
+/* @return the "Active effects" lines (wrench menu) for Slimed and Mind Control, with seconds left */
+extern std::string ghost_effects(const ::peer &peer);
 
 /* @brief ghosts float about, jars catch them, slime wears off, new ghosts move in. call often */
 extern void ghost_tick();

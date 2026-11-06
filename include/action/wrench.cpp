@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "action/ghosts.hpp"
 
 #include "tools/create_dialog.hpp"
 #include "database/playmods.hpp"
@@ -66,7 +67,7 @@ void action::wrench(ENetEvent& event, const std::string& header)
                             .add_spacer("small")
                             .add_textbox("`wActive effects:``")
                             .add_raw([&] {
-                                const std::string worn = active_effects(pOthers->clothing, (here != worlds.end()) ? here->xenonite : 0), timed = radiation_effects(*pOthers);
+                                const std::string worn = active_effects(pOthers->clothing, (here != worlds.end()) ? here->xenonite : 0), timed = radiation_effects(*pOthers) + ghost_effects(*pOthers);
                                 return timed.empty() ? worn : (worn.find("`wNone!``") != std::string::npos) ? timed : worn + timed;
                             }())
                             .add_spacer("small")

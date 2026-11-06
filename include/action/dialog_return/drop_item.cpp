@@ -20,9 +20,21 @@ void drop_item(ENetEvent& event, const ::hPipe &hPipe)
 
     float x_nabor = (pPeer->facing_left) ? pPeer->pos.x - 32 : pPeer->pos.x + 32; // @note peer's naboring tile (drop position)
 
-    /* @note Ghosts-In-A-Jar dropped in front of a Spirit Storage Unit go into it */
-    const int stored = ssu_take_jars(event, *world, ::pos{x_nabor + 16.0f, pPeer->pos.y + 16.0f}.by_32(true), itemID, count);
     modify_item_inventory(event, ::slot(itemID, -count));
-    if (stored >= count) return;
-    add_drop(event, ::slot(itemID, static_cast<short>(count - stored)), {x_nabor, pPeer->pos.y}, *world);
+    add_drop(event, ::slot(itemID, count), {x_nabor, pPeer->pos.y}, *world);
+
+    /* @note Ghosts-In-A-Jar dropped in front of a Spirit Storage Unit wait there until steam powers the unit */
+    if (itemID == GHOST_IN_A_JAR || itemID == MIND_GHOST_IN_A_JAR)
+    {
+        const ::pos front = ::pos{x_nabor + 16.0f, pPeer->pos.y + 16.0f}.by_32(true);
+        for (const int dx : {0, -1, 1})
+        {
+            const ::pos at{ front.x + dx, front.y };
+            if (valid_tile(*world, at) && world->blocks[cord(at.x_int(), at.y_int())].fg == SPIRIT_STORAGE_UNIT)
+            {
+                send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "Now send `2Steam`` into the `2Spirit Storage Unit`` to store the ghost!", 0u, 1u });
+                break;
+            }
+        }
+    }
 }

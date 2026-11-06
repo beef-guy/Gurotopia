@@ -23,7 +23,7 @@ void on::SetClothing(ENetPeer *peer, bool sound, bool everyone)
         CL_Vec3f{c(clothing::HAIR), c(clothing::SHIRT), c(clothing::LEGS)}, 
         CL_Vec3f{c(clothing::FEET), c(clothing::FACE), c(clothing::HAND)}, 
         CL_Vec3f{c(clothing::BACK), c(clothing::HEAD), c(clothing::CHARM)}, 
-        (pPeer->state & S_GHOST) ? -140 : pPeer->skin_color,
+        (pPeer->state & S_GHOST) ? -140 : ghost_skin(*pPeer, pPeer->skin_color), // @note slimed: green, a Mind Ghost: purple
         CL_Vec3f{c(clothing::ANCES), sound ? 1.0f : 0.0f, 0.0f} // @note y != 0: the client plays audio/change_clothes.wav
     };
     send_varlist(peer, clothes, pPeer->netid);
@@ -46,10 +46,11 @@ void on::SetClothing(ENetPeer *peer, bool sound, bool everyone)
         /* @note 0x14 PACKET_SET_CHARACTER_STATE. byte 1: punch effect, byte 2: 0x80 + extra build range, byte 3: 0x80 + extra punch (Fist) range */
         .type = static_cast<int>(0x14u | (u_int(pPeer->punch_effect) << 8) | (u_int(0x80 + fx.build_range) << 16) | (u_int(0x80 + fx.punch_range) << 24)),
         .netid = pPeer->netid,
+        .state = ghost_flags2(*pPeer), // @note the second flag set (CHAR_FLAG2_...): a Mind Ghost swaps left and right
         .waterspeed = fx.water_speed,
         .id = pPeer->state | ((fx.mods & M_DOUBLE_JUMP) ? S_DOUBLE_JUMP : 0) | (irradiated(*pPeer) ? S_IRRADIATED : 0) | (cursed(*pPeer) ? S_DEVIL_HORNS : 0) | (robot ? 0x3c : 0), // @note 04 invisible (only eyes/mouth), 08 no arms, 16 no face, 32 invisible (only legs/arms), 64 devil horns, 128 angel halo, 2048 frozen, 4096 gray skin?,8192 ducttape, 16384 Onion effect, 32768 stars effect, 65536 zombie, 131072 hit by lava, 262144 shadow effect, 524288 irradiated effect, 1048576 spotlight, 2097152 pineapple thingy
         .pos = ::pos{ 1200.0f/*acceleration*/, fx.punch_strength },
-        .speed = ::pos{ fx.speed * ghost_speed_factor(*pPeer), fx.gravity }, // @note slimed by a ghost: slower, or turned around by a Mind Ghost
+        .speed = ::pos{ fx.speed * ghost_speed_factor(*pPeer), fx.gravity }, // @note slimed by a ghost: half speed
         .punch = ::pos{ pPeer->hair_color, 0x00000000u } // @todo can this even be unsigned?
     };
     send_gamePacket(*peer, gamePacket); // @todo handle for 'p'
