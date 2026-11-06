@@ -138,7 +138,8 @@ public:
     long long geiger_found_since{}; // @note ms: standing on the radiation source since
     long long geiger_pulse{};     // @note ms: last ping
     long long geiger_charge_tick{}; // @note ms
-    bool disguised{};             // @note the Great Chameleon blended them into the background
+    bool disguised{};             // @note the Great Chameleon blended them into a block
+    long long disguise_ended{};   // @note ms: when the disguise last ended
     ::pos magplant{-1, -1}; // @note the MAGPLANT 5000 this player's remote builds from (not saved)
     std::string magplant_world{};
     struct

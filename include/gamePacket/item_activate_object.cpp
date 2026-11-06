@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "action/radiation.hpp"
 
 #include "onVariant/SetBux.hpp"
 #include "onVariant/ConsoleMessage.hpp"
@@ -16,6 +17,7 @@ void item_activate_object(ENetEvent& event, ::gamePacket gamePacket)
 
     auto object = std::ranges::find(world->objects, gamePacket.id, &::object::uid);
     if (object == world->objects.end()) return; // @note already picked up (the game can ask twice)
+    if (chameleon_pickup_blocked(event.peer)) return; // @note the Great Chameleon
 
     u_short left = 0;
     if (object->id != 112/*gem*/)

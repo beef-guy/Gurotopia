@@ -142,53 +142,40 @@ namespace
         });
     }
 
+    /* @note the Growmojis everyone has, in the order real Growtopia lists them */
+    constexpr std::string_view free_growmojis[] = {
+        "sigh", "mad", "smile", "tongue", "wow", "no", "shy", "wink", "music", "lol", "yes", "love",
+        "megaphone", "heart", "cool", "kiss", "agree", "see-no-evil", "dance"
+    };
+    constexpr std::size_t FRIENDS_FOR_BUILD = 50; // @note (build): "You need 50 friends to get this Growmoji."
+
     void show_growmojis(ENetEvent &event)
     {
         const ::peer *pPeer = static_cast<::peer*>(event.peer->data);
-        std::vector<std::pair<std::string_view, std::string_view>> free_list{};
-        for (const auto &[code, glyph] : emoticon)
-            if (growmoji_for_code(code) == nullptr) free_list.emplace_back(code, glyph);
-        std::ranges::sort(free_list, {}, &std::pair<std::string_view, std::string_view>::second);
+        auto glyph = [](std::string_view code) { auto it = emoticon.find(code); return (it == emoticon.end()) ? std::string_view{} : it->second; };
 
-        int unlocked = static_cast<int>(free_list.size()), total = static_cast<int>(free_list.size());
-        std::string grid{}, locked{};
-        for (const growmoji &g : growmoji_items)
-        {
-            if (!emoticon.contains(g.code)) continue;
-            const bool have = growmoji_unlocked(*pPeer, g.code);
-            ++total;
-            if (have) ++unlocked;
-            const std::string &name = id_to_item(g.item).raw_name;
-            if (have) grid += std::format("add_label_with_icon|small|{} `2({})``|left|{}|\n", emoticon[g.code], g.code, g.item);
-            else locked += std::format("add_label_with_icon|small|`s({})`` - use a `w{}`` to unlock|left|{}|\n", g.code, name, g.item);
-        }
-        grid += locked; // @note unlocked first
+        std::string have{}, locked{};
+        auto add = [&](std::string_view code) {
+            if (glyph(code).empty()) return;
+            if (growmoji_unlocked(*pPeer, code))
+                have += std::format("add_smalltext|{} ({})|left|\n", glyph(code), code);
+            else
+                locked += std::format("add_textbox|`9{}``|left|\nadd_smalltext|`s{} ({})``|left|\n",
+                    (code == "build") ? std::format("You need {} friends to get this Growmoji.", FRIENDS_FOR_BUILD) : "This Growmoji can be found in a secret event.",
+                    glyph(code), code);
+        };
+        for (std::string_view code : free_growmojis) add(code);
+        add("build");
+        for (const growmoji &g : growmoji_items) add(g.code);
 
-        std::string free_rows{};
-        for (std::size_t i = 0; i < free_list.size(); i += 4)
-        {
-            std::string row{};
-            for (std::size_t j = i; j < std::min(i + 4, free_list.size()); ++j)
-                row += std::format("{} `w({})``     ", free_list[j].second, free_list[j].first);
-            free_rows += std::format("add_smalltext|{}|left|\n", row);
-        }
         send_varlist(event.peer, {
             "OnDialogRequest",
-            ::create_dialog()
-                .set_default_color("`o")
-                .add_label_with_icon("big", "`wGrowmojis``", 5770)
-                .add_spacer("small")
-                .add_textbox(std::format("You have unlocked `2{}/{}`` Growmojis.", unlocked, total))
-                .add_smalltext("Type a Growmoji's name in brackets in chat to use it, like `w(smile)``. Use a Growmoji item on yourself to unlock that Growmoji forever.")
-                .add_spacer("small")
-                .add_label("small", "`wCollectable Growmojis``")
-                .add_raw(grid)
-                .add_spacer("small")
-                .add_label("small", "`wEveryone has these``")
-                .add_raw(free_rows)
-                .add_spacer("small")
-                .add_quick_exit()
-                .end_dialog("growmojis", "Close", "")
+            std::format("set_default_color|`o\n"
+                        "add_label|big|`w{} Growmojis``|left|\n"
+                        "add_spacer|small|\n", glyph("smile")) +
+            have + locked +
+            "add_quick_exit|\n"
+            "end_dialog|growmojis|||\n"
         });
     }
 
@@ -367,6 +354,7 @@ void notebook_edit(ENetEvent& event, const ::hPipe &hPipe)
 
 bool growmoji_unlocked(const ::peer &peer, std::string_view code)
 {
+    if (code == "build") return peer.friends.size() >= FRIENDS_FOR_BUILD;
     if (growmoji_for_code(code) == nullptr) return true;
     return peer.growmojis.find(std::format(",{},", code)) != std::string::npos;
 }
