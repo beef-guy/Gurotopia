@@ -369,6 +369,8 @@ struct ghost
     long long since{};  // @note ms (steady clock) when it left (x, y)
     long long next{};   // @note not before this (ms): pick somewhere new to float to
     long long held_until{}; // @note a Neutron Gun beam has it until then (ms)
+    u_char into_jar{};      // @note a jar is pulling it in (that jar's id): it flies into the jar, then goes in
+    long long in_jar_at{};  // @note ms (steady clock) when it reaches the jar
 };
 
 /* @brief a Ghost Jar or Ghost Trap that was set down. it pulls in a ghost above it for a while */
@@ -379,6 +381,33 @@ struct ghost_jar
     float x{}, y{};
     long long placed{}; // @note ms (steady clock)
     bool done{};
+    bool pulling{}; // @note a ghost is flying into it right now
+};
+
+/* @brief a puff of steam travelling through Steam Blocks. the game moves its own copy the same way, this one is for what steam does here (the Spirit Storage Unit, Steam Doors...) */
+struct steam_puff
+{
+    short x{}, y{};  // @note the tile it is on
+    u_char dir{};    // @note where it goes next: 0 right, 1 down, 2 left, 3 up
+    u_char steps{};  // @note tiles travelled, it runs out after a while
+};
+
+/* @brief a Steam Engine's heat. Nuclear Fuel adds 100 degrees, above 500 it makes steam */
+struct steam_engine
+{
+    ::pos pos{};
+    int heat{};          // @note degrees
+    long long cooled{};  // @note unix time the heat was last worked out
+    long long next{};    // @note ms (steady clock): next puff
+};
+
+/* @brief a Steam Collector holding steam until it has enough for every way out */
+struct steam_collector
+{
+    ::pos pos{};
+    int held{};
+    u_char from{};       // @note the side the last steam came in from (no steam goes back out there)
+    long long until{};   // @note ms (steady clock): it lets go of the steam after 20 seconds
 };
 
 /* @brief a Spirit Storage Unit and how many ghosts are stored in it (each one is 5%) */
@@ -473,6 +502,9 @@ public:
     std::vector<::oven> ovens{};
     ::battle battle{}; // @note not saved
     std::vector<::spirit_unit> spirit_units{};
+    std::vector<::steam_puff> steam_puffs{};           // @note not saved: steam only lasts a moment
+    std::vector<::steam_engine> steam_engines{};       // @note saved (EX_STEAM_ENGINE)
+    std::vector<::steam_collector> steam_collectors{}; // @note not saved
     std::vector<::ghost> ghosts{}; // @note saved (kind and place only), so a haunted world stays haunted
     std::vector<::ghost_jar> ghost_jars{}; // @note not saved: a jar only works for a few seconds
     std::vector<std::pair<long long, std::array<u_char, 2>>> npc_removals{}; // @note not saved: NPCs to take away after a moment (ms, {id, id})

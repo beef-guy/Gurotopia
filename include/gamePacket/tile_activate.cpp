@@ -4,6 +4,7 @@
 #include "action/quit_to_exit.hpp"
 #include "tools/sound.hpp"
 #include "action/carnival.hpp"
+#include "action/steam.hpp"
 
 #include "tile_activate.hpp"
 
@@ -27,6 +28,8 @@ void tile_activate(ENetEvent& event, ::gamePacket gamePacket)
         send_gamePacket(*event.peer, gamePacket);
         return;
     }
+
+    if (steam_tile_activate(event, *world, gamePacket.punch)) return; // @note Steam Stomper, Steam Revolver, Steam Launcher
 
     ::block &block = world->blocks[cord(gamePacket.punch.x, gamePacket.punch.y)];
     const ::item &item = id_to_item(block.fg);

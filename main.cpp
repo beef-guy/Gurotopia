@@ -18,6 +18,7 @@
 #include "include/action/transform.hpp"
 #include "include/action/fossils.hpp"
 #include "include/action/ghosts.hpp"
+#include "include/action/steam.hpp"
 #include "include/action/special_items.hpp"
 #include "include/action/carnival.hpp"
 #include "include/commands/renderworld.hpp"
@@ -269,6 +270,7 @@ int main(int argc, char *argv[])
         transform_tick(); // @note /transformscan
         fossil_tick(); // @note rocks in busy worlds turn into Fossil Rocks
         ghost_tick(); // @note ghosts float about, Ghost Jars catch them, new ghosts move in
+        steam_tick(); // @note steam moves through Steam Blocks, Steam Engines puff
         special_tick(); // @note Freeze and Curse Wands wearing off, Challenge Timers, Game Generator games
         carnival_tick(); // @note Carnival games: timers, targets, platforms
         render_tick(); // @note /renderworld results
