@@ -17,12 +17,14 @@
 * AUTOMATICALLY! Blocks broken by this device will not drop gems", Heart of Gaia 6950 "target any tree of your choosing, and it
 * will harvest them", Techno-Organic Engine 6954 "breaking blocks OR harvesting trees, and then collecting a target drop".
 * tile extras 0x45, 0x46, 0x47 from github.com/voidkle/gtps-guide guide/tile-extras.md.
-* the speed and gem cost are not documented anywhere public, so they are set here: one block or tree every 2 seconds.
+* blocks are punched one hit at a time like a player (HIT_MS) and need the block's own hit count; trees are harvested every 2 seconds.
+* the speed and gem cost are not documented anywhere public, so they are set here.
 */
 
 namespace
 {
-    constexpr long long INTERVAL_MS = 2000;
+    constexpr long long INTERVAL_MS = 2000; // @note between harvests
+    constexpr long long HIT_MS = 300;       // @note between punches on a block, about a player's punch speed
     constexpr int ENGINE_CAPACITY = 5000;
 
     long long now_ms()
@@ -111,36 +113,58 @@ namespace
         add_break_drop(event, slot, tile.by_32(), world);
     }
 
-    /* @return true when the machine found something to do */
-    bool work(ENetEvent &event, ::world &world, ::auto_machine &m, type machine)
+    enum class result { NOTHING, HIT, DONE };
+
+    /* @brief one punch on the block it is working on (picking the next target block first if needed) */
+    result punch_block(ENetEvent &event, ::world &world, ::auto_machine &m, type machine)
     {
-        const bool tree = is_seed(m.target);
+        const ::item &target = id_to_item(m.target);
+        if (!valid_tile(world, m.working) || world.blocks[cord(m.working.x_int(), m.working.y_int())].fg != m.target)
+        {
+            m.working = {-1, -1};
+            for (int i = 0; i < static_cast<int>(world.blocks.size()); ++i)
+                if (world.blocks[i].fg == m.target) { m.working = ::pos{i % 100, i / 100}; break; }
+            if (m.working.x < 0) return result::NOTHING;
+        }
+        const ::pos tile = m.working;
+        ::block &block = world.blocks[cord(tile.x_int(), tile.y_int())];
+        ++block.hits[0];
+        if (block.hits[0] < target.hits)
+        {
+            ::gamePacket damage{.type = 0x08, .netid = -1, .id = 6, .punch = tile}; // @note TILE_APPLY_DAMAGE: the crack grows, no avatar punches
+            ::blob blob = compress_state(damage);
+            peers(world.name, PeerSearch::WORLD, [&blob](ENetPeer *peer) { send_data(*peer, blob); });
+            return result::HIT;
+        }
+        clear_tile(world, block, tile);
+        m.working = {-1, -1};
+        if (!(u_char(target.property) & 04)) // @note same drops as a punch, without the gems
+        {
+            const bool farmable = target.rarity >= 24;
+            if (!RandomRange(0, farmable ? 2 : 4)) drop(event, world, m, machine, ::slot(static_cast<short>(m.target + 1), 1), tile);
+            else if (!RandomRange(0, farmable ? 4 : 8)) drop(event, world, m, machine, ::slot(m.target, 1), tile);
+        }
+        return result::DONE;
+    }
+
+    /* @brief harvest one grown tree of the target */
+    result harvest(ENetEvent &event, ::world &world, ::auto_machine &m, type machine)
+    {
         const ::item &target = id_to_item(m.target);
         for (int i = 0; i < static_cast<int>(world.blocks.size()); ++i)
         {
             ::block &block = world.blocks[i];
             if (block.fg != m.target) continue;
             const ::pos tile{i % 100, i / 100};
-            if (tree)
-            {
-                auto t = std::ranges::find(world.trees, tile, &::tree::pos);
-                if (t == world.trees.end() || ticks() - t->tick < static_cast<u_int>(target.tick)) continue; // @note not grown yet
-                const int fruit = std::max(1, static_cast<int>(t->fruit));
-                const short count = static_cast<short>(RandomRange(1, fruit * 3 + 1));
-                clear_tile(world, block, tile);
-                drop(event, world, m, machine, ::slot(static_cast<short>(m.target - 1), count), tile);
-                return true;
-            }
+            auto t = std::ranges::find(world.trees, tile, &::tree::pos);
+            if (t == world.trees.end() || ticks() - t->tick < static_cast<u_int>(target.tick)) continue; // @note not grown yet
+            const int fruit = std::max(1, static_cast<int>(t->fruit));
+            const short count = static_cast<short>(RandomRange(1, fruit * 3 + 1));
             clear_tile(world, block, tile);
-            if (!(u_char(target.property) & 04)) // @note same drops as a punch, without the gems
-            {
-                const bool farmable = target.rarity >= 24;
-                if (!RandomRange(0, farmable ? 2 : 4)) drop(event, world, m, machine, ::slot(static_cast<short>(m.target + 1), 1), tile);
-                else if (!RandomRange(0, farmable ? 4 : 8)) drop(event, world, m, machine, ::slot(m.target, 1), tile);
-            }
-            return true;
+            drop(event, world, m, machine, ::slot(static_cast<short>(m.target - 1), count), tile);
+            return result::DONE;
         }
-        return false;
+        return result::NOTHING;
     }
 
     void send(ENetEvent &event, const ::pos &pos, ::create_dialog &dialog)
@@ -258,7 +282,7 @@ bool auto_machine_punch(ENetEvent &event, ::world &world, const ::pos &pos, bool
         if (m->gems < cost(machine)) { say(event.peer, pPeer, "The machine needs gems to run! Wrench it to add some."); return false; }
     }
     m->on = !m->on;
-    m->next = now_ms() + INTERVAL_MS;
+    m->next = now_ms() + HIT_MS;
     say(event.peer, pPeer, m->on ? "The machine is now `2ON``." : "The machine is now `4OFF``.");
     world_tile_update(world, pos);
     return false;
@@ -268,7 +292,7 @@ void automation_tick()
 {
     static long long last = 0;
     const long long now = now_ms();
-    if (now - last < 250) return;
+    if (now - last < 100) return;
     last = now;
 
     for (::world &world : worlds)
@@ -284,7 +308,6 @@ void automation_tick()
         {
             ::auto_machine &m = world.auto_machines[i];
             if (!m.on || now < m.next || !valid_tile(world, m.pos)) continue;
-            m.next = now + INTERVAL_MS;
             const type machine = static_cast<type>(id_to_item(world.blocks[cord(m.pos.x_int(), m.pos.y_int())].fg).type);
             if (!is_machine(machine)) { m.on = false; continue; }
             if (m.gems < cost(machine) || m.target == 0 || (machine == type::AUTO_BREAK && m.count >= ENGINE_CAPACITY))
@@ -293,7 +316,9 @@ void automation_tick()
                 world_tile_update(world, m.pos);
                 continue;
             }
-            if (work(event, world, m, machine))
+            const bool tree = is_seed(m.target);
+            m.next = now + (tree ? INTERVAL_MS : HIT_MS);
+            if ((tree ? harvest(event, world, m, machine) : punch_block(event, world, m, machine)) == result::DONE)
             {
                 m.gems -= cost(machine);
                 if (m.gems < cost(machine)) m.on = false;
