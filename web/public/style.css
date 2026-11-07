@@ -619,3 +619,87 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 6px; }
   .table.machines td .tag { margin: 4px 6px 0 0; }
   .table.machines .item-link { display: flex; }
 }
+
+/* ---------- Lua scripts ---------- */
+.mode-pick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mode-card { position: relative; cursor: pointer; font-weight: 400; }
+.mode-card input { position: absolute; opacity: 0; pointer-events: none; }
+.mode-body { display: grid; gap: 4px; height: 100%; padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface-2); }
+.mode-body strong { font-size: 1rem; }
+.mode-body small { color: var(--muted); font-size: 0.86rem; }
+.mode-card input:checked + .mode-body { border-color: var(--green); box-shadow: 0 0 0 3px rgba(61, 220, 132, 0.18); background: var(--surface-3); }
+.mode-card input:focus-visible + .mode-body { outline: 2px solid var(--blue); outline-offset: 2px; }
+#template-pick.dim { opacity: 0.5; }
+.table.scripts tr.off td:first-child, .table.scripts tr.off td:nth-child(2) { opacity: 0.55; }
+.table.scripts td .chip { display: inline-flex; align-items: center; gap: 6px; }
+.table.scripts td .chip .ic { width: 14px; height: 14px; }
+.table.scripts td.right { white-space: nowrap; }
+button.switch { width: 44px; height: 24px; padding: 2px; border-radius: 99px; background: var(--surface-3); border: 1px solid var(--line-strong); box-shadow: none; display: inline-flex; align-items: center; }
+button.switch span { width: 18px; height: 18px; border-radius: 50%; background: var(--muted); transition: transform 0.15s ease, background 0.15s ease; }
+button.switch.on { background: rgba(61, 220, 132, 0.25); border-color: var(--green); }
+button.switch.on span { transform: translateX(20px); background: var(--green); }
+.script-log { height: 260px; }
+.script-log.short { height: 200px; }
+.log-line.error { color: #ff9b9b; }
+.log-line.warn { color: #ffd27a; }
+.log-line { border-bottom: 1px solid rgba(255, 255, 255, 0.03); padding: 1px 0; }
+.ok-text { color: var(--ok); }
+.bad-text { color: #ffb3b3; }
+.warn-text { color: var(--warn); }
+
+.script-head h1 { gap: 12px; }
+.script-head .crumb { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); text-decoration: none; font-size: 0.88rem; margin-bottom: 6px; }
+.title-input { font: inherit; font-size: 1.45rem; font-weight: 650; background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 2px 8px; margin: 0 0 0 -8px; width: auto; field-sizing: content; min-width: 6ch; max-width: min(520px, 70vw); color: var(--text); }
+.title-input:hover { border-color: var(--line); }
+.script-head .chip { display: inline-flex; align-items: center; gap: 6px; }
+.script-head .chip .ic { width: 14px; height: 14px; }
+
+.code-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; margin-bottom: 18px; }
+.code-main { min-width: 0; }
+.code-card { height: calc(100vh - 330px); min-height: 420px; }
+.code-card .CodeMirror { height: 100%; font: 13.5px/1.55 ui-monospace, "Cascadia Code", Consolas, monospace; background: var(--log-bg); color: #dce6fb; }
+.code-card .CodeMirror-gutters { background: var(--surface); border-right: 1px solid var(--line); }
+.code-card .CodeMirror-linenumber { color: var(--faint); }
+.code-card .CodeMirror-cursor { border-left-color: var(--green); }
+.code-card .CodeMirror-selected, .code-card .CodeMirror-focused .CodeMirror-selected { background: rgba(42, 140, 255, 0.28); }
+.code-card .CodeMirror-matchingbracket { color: var(--green) !important; text-decoration: underline; }
+.code-card .cm-keyword { color: #ff8fb1; }
+.code-card .cm-builtin { color: #7fb6ff; }
+.code-card .cm-string { color: #b5e48c; }
+.code-card .cm-number { color: #ffc861; }
+.code-card .cm-comment { color: #6b7ea6; font-style: italic; }
+.code-card .cm-variable, .code-card .cm-variable-2 { color: #dce6fb; }
+.code-card .cm-error-line { background: rgba(255, 107, 107, 0.16); }
+.syntax { margin: 8px 2px 0; font-size: 0.86rem; color: var(--muted); }
+.syntax.ok { color: var(--ok); }
+.syntax.bad { color: #ffb3b3; }
+.ref { position: sticky; top: 12px; max-height: calc(100vh - 120px); overflow: auto; padding: 16px; }
+.ref input[type="search"] { margin-bottom: 8px; }
+.ref-section { border-top: 1px solid var(--line); padding: 8px 0; }
+.ref-section summary { cursor: pointer; font-weight: 650; padding: 4px 0; }
+.ref-entry { padding: 8px 0; border-bottom: 1px dashed var(--line); display: grid; gap: 4px; }
+.ref-entry:last-child { border-bottom: 0; }
+.ref-entry code { white-space: normal; word-break: break-word; font-size: 12px; }
+.ref-entry p { margin: 0; color: var(--muted); }
+.ref-entry button { justify-self: start; }
+
+.blocks-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; margin-bottom: 18px; }
+.blockly-area { height: calc(100vh - 300px); min-height: 480px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); }
+.lua-out { display: flex; flex-direction: column; padding: 16px; max-height: calc(100vh - 300px); min-height: 480px; }
+.lua-out .card-head { margin-bottom: 10px; }
+.lua-preview { flex: 1; overflow: auto; margin: 0 0 10px; padding: 12px; border-radius: var(--radius-sm); background: var(--log-bg); color: #cfe0ff; font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre; }
+.blockly-area .blocklyToolboxDiv { border-right: 1px solid var(--line); }
+.blockly-area .blocklyTreeLabel, .blockly-area .blocklyToolboxCategoryLabel { font-family: "Segoe UI", system-ui, sans-serif; }
+.blocklyFlyoutLabelText { fill: var(--muted) !important; }
+
+@media (max-width: 1100px) {
+  .code-layout, .blocks-layout { grid-template-columns: minmax(0, 1fr); }
+  .ref { position: static; max-height: none; }
+  .lua-out { max-height: 360px; min-height: 0; }
+}
+@media (max-width: 620px) {
+  .mode-pick { grid-template-columns: 1fr; }
+  .table.scripts .hide-sm { display: none; }
+  .code-card { height: 60vh; min-height: 320px; }
+  .blockly-area { height: 70vh; min-height: 380px; }
+}

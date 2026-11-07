@@ -10,6 +10,7 @@
 #include "database/playmods.hpp"
 #include "commands/punch.hpp"
 #include "tools/terminal.hpp"
+#include "scripting/lua.hpp"
 
 #include "panel_bridge.hpp"
 
@@ -136,6 +137,7 @@ namespace
         else if (action == "effects_reload") item_effects::reload(); // @note an item effect was made, edited or deleted on the website
         else if (action == "machines_reload") machines::reload(); // @note a machine's capacity was changed on the website
         else if (action == "titles_reload") titles::reload(); // @note a title was made, edited or deleted on the website
+        else if (action == "scripts_reload") lua::reload(); // @note a Lua script was saved, switched on or off, or deleted on the website
         else if (action == "titles_sync") // @note the website gave or took a player's title
         {
             if (ENetPeer *peer = moderation::find_online(target); peer != nullptr) titles::sync_peer(peer);

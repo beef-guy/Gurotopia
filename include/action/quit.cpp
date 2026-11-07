@@ -3,6 +3,7 @@
 #include "action/quit_to_exit.hpp"
 #include "database/friends.hpp"
 #include "action/dialog_return/wrenchables.hpp"
+#include "scripting/lua.hpp"
 
 #include "quit.hpp"
 
@@ -11,6 +12,7 @@ void action::quit(ENetEvent& event, const std::string& header)
     if (event.peer == nullptr || event.peer->data == nullptr) return; // @note already quit
 
     action::quit_to_exit(event, "", true);
+    lua::player_logout(event.peer); // @note scripts' leave event, then what they saved for this player is written
     friends_alert(event.peer, false);
     const int uid = static_cast<::peer*>(event.peer->data)->user_id;
 

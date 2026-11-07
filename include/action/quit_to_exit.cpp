@@ -8,6 +8,7 @@
 #include "action/dialog_return/wrenchables.hpp"
 #include "action/special_items.hpp"
 #include "action/carnival.hpp"
+#include "scripting/lua.hpp"
 
 void action::quit_to_exit(ENetEvent& event, const std::string& header, bool skip_selection = false) 
 {
@@ -16,6 +17,8 @@ void action::quit_to_exit(ENetEvent& event, const std::string& header, bool skip
 
     trade::cancel(event.peer, std::format("`4{} left, so the trade was canceled.``", pPeer->display_growid));
     magplant_take_remote(event); // @note the MAGPLANT 5000 Remote only works in the world it came from
+
+    lua::world_leave(event.peer, pPeer->recent_worlds.back()); // @note scripts' leaveWorld event, while they are still in it
 
     auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
     if (world == worlds.end()) return;

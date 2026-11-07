@@ -38,6 +38,8 @@
 #include "tile_change.hpp"
 
 #include "action/transform.hpp"
+#include "scripting/lua.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <ctime>
@@ -165,6 +167,15 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 if (gamePacket.id == 18) play_sfx(event.peer, "audio/punch_locked.wav");
                 return;
             }
+
+        /* @note the server's Lua scripts: a punch, place or wrench event that returns true stops it here */
+        if (gamePacket.id == 18) { if (lua::punch(event.peer, gamePacket.punch.x_int(), gamePacket.punch.y_int(), block.fg, block.bg)) return; }
+        else if (gamePacket.id == 32) { if (lua::wrench(event.peer, gamePacket.punch.x_int(), gamePacket.punch.y_int(), block.fg)) return; }
+        else
+        {
+            if (lua::place(event.peer, gamePacket.punch.x_int(), gamePacket.punch.y_int(), gamePacket.id)) return;
+            if (remote_from == nullptr && pPeer->have_slot(::slot(gamePacket.id, 0)) == 0) return; // @note a script took it away
+        }
 
         bool tile_update{};
         bool lock_visuals{}; // @todo this looks sloppy
@@ -620,6 +631,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 if (item.type != type::SEED) grow_pass_break(event.peer);
                 if (item.type != type::SEED) ring_progress(event.peer, RT_BREAK, 1), ring_progress(event.peer, RT_BREAK_RARITY, item.rarity);
             }
+            lua::tile_broken(event.peer, gamePacket.punch.x_int(), gamePacket.punch.y_int(), static_cast<short>(item.id)); // @note scripts' break event, once this packet is done
         } // @note delete im, id
         else if (item.cloth_type != clothing::NONE) 
         {

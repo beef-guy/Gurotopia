@@ -10,6 +10,7 @@
 #include "database/titles.hpp"
 
 #include "action/event_buttons.hpp"
+#include "scripting/lua.hpp"
 
 #include "enter_game.hpp"
 
@@ -73,4 +74,5 @@ void action::enter_game(ENetEvent& event, const std::string& header)
             "EAcGAQoDEAQRBQ0JCAwCDw4="
         });
     }
+    lua::player_login(event.peer); // @note scripts' join event
 }

@@ -32,6 +32,7 @@
 #include "include/database/titles.hpp"
 #include "include/database/item_effects.hpp"
 #include "include/database/machines.hpp"
+#include "include/scripting/lua.hpp"
 
 #include <chrono>
 #include <csignal>
@@ -72,6 +73,7 @@ static void print_help()
         "  --cdn-host HOST     where the client downloads files it doesn't have, e.g. custom item textures (default: Growtopia's)\n"
         "  --cdn-path PATH     folder on that host, ending in cache/ (default: Growtopia's)\n"
         "  --discord-webhook F file with the Discord webhook URL /renderworld posts to (default: discord_webhook.txt)\n"
+        "  --lua-memory MB     most memory this server's Lua scripts may use (default: 64)\n"
         "\n"
         "  many servers behind one IP:\n"
         "  --platform-db NAME  database that lists the servers (e.g. gurotopia_platform)\n"
@@ -180,6 +182,11 @@ static bool parse_options(int argc, char *argv[])
                 { print("--cdn-path must be a folder like psnode/1/cache/ (no leading /, ends with /)"); return false; }
             gServer_data.cdn_path = value;
         }
+        else if (option == "--lua-memory")
+        {
+            if (!number(value, 8, 1024, n)) { print(std::format("--lua-memory must be 8 to 1024 (MB), not {}", value)); return false; }
+            lua::memory_limit_mb = static_cast<std::size_t>(n);
+        }
         else if (option == "--https-bind") gServer_data.https_bind = value;
         else if (option == "--server-data") gServer_data.config_file = value;
         else if (option == "--mysql-login") db.login_file = value;
@@ -270,6 +277,7 @@ int main(int argc, char *argv[])
         decode_items_dat();
         if (!platform::gateway) panel_items_catalog();
         if (!platform::gateway) machines::init(); // @note the machine capacities the website edits (web/src/machines.js)
+        if (!platform::gateway) lua::init(); // @note the server's Lua scripts (web/src/scripts.js)
         discord::load_webhook(discord_webhook_file); // @note ./discord_webhook.txt, or --discord-webhook
         parse_store();
         check_for_holiday();
@@ -307,6 +315,7 @@ int main(int argc, char *argv[])
         carnival_tick(); // @note Carnival games: timers, targets, platforms
         render_tick(); // @note /renderworld results
         if (!platform::gateway) panel_tick(); // @note kicks, bans, role changes and world actions from the website, and who is online
+        if (!platform::gateway) lua::tick(); // @note script timers, warps and kicks scripts asked for, saving script data
 
         if (clock::now() - last_save >= std::chrono::seconds(60)) // @note so a crash or force stop loses at most a minute
         {
@@ -318,6 +327,7 @@ int main(int argc, char *argv[])
 
     safe_disconnect_peers(gSignal);
     save_everything();
+    lua::shutdown(); // @note saves what scripts stored
     platform::report("stopped", 0);
     panel_bridge_clear();
     worlds.clear(); // @note before the database connection closes

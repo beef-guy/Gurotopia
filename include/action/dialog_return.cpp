@@ -3,9 +3,12 @@
 #include "dialog_return/__dialog_return.hpp"
 
 #include "action/dialog_return.hpp"
+#include "scripting/lua.hpp"
 
 void action::dialog_return(ENetEvent& event, const std::string& header) 
 {
+    if (lua::dialog(event.peer, header)) return; // @note a script's dialog (named lua_...)
+
     ::hPipe hPipe{ header };
 
     // @note found at ./action/dialog_return/

@@ -17,6 +17,7 @@
 #include "transform.hpp"
 #include "ghosts.hpp"
 
+#include "scripting/lua.hpp"
 #include "join_request.hpp"
 
 #include <algorithm> // linux
@@ -168,6 +169,7 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
             if (pOthers->user_id != pPeer->user_id)
                 send_varlist(event.peer, { "OnTalkBubble", static_cast<u_int>(pOthers->netid), pOthers->growid, 1u });
         });
+        lua::world_enter(event.peer, std::string(world.name)); // @note scripts' enterWorld event (a copy: scripts can't move worlds, but be safe)
     }
     catch (const std::exception& exc)
     {

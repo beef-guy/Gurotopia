@@ -29,6 +29,7 @@
 
 #include "database/roles.hpp"
 #include "database/titles.hpp"
+#include "scripting/lua.hpp"
 #include "__command.hpp"
 
 bool can_use(const ::peer &peer, std::string_view name, const ::cmd_entry &entry)
@@ -48,6 +49,8 @@ void help_return(ENetEvent& event, const std::string_view text)
     std::vector<std::string_view> names{};
     for (const auto &[name, entry] : cmd_pool)
         if (entry.run != on::Action && name != "/?" && can_use(*pPeer, name, entry)) names.emplace_back(name);
+    const std::vector<std::string> scripted = lua::command_names(*pPeer); // @note the server's own commands, from its Lua scripts
+    for (const std::string &name : scripted) names.emplace_back(name);
     std::ranges::sort(names);
 
     std::string list{};

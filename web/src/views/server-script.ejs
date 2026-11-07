@@ -1,0 +1,77 @@
+<%- include('partials/server-shell') %>
+<% const blocks = script.mode === 'blocks'; %>
+<link rel="stylesheet" href="/static/vendor/codemirror/codemirror.css?v=<%= v %>">
+<div class="page-head script-head">
+  <div>
+    <a class="crumb" href="/servers/<%= server.id %>/scripts"><svg class="ic"><use href="#i-back"/></svg>Lua scripts</a>
+    <h1>
+      <input id="script-name" class="title-input" value="<%= script.name %>" maxlength="48" aria-label="Script name">
+      <span class="chip"><svg class="ic"><use href="#i-<%= blocks ? 'puzzle' : 'code' %>"/></svg><%= blocks ? 'Blocks' : 'Code' %></span>
+    </h1>
+    <p class="muted small" id="save-state"><%= script.enabled ? 'Running.' : 'Switched off: it doesn\'t run until you switch it on.' %> <%= server.reporting ? 'Saving loads it into the game right away.' : 'The server is offline, so it starts when the server does.' %></p>
+  </div>
+  <div class="controls">
+    <form method="post" action="/servers/<%= server.id %>/scripts/<%= script.id %>/<%= script.enabled ? 'disable' : 'enable' %>" class="inline">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <input type="hidden" name="back" value="editor">
+      <button type="submit" class="ghost"><svg class="ic"><use href="#i-power"/></svg><%= script.enabled ? 'Switch off' : 'Switch on' %></button>
+    </form>
+    <button type="button" id="save"><svg class="ic"><use href="#i-upload"/></svg>Save</button>
+  </div>
+</div>
+
+<form id="script-form" method="post" action="/servers/<%= server.id %>/scripts/<%= script.id %>" hidden>
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+</form>
+
+<% if (blocks) { %>
+<div class="blocks-layout">
+  <div id="blockly" class="blockly-area" aria-label="Block editor"></div>
+  <aside class="card lua-out">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-code"/></svg>The Lua it makes</h2></div>
+    <pre id="lua-preview" class="lua-preview"></pre>
+    <p class="muted small">Blocks turn into this code when you save. Want to write code instead? Turn it into a code script. You can't go back to blocks after that.</p>
+    <button type="button" class="ghost small" id="to-code">Turn into a code script</button>
+  </aside>
+</div>
+<script type="application/json" id="script-data"><%- JSON.stringify({ blocks: script.blocks || '' }).replace(/</g, '\\u003c') %></script>
+<% } else { %>
+<div class="code-layout">
+  <div class="code-main">
+    <div class="card flush code-card">
+      <textarea id="source" spellcheck="false" aria-label="Lua code"><%= script.source %></textarea>
+    </div>
+    <p id="syntax" class="syntax">Checking…</p>
+  </div>
+  <aside class="card ref" aria-label="What scripts can use">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-book"/></svg>What you can use</h2></div>
+    <input type="search" id="ref-filter" placeholder="Search, like gems or dialog" aria-label="Search the reference">
+    <% for (const section of docs.SECTIONS) { %>
+    <details class="ref-section" <%= section.title === 'Events' ? 'open' : '' %>>
+      <summary><%= section.title %></summary>
+      <% if (section.text) { %><p class="muted small"><%= section.text %></p><% } %>
+      <% for (const [sig, what, snippet] of section.entries) { %>
+      <div class="ref-entry">
+        <code><%= sig %></code>
+        <p class="small"><%= what %></p>
+        <button type="button" class="ghost small" data-snippet="<%= snippet %>">Insert</button>
+      </div>
+      <% } %>
+    </details>
+    <% } %>
+    <details class="ref-section">
+      <summary>Limits</summary>
+      <% for (const l of docs.LIMITS) { %><p class="small"><%= l %></p><% } %>
+    </details>
+  </aside>
+</div>
+<% } %>
+
+<section class="card console-card">
+  <div class="console-bar">
+    <span class="dots"><i></i><i></i><i></i></span>
+    <span class="muted small">Log for this script</span>
+  </div>
+  <pre id="script-log" class="log script-log short" data-server="<%= server.id %>" data-script="<%= script.name %>">Loading…</pre>
+</section>
+<%- include('partials/server-shell-end') %>

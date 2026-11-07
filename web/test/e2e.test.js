@@ -620,6 +620,90 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     assert.deepEqual(log.map((l) => l.action), ['machine_edit', 'machine_reset', 'machine_edit', 'machine_edit', 'machine_create', 'machine_delete']);
   });
 
+  await t.test('lua scripts: make, edit, switch off and delete, and the game reloads them', async () => {
+    const srv = `srv_${id}`;
+    let r = await alice.get(`/servers/${id}/scripts`);
+    assert.equal(r.status, 200);
+    assert.match(r.text, /No scripts yet/);
+    assert.match(r.text, /Daily reward|\/daily reward/, 'templates are offered');
+
+    r = await alice.post(`/servers/${id}/scripts`, { _csrf: await alice.csrf(), name: 'Daily', mode: 'code', template: 'daily' });
+    assert.equal(r.status, 302, r.text.slice(0, 400));
+    const sid = Number(r.location.match(/scripts\/(\d+)\?done=scriptCreated/)[1]);
+    let [[row]] = await admin.query(`SELECT * FROM ${srv}.lua_scripts WHERE id = ?`, [sid]);
+    assert.equal(row.mode, 'code');
+    assert.match(row.source, /command\("\/daily"/, 'the template is the starting code');
+    assert.equal(row.enabled, 1);
+
+    r = await alice.get(`/servers/${id}/scripts/${sid}`);
+    assert.equal(r.status, 200);
+    assert.match(r.text, /codemirror\.js/);
+    assert.match(r.text, /What you can use/);
+
+    assert.equal((await alice.post(`/servers/${id}/scripts`, { _csrf: await alice.csrf(), name: 'daily', mode: 'code' })).status, 400, 'names are unique');
+    assert.equal((await alice.post(`/servers/${id}/scripts`, { _csrf: await alice.csrf(), name: '<b>', mode: 'code' })).status, 400, 'names are checked');
+
+    const save = async (sidToSave, form) => {
+      const res = await fetch(`${BASE}/servers/${id}/scripts/${sidToSave}`, {
+        method: 'POST', redirect: 'manual',
+        headers: { cookie: alice.cookie, accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ _csrf: await alice.csrf(), ...form }).toString(),
+      });
+      return { status: res.status, body: await res.json() };
+    };
+    const big = 'print("x")\n'.repeat(10000); // @note 110 KB: more than the usual 10 KB form limit
+    let out = await save(sid, { name: 'Daily gems', source: big });
+    assert.equal(out.status, 200, JSON.stringify(out.body));
+    assert.equal(out.body.ok, true);
+    [[row]] = await admin.query(`SELECT name, source, updated_by FROM ${srv}.lua_scripts WHERE id = ?`, [sid]);
+    assert.equal(row.name, 'Daily gems');
+    assert.equal(row.source.length, big.length);
+    assert.equal(row.updated_by, 'alice');
+    out = await save(sid, { source: 'x'.repeat(256 * 1024 + 1) });
+    assert.equal(out.status, 400, 'scripts are at most 256 KB');
+
+    r = await alice.post(`/servers/${id}/scripts`, { _csrf: await alice.csrf(), name: 'Blocky', mode: 'blocks' });
+    const bid = Number(r.location.match(/scripts\/(\d+)/)[1]);
+    r = await alice.get(`/servers/${id}/scripts/${bid}`);
+    assert.match(r.text, /blockly_compressed\.js/);
+    out = await save(bid, { blocks: '{"blocks":{"languageVersion":0,"blocks":[]}}', source: '-- blocks' });
+    assert.equal(out.body.ok, true);
+    out = await save(bid, { blocks: 'not json', source: '' });
+    assert.equal(out.status, 400, 'broken block data is refused');
+    out = await save(bid, { mode: 'code', source: 'print(1)' });
+    [[row]] = await admin.query(`SELECT mode, blocks, source FROM ${srv}.lua_scripts WHERE id = ?`, [bid]);
+    assert.deepEqual([row.mode, row.blocks, row.source], ['code', '', 'print(1)'], 'a block script can become code');
+
+    r = await alice.post(`/servers/${id}/scripts/${sid}/disable`, { _csrf: await alice.csrf() });
+    assert.match(r.location, /done=scriptDisabled/);
+    [[row]] = await admin.query(`SELECT enabled FROM ${srv}.lua_scripts WHERE id = ?`, [sid]);
+    assert.equal(row.enabled, 0);
+    r = await alice.post(`/servers/${id}/scripts/${sid}/duplicate`, { _csrf: await alice.csrf() });
+    assert.match(r.location, /done=scriptDuplicated/);
+    const [copies] = await admin.query(`SELECT name, enabled FROM ${srv}.lua_scripts WHERE name LIKE 'Daily gems%' ORDER BY id`);
+    assert.deepEqual(copies.map((c) => [c.name, c.enabled]), [['Daily gems', 0], ['Daily gems copy', 0]]);
+
+    await admin.query(`INSERT INTO ${srv}.lua_log (script, level, message) VALUES ('Daily gems', 'error', 'Daily gems:3: oops'), ('Other', 'info', 'hi')`);
+    let res = await fetch(`${BASE}/servers/${id}/scripts/logs.json?script=Daily%20gems`, { headers: { cookie: alice.cookie } });
+    let logs = (await res.json()).logs;
+    assert.deepEqual(logs.map((l) => l.message), ['Daily gems:3: oops'], 'the editor only shows its own script');
+    res = await fetch(`${BASE}/servers/${id}/scripts/logs.json?after=${logs[0].id}`, { headers: { cookie: alice.cookie } });
+    logs = (await res.json()).logs;
+    assert.deepEqual(logs.map((l) => l.message), ['hi'], 'after= only gives newer lines');
+    r = await alice.post(`/servers/${id}/scripts/logs/clear`, { _csrf: await alice.csrf() });
+    const [[{ n }]] = await admin.query(`SELECT COUNT(*) AS n FROM ${srv}.lua_log`);
+    assert.equal(n, 0);
+
+    for (const s of [sid, bid]) {
+      r = await alice.post(`/servers/${id}/scripts/${s}/delete`, { _csrf: await alice.csrf() });
+      assert.match(r.location, /done=scriptDeleted/);
+    }
+    assert.equal((await alice.get(`/servers/${id}/scripts/${sid}`)).status, 404);
+    const [sent] = await admin.query(`SELECT done_at FROM ${srv}.panel_actions WHERE action = 'scripts_reload'`);
+    assert.ok(sent.length >= 8, `the game was told every time (${sent.length})`);
+    assert.ok(sent.every((a) => a.done_at), 'the game carried them out');
+  });
+
   await t.test('resources: a PNG upload becomes an .rttex players can download', async () => {
     const rttex = require('../src/rttex');
     const rgba = Buffer.alloc(64 * 32 * 4, 0);
