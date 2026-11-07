@@ -118,6 +118,21 @@ function icon(dir, file, cx, cy) {
   return out;
 }
 
+/* @return the whole decoded sheet, or null */
+function sheetOf(dir, file) { return sheet(dir, file); }
+
+/* @return the whole sheet as a PNG (the resource manager's preview), or null */
+function sheetPng(dir, file) {
+  const img = sheet(dir, file);
+  return img ? png(img.w, img.h, img.rgba) : null;
+}
+
+/* @note after a file is deleted */
+function forget(dir, file) {
+  sheets.delete(`${dir}|${file}`);
+  for (const key of [...icons.keys()]) if (key.startsWith(`${dir}|${file}:`)) icons.delete(key);
+}
+
 function clear() { sheets.clear(); icons.clear(); }
 
-module.exports = { decode, png, icon, safePath, clear };
+module.exports = { decode, png, icon, safePath, sheetOf, sheetPng, forget, clear };

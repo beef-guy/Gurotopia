@@ -19,6 +19,9 @@ public:
     std::size_t max_players{50ull};
     std::string owner{};       // @note --owner: this account is always a developer here (the server's owner)
     bool sandbox{false};       // @note --sandbox: everyone may use /find
+    /* @note where the client downloads game files it doesn't have (custom item textures), --cdn-host/--cdn-path */
+    std::string cdn_host{"ubistatic-a.akamaihd.net"};
+    std::string cdn_path{"0098/01020126/cache/"};
 
     void init();
 };

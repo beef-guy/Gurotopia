@@ -163,3 +163,21 @@ test('item icons: a 32x32 cell of an .rttex becomes a PNG', () => {
   assert.equal(rttex.safePath(dir, '../etc/passwd.rttex'), null);
   assert.equal(rttex.safePath(dir, 'sheet.png'), null);
 });
+
+test('resources: PNG to .rttex keeps every pixel and pads to a power of two', () => {
+  const rttex = require('../src/rttex');
+  const resources = require('../src/resources');
+  const w = 40; const h = 70;
+  const rgba = Buffer.alloc(w * h * 4);
+  for (let i = 0; i < w * h; i++) { rgba[i * 4] = i & 0xff; rgba[i * 4 + 1] = (i >> 4) & 0xff; rgba[i * 4 + 2] = 9; rgba[i * 4 + 3] = i % 3 ? 255 : 0; }
+  const decoded = resources.decodePng(rttex.png(w, h, rgba));
+  assert.ok(decoded.rgba.equals(rgba));
+  const back = rttex.decode(resources.encodeRttex(decoded));
+  assert.deepEqual([back.w, back.h], [64, 128]);
+  for (let y = 0; y < h; y++) assert.ok(back.rgba.subarray(y * 64 * 4, y * 64 * 4 + w * 4).equals(rgba.subarray(y * w * 4, (y + 1) * w * 4)), `row ${y}`);
+  assert.equal(back.rgba[(0 * 64 + 50) * 4 + 3], 0, 'padding is see-through');
+  assert.throws(() => resources.decodePng(Buffer.from('nope')), resources.UserError);
+  assert.equal(resources.isOwnName({ id: 3 }, 'ps3_sword_0123abcd.rttex'), true);
+  assert.equal(resources.isOwnName({ id: 3 }, 'ps4_sword_0123abcd.rttex'), false, 'another server\'s file');
+  assert.equal(resources.isOwnName({ id: 3 }, 'ps3_../x_0123abcd.rttex'), false);
+});

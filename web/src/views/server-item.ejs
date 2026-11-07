@@ -106,10 +106,11 @@
 
   <section class="card">
     <div class="card-head"><h2><svg class="ic"><use href="#i-box"/></svg>Look</h2></div>
-    <p class="muted small">Which picture it uses: a texture file from the game folder, and the 32×32 cell in it (counted from 0). Uploading your own textures comes later.</p>
+    <p class="muted small">Which picture it uses: a texture file and the 32×32 cell in it (counted from 0). Use one of the game's files, or your own from <a href="/servers/<%= server.id %>/resources">Resources</a>.</p>
     <div class="tex-grid">
       <label>Texture file
-        <input name="texture" id="f-texture" value="<%= v('texture', item.texture) %>" maxlength="64" spellcheck="false">
+        <input name="texture" id="f-texture" value="<%= v('texture', item.texture) %>" maxlength="64" spellcheck="false" list="own-textures" autocomplete="off">
+        <datalist id="own-textures"><% for (const t of textures) { %><option value="<%= t.file %>"><%= t.w %>×<%= t.h %></option><% } %></datalist>
       </label>
       <label>Column
         <input type="number" name="texX" id="f-x" min="0" max="255" value="<%= v('texX', item.texX) %>">

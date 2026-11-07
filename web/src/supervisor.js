@@ -206,6 +206,7 @@ function gameArgs(row) {
     '--platform-db', config.db.platformDb,
     '--no-https',
     '--max-players', String(row.max_players),
+    ...(config.cdn.host ? ['--cdn-host', config.cdn.host, '--cdn-path', `cdn/${row.id}/cache/`] : []),
   ];
 }
 

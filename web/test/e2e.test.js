@@ -89,6 +89,7 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     STOP_TIMEOUT_SECONDS: '10', MAX_CRASHES: '2',
     SERVERS_PER_USER: '2', SIGNUP_CODE: 'letmein',
     SAMPLE_SECONDS: '1', STORAGE_CHECK_MINUTES: '1',
+    CDN_DIR: path.join(tmp, 'cdn'), CDN_HOST: 'cdn.test',
   };
   const procs = [];
   const output = [];
@@ -406,6 +407,41 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     assert.equal(sent.length, 4);
     assert.ok(sent.every((a) => a.done_at));
     assert.equal((await alice.get(`/servers/${id}/items/2/icon.png`)).status, 404, 'no textures on this machine: the page shows a letter instead');
+  });
+
+  await t.test('resources: a PNG upload becomes an .rttex players can download', async () => {
+    const rttex = require('../src/rttex');
+    const rgba = Buffer.alloc(64 * 32 * 4, 0);
+    for (let i = 0; i < 64 * 32; i++) { rgba[i * 4] = 200; rgba[i * 4 + 3] = 255; }
+    const png = rttex.png(64, 32, rgba);
+    let r = await alice.post(`/servers/${id}/resources`, { _csrf: await alice.csrf(), name: 'My Sword.png', data: png.toString('base64') });
+    assert.equal(r.status, 302);
+    const file = decodeURIComponent(r.location.match(/file=([^&]+)/)[1]);
+    assert.match(file, new RegExp(`^ps${id}_my_sword_[0-9a-f]{8}\\.rttex$`));
+    const stored = path.join(tmp, 'cdn', String(id), 'cache', 'game', file);
+    const img = rttex.decode(fs.readFileSync(stored));
+    assert.deepEqual([img.w, img.h, img.rgba[0]], [64, 32, 200], 'saved as an .rttex the game can read');
+    r = await alice.get(`/servers/${id}/resources`);
+    assert.equal(r.status, 200);
+    assert.match(r.text, new RegExp(file.replace('.', '\\.')));
+    assert.match(r.text, /2 cells/);
+    assert.equal((await alice.get(`/servers/${id}/resources/${file}/sheet.png`)).status, 200);
+    assert.equal((await alice.get(`/servers/${id}/items/texture.png?file=${file}&x=1&y=0`)).status, 200, 'the item editor previews it');
+    assert.equal((await alice.get(`/servers/${id}/items/texture.png?file=${file}&x=2&y=0`)).status, 404);
+    r = await alice.post(`/servers/${id}/resources`, { _csrf: await alice.csrf(), name: 'again.png', data: png.toString('base64') });
+    assert.match(r.location, /done=textureExisted/, 'the same picture is kept once');
+    r = await alice.post(`/servers/${id}/resources`, { _csrf: await alice.csrf(), name: 'x.png', data: Buffer.from('not a picture').toString('base64') });
+    assert.equal(r.status, 400);
+    assert.match(r.text, /isn&#39;t a PNG|isn't a PNG/);
+    assert.equal((await bob.get(`/servers/${id}/resources/${file}/sheet.png`)).status, 404, 'other owners can\'t see it');
+    assert.equal((await alice.get(`/servers/${id}/resources/..%2F..%2Fx.rttex/download`)).status, 404);
+    r = await alice.post(`/servers/${id}/items/2`, { _csrf: await alice.csrf(), name: 'Dirt', info: '', rarity: '1', hits: '3', hitReset: '8', collision: '1', texture: file, texX: '1', texY: '0' });
+    assert.equal(r.status, 302, 'an item can use the upload');
+    assert.equal((await alice.get(`/servers/${id}/items/2/icon.png`)).status, 200);
+    await alice.post(`/servers/${id}/items/2/reset`, { _csrf: await alice.csrf() });
+    r = await alice.post(`/servers/${id}/resources/${file}/delete`, { _csrf: await alice.csrf() });
+    assert.equal(r.status, 302);
+    assert.equal(fs.existsSync(stored), false);
   });
 
   await t.test('the log shows the server output', async () => {

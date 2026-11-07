@@ -67,6 +67,13 @@ const config = {
   // @note Growtopia's game folder (the .rttex textures), for item icons in the item manager
   texturesDir: path.resolve(str('TEXTURES_DIR', path.join(str('GAME_DIR', '/opt/gurotopia'), 'game'))),
 
+  // @note custom item textures: uploads are kept in cdnDir/<server id>/cache/game/ and nginx serves
+  //       cdnDir at https://<cdnHost>/cdn/. With no CDN_HOST the game keeps Growtopia's own CDN.
+  cdn: {
+    dir: path.resolve(str('CDN_DIR', '/srv/gurotopia/www/cdn')),
+    host: str('CDN_HOST', ''),
+  },
+
   ports: {
     first: int('FIRST_GAME_PORT', 17100), // @note 17091 is the gateway
     last: int('LAST_GAME_PORT', 17999),
