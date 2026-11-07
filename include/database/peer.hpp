@@ -2,6 +2,7 @@
 
 #include <cmath> // @note std::floor
 #include <deque> // @note std::deque
+#include <map>
 
 enum bgra : u_int
 {
@@ -110,6 +111,8 @@ public:
     long long total_playtime() const { return this->playtime + ((this->login_at > 0) ? std::time(nullptr) - this->login_at : 0); }
     u_char role{}; // @note the staff powers of their role (PLAYER, MODERATOR or DEVELOPER), see database/roles.hpp
     int role_id{}; // @note their role in the roles table, what peer.role in the database holds
+    /* @note their peer_titles rows: title id -> {given to them, switched on}. see database/titles.hpp */
+    std::map<int, std::pair<bool, bool>> title_rows{};
     /* @note /playermode: staff and owner powers are switched off (not saved) so the server's owner can test like a normal player */
     bool player_mode{};
     u_char real_role{};

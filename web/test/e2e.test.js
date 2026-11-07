@@ -356,6 +356,58 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     assert.deepEqual(log.map((l) => l.action).slice(-5), ['role_create', 'role_move', 'role_edit', 'role', 'role_delete']);
   });
 
+  await t.test('title manager makes titles with icons, and players can be given them', async () => {
+    const srv = `srv_${id}`;
+    let r = await alice.get(`/servers/${id}/titles`);
+    assert.equal(r.status, 200);
+    assert.match(r.text, /Doctor[\s\S]*Legendary/, 'the real game\'s titles are listed');
+    r = await alice.get(`/servers/${id}/titles/new`);
+    assert.equal(r.status, 200);
+
+    r = await alice.post(`/servers/${id}/titles`, { _csrf: await alice.csrf(), name: 'Champion', description: 'Won a contest.', prefix: '', suffix: ' the Champ',
+      color: '6', badge: 'master', icon: 'item', iconItem: '6', grant: 'manual', sort: '50', enabled: '1' });
+    assert.equal(r.status, 302, r.text.slice(0, 400));
+    const tid = Number(r.location.match(/titles\/(\d+)/)[1]);
+    assert.equal(tid, 100, 'new titles start at 100');
+    let [[row]] = await admin.query(`SELECT * FROM ${srv}.titles WHERE id = ?`, [tid]);
+    assert.equal(row.suffix, ' the Champ');
+    assert.equal(row.texture, 'game/tiles_page1.rttex', 'the icon is the item\'s picture');
+    assert.equal(row.tex_x, 6);
+    assert.equal(row.badge, 'master');
+
+    assert.equal((await alice.post(`/servers/${id}/titles`, { _csrf: await alice.csrf(), name: 'champion', color: '', badge: '', icon: 'none', grant: 'manual' })).status, 400, 'names are unique');
+    assert.equal((await alice.post(`/servers/${id}/titles`, { _csrf: await alice.csrf(), name: 'Pipe', prefix: 'a|b', color: '', badge: '', icon: 'none', grant: 'manual' })).status, 400, 'no | in names');
+    assert.equal((await alice.post(`/servers/${id}/titles`, { _csrf: await alice.csrf(), name: 'Tex', color: '', badge: '', icon: 'texture', texture: '../x.rttex', texX: '0', texY: '0', grant: 'manual' })).status, 400, 'texture names are checked');
+
+    r = await alice.post(`/servers/${id}/titles/${tid}`, { _csrf: await alice.csrf(), name: 'Champion', color: '6', badge: '', icon: 'texture', texture: 'tiles_page16.rttex', texX: '27', texY: '11', grant: 'level', grantLevel: '30', sort: '50', enabled: '1' });
+    assert.equal(r.status, 302);
+    [[row]] = await admin.query(`SELECT * FROM ${srv}.titles WHERE id = ?`, [tid]);
+    assert.equal(row.texture, 'game/tiles_page16.rttex');
+    assert.equal(row.grant_type, 'level');
+    assert.equal(row.grant_value, 30);
+
+    const [[g]] = await admin.query(`SELECT uid FROM ${srv}.peer WHERE growid = 'Griefer'`);
+    r = await alice.get(`/servers/${id}/players/${g.uid}`);
+    assert.match(r.text, /id="titles"/);
+    r = await alice.post(`/servers/${id}/players/${g.uid}/titles`, { _csrf: await alice.csrf(), titles: ['1', '2'] });
+    assert.equal(r.status, 302);
+    let [given] = await admin.query(`SELECT title, granted, equipped FROM ${srv}.peer_titles WHERE uid = ? ORDER BY title`, [g.uid]);
+    assert.deepEqual(given.map((x) => [x.title, x.granted, x.equipped]), [[1, 1, 1], [2, 1, 1]]);
+    await alice.post(`/servers/${id}/players/${g.uid}/titles`, { _csrf: await alice.csrf(), titles: ['2'] });
+    [given] = await admin.query(`SELECT title, granted FROM ${srv}.peer_titles WHERE uid = ? ORDER BY title`, [g.uid]);
+    assert.deepEqual(given.map((x) => [x.title, x.granted]), [[1, 0], [2, 1]], 'Doctor was taken away');
+
+    assert.equal((await alice.post(`/servers/${id}/titles/1/delete`, { _csrf: await alice.csrf() })).status, 400, 'real game titles stay');
+    r = await alice.post(`/servers/${id}/titles/${tid}/delete`, { _csrf: await alice.csrf() });
+    assert.equal(r.status, 302);
+    const [gone] = await admin.query(`SELECT id FROM ${srv}.titles WHERE id = ?`, [tid]);
+    assert.equal(gone.length, 0);
+
+    const [sent] = await admin.query(`SELECT action, done_at FROM ${srv}.panel_actions WHERE action LIKE 'titles%' ORDER BY id`);
+    assert.deepEqual(sent.map((a) => a.action), ['titles_reload', 'titles_reload', 'titles_sync', 'titles_sync', 'titles_reload']);
+    assert.ok(sent.every((a) => a.done_at), 'the game carried them out');
+  });
+
   await t.test('item manager edits items and makes new ones through the game', async () => {
     const srv = `srv_${id}`;
     let r = await alice.get(`/servers/${id}/items`);

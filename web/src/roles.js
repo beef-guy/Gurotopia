@@ -58,7 +58,7 @@ const GROUPS = [
     '/passpoints': 'Give themselves Grow Pass points',
   } },
   { name: 'Server tools', risky: 'For trusted staff only', commands: {
-    '/setrole': 'Give roles below their own', '/export': 'Save a world to a file', '/import': 'Load a world from a file',
+    '/setrole': 'Give roles below their own', '/granttitle': 'Give a player a title', '/removetitle': 'Take a title away', '/export': 'Save a world to a file', '/import': 'Load a world from a file',
     '/fossil': 'Spawn a fossil rock', '/spawnghost': 'Spawn ghosts', '/ready': 'Finish machines in the world', '/geiger': 'Show the radiation source',
     '/transformflag': 'Test a transform effect', '/transformscan': 'Try every transform effect',
   } },

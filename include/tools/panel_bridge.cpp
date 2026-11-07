@@ -4,6 +4,7 @@
 #include "action/quit_to_exit.hpp"
 #include "commands/moderation.hpp"
 #include "database/roles.hpp"
+#include "database/titles.hpp"
 #include "database/playmods.hpp"
 #include "commands/punch.hpp"
 #include "tools/terminal.hpp"
@@ -130,6 +131,11 @@ namespace
         else if (action == "world_delete") world_delete(target);
         else if (action == "roles_reload") roles::reload(); // @note a role was made, edited or deleted on the website
         else if (action == "items_reload") items_reload();
+        else if (action == "titles_reload") titles::reload(); // @note a title was made, edited or deleted on the website
+        else if (action == "titles_sync") // @note the website gave or took a player's title
+        {
+            if (ENetPeer *peer = moderation::find_online(target); peer != nullptr) titles::sync_peer(peer);
+        }
         else print(std::format("panel: unknown action {}", action));
     }
 

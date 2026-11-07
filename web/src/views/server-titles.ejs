@@ -1,0 +1,55 @@
+<%- include('partials/server-shell') %>
+<%
+  const plain = (s) => String(s || '').replace(/`./g, '');
+  const badgeLabel = (v) => (badges.find((b) => b.value === v) || { label: '' }).label;
+  const iconSrc = (t) => `/servers/${server.id}/items/texture.png?file=${encodeURIComponent(t.textureFile)}&x=${t.texX}&y=${t.texY}`;
+%>
+<div class="page-head">
+  <div>
+    <h1>Title manager</h1>
+    <p class="muted">Titles change how a player's name looks to everyone, like the real game's red <strong>Dr.</strong> or <strong>of Legend</strong>. Players switch theirs on and off by wrenching themselves and tapping Title.</p>
+  </div>
+  <% if (result.ready) { %><a class="btn" href="/servers/<%= server.id %>/titles/new"><svg class="ic"><use href="#i-plus"/></svg>New title</a><% } %>
+</div>
+
+<% if (!result.ready) { %>
+<section class="card">
+  <div class="empty">
+    <svg class="ic big"><use href="#i-trophy"/></svg>
+    <p>Start the server once with the latest game build, then you can edit titles here.</p>
+  </div>
+</section>
+<% } else { %>
+<% for (const group of [['Your titles', result.titles.filter((t) => !t.builtin)], ['Real game titles', result.titles.filter((t) => t.builtin)]]) { %>
+<h2 class="section-title"><%= group[0] %></h2>
+<% if (!group[1].length) { %>
+<section class="card"><div class="empty"><svg class="ic big"><use href="#i-trophy"/></svg><p>No titles of your own yet. Make one with its own text, colour, badge and icon.</p><a class="btn" href="/servers/<%= server.id %>/titles/new"><svg class="ic"><use href="#i-plus"/></svg>New title</a></div></section>
+<% } else { %>
+<section class="card flush">
+  <ol class="role-list title-list">
+    <% for (const t of group[1]) { %>
+    <li class="role-row <%= t.enabled ? '' : 'off' %>">
+      <span class="item-ic" data-letter="<%= t.texture ? '?' : '' %>"><% if (t.texture) { %><img src="<%= iconSrc(t) %>" alt="" width="32" height="32" loading="lazy"><% } else { %><svg class="ic"><use href="#i-trophy"/></svg><% } %></span>
+      <div class="role-main">
+        <a class="role-title" href="/servers/<%= server.id %>/titles/<%= t.id %>"><strong><%= t.name %></strong>
+          <span class="name-preview small gt-<%= t.colorKey %>"><%= plain(t.prefix) %>Psy7<%= plain(t.suffix) %></span></a>
+        <span class="role-meta">
+          <%= t.enabled ? howToGet(t, roleMap) : 'switched off' %>
+          <% if (t.badge) { %> · <%= badgeLabel(t.badge) %><% } %>
+          <% if (t.texture) { %> · icon<% } %>
+          · <%= t.holders %> given
+        </span>
+      </div>
+      <div class="role-actions">
+        <% if (!t.enabled) { %><span class="badge stopped">Off</span><% } %>
+        <a class="btn ghost small" href="/servers/<%= server.id %>/titles/<%= t.id %>">Edit</a>
+      </div>
+    </li>
+    <% } %>
+  </ol>
+</section>
+<% } %>
+<% } %>
+<p class="muted small">Changes apply right away to everyone online. Give titles on a player's page under <a href="/servers/<%= server.id %>/players">Players</a>, or in game with <code>/granttitle name title</code> and <code>/removetitle</code>.</p>
+<% } %>
+<%- include('partials/server-shell-end') %>

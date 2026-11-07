@@ -5,6 +5,7 @@
 #include "onVariant/ConsoleMessage.hpp"
 #include "commands/__command.hpp"
 #include "tools/terminal.hpp"
+#include "database/titles.hpp"
 
 #include "roles.hpp"
 
@@ -202,8 +203,9 @@ std::string roles::display_name(const ::peer &peer)
             else if (std::ranges::find(world->access, peer.user_id) != world->access.end()) color = "^";
         }
     }
-    if (!role.color.empty()) color = role.color;
-    return std::format("`{}{}{}``", color, role.tag, peer.growid);
+    if (const std::string title = titles::color(peer); !title.empty()) color = title; // @note Dr. is red, Legend is gold
+    if (!role.color.empty()) color = role.color; // @note staff colours still win
+    return std::format("`{}{}{}{}{}``", color, role.tag, titles::prefix(peer), peer.growid, titles::suffix(peer));
 }
 
 void roles::refresh_name(ENetPeer *peer)
@@ -212,10 +214,11 @@ void roles::refresh_name(ENetPeer *peer)
     pPeer->display_growid = display_name(*pPeer);
     if (pPeer->netid == 0 || pPeer->recent_worlds.empty()) return;
     const int netid = pPeer->netid;
-    const std::string name = pPeer->display_growid;
-    peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [netid, &name](ENetPeer *other)
+    const std::string name = pPeer->display_growid, icon = titles::icon(*pPeer), country = titles::country_state(*pPeer);
+    peers(pPeer->recent_worlds.back(), PeerSearch::WORLD, [netid, &name, &icon, &country](ENetPeer *other)
     {
-        send_varlist(other, { "OnNameChanged", name }, netid);
+        send_varlist(other, { "OnNameChanged", name, icon }, netid); // @note icon: the title icon JSON, "" takes it away
+        send_varlist(other, { "OnCountryState", country }, netid);   // @note title badges (OnNameChanged just reset them)
     });
 }
 

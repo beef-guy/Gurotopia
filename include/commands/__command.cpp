@@ -28,6 +28,7 @@
 #include <algorithm>
 
 #include "database/roles.hpp"
+#include "database/titles.hpp"
 #include "__command.hpp"
 
 bool can_use(const ::peer &peer, std::string_view name, const ::cmd_entry &entry)
@@ -90,6 +91,8 @@ const std::unordered_map<std::string_view, ::cmd_entry> cmd_pool
     {"/give", {give, DEVELOPER}},
     {"/punch", {punch, DEVELOPER}},
     {"/setrole", {setrole, DEVELOPER}},
+    {"/granttitle", {granttitle, DEVELOPER}}, // @note /granttitle <name> <title>: Doctor, Legendary, or one made in the Title Manager
+    {"/removetitle", {removetitle, DEVELOPER}},
     {"/givegems", {givegems, DEVELOPER}},
     {"/trashall", {trashall, DEVELOPER}},
     {"/mail", {mail, DEVELOPER}},

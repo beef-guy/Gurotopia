@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "database/titles.hpp"
 #include "database/roles.hpp"
 
 #include "onVariant/ConsoleMessage.hpp"
@@ -276,22 +277,6 @@ namespace
         });
     }
 
-    void show_titles(ENetEvent &event)
-    {
-        const ::peer *pPeer = static_cast<::peer*>(event.peer->data);
-        std::string owned{};
-        if (const role_def &role = roles::get(pPeer->role_id); role.id != PLAYER)
-            owned += std::format("add_label_with_icon|small|`{}{}{}`` (shown in your name)|left|32|\n", role.color.empty() ? "w" : role.color, role.tag, role.name);
-
-        ::create_dialog dialog = ::create_dialog()
-            .set_default_color("`o")
-            .add_label_with_icon("big", "`wTitles``", 1794)
-            .add_spacer("small");
-        if (owned.empty()) dialog.add_textbox("You haven't earned any titles yet. Titles come from achievements, which aren't on this server yet.");
-        else dialog.add_textbox("Your titles:").add_raw(owned);
-        dialog.add_spacer("small").add_quick_exit();
-        send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("profile_info", "Close", "") });
-    }
 }
 
 std::string online_status_text(const ::peer &peer)
@@ -312,7 +297,7 @@ bool profile_button(ENetEvent& event, const std::string &button)
     else if (button == "notebook_edit") show_notebook(event);
     else if (button == "emojis") show_growmojis(event);
     else if (button == "trade_scan") show_trades(event);
-    else if (button == "title_edit") show_titles(event);
+    else if (button == "title_edit") titles::show_menu(event); // @note database/titles.cpp
     else if (button == "alist") coming_soon(event, "Achievements", 1794, "Achievements aren't on this server yet. They're coming in a later update!");
     else if (button == "marvelous_missions") coming_soon(event, "Marvelous Missions", 1486, "Marvelous Missions aren't on this server yet. They're coming in a later update!");
     else if (button == "pets" || button == "renew_pvp_license") coming_soon(event, "Card Battles", 1486, "Battle Pets and Card Battles aren't on this server yet. They're coming in a later update!");

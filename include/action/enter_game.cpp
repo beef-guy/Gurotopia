@@ -7,6 +7,7 @@
 #include "onVariant/SetBux.hpp"
 #include "automate/holiday.hpp"
 #include "database/friends.hpp"
+#include "database/titles.hpp"
 
 #include "action/event_buttons.hpp"
 
@@ -17,6 +18,7 @@ void action::enter_game(ENetEvent& event, const std::string& header)
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
 
     pPeer->display_growid = std::format("`w{}``", pPeer->growid);
+    titles::load_peer(*pPeer); // @note which titles they were given, and which they switched off
     /* @note load friends, then tell the ones online that we're here */
     pPeer->friends.clear();
     for (const ::friend_row &row : friends_of(pPeer->user_id)) pPeer->friends.emplace_back(row.uid);

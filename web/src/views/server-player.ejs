@@ -91,6 +91,28 @@
   </section>
 </div>
 
+<% if (titleList.ready) { %>
+<section class="card" id="titles">
+  <div class="card-head"><h2><svg class="ic"><use href="#i-trophy"/></svg>Titles</h2>
+    <span class="chip"><%= titleList.rows.filter((r) => r.owned).length %> owned · <%= titleList.rows.filter((r) => r.shown).length %> shown</span></div>
+  <p class="muted small">Tick a title to give it to <%= player.growid %>. Titles they earn by level or role are marked, and they can switch any of theirs off in game (wrench yourself, then Title).</p>
+  <form method="post" action="/servers/<%= server.id %>/players/<%= player.uid %>/titles">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="title-checks">
+      <% for (const r of titleList.rows.filter((x) => x.title.enabled)) { %>
+      <label class="cmd <%= r.byRule && !r.given ? 'auto' : '' %>">
+        <input type="checkbox" name="titles" value="<%= r.title.id %>" <%= r.given ? 'checked' : '' %>>
+        <span><strong class="gt-<%= r.title.colorKey %>" style="color: var(--gt)"><%= r.title.name %></strong><br>
+          <small class="muted"><%= r.byRule ? 'Has it already (' + (r.title.grant === 'everyone' ? 'everyone' : r.title.grant === 'level' ? 'level ' + r.title.grantValue : 'role') + ')' : r.given ? 'Given' : 'Not given' %><%= r.owned ? (r.shown ? ' · showing' : ' · hidden by them') : '' %></small></span>
+      </label>
+      <% } %>
+    </div>
+    <button type="submit" class="ghost">Save titles</button>
+    <a class="btn ghost small" href="/servers/<%= server.id %>/titles">Edit titles</a>
+  </form>
+</section>
+<% } %>
+
 <div class="over-grid two">
   <section class="card">
     <div class="card-head"><h2><svg class="ic"><use href="#i-globe"/></svg>Worlds owned</h2><span class="chip"><%= more.worlds.length %></span></div>

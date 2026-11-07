@@ -29,6 +29,7 @@
 #include <cctype>
 #include "include/tools/panel_bridge.hpp"
 #include "include/database/roles.hpp"
+#include "include/database/titles.hpp"
 
 #include <chrono>
 #include <csignal>
@@ -260,6 +261,7 @@ int main(int argc, char *argv[])
         {
             panel_bridge_create_tables(); // @note the website's live actions (web/src/players.js, worlds.js)
             roles::init(); // @note the roles the website edits (web/src/roles.js)
+            titles::init(); // @note the titles the website edits (web/src/titles.js)
         }
 
         decode_items_dat();
