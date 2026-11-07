@@ -594,3 +594,8 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 6px; }
 .num-unit em { font-style: normal; color: var(--muted); font-weight: 650; }
 @media (max-width: 1000px) { .effect-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 620px) { .effect-grid { grid-template-columns: 1fr; } .effect-item { flex-wrap: wrap; } }
+.bonus-cell { display: inline-flex; align-items: center; gap: 8px; }
+.bonus-cell img { image-rendering: pixelated; border-radius: 4px; }
+.table.effects .fx-none { color: var(--faint); }
+.table.effects th, .table.effects td { padding: 12px 10px; }
+.table.effects th { font-size: 0.7rem; }

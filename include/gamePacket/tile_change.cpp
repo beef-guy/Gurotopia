@@ -615,6 +615,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 } /* ~gem drop */
 
                 pPeer->add_xp(event, std::trunc(1.0f + item.rarity / 5.0f));
+                item_effects::bonus_drops(event, *pPeer, gamePacket.punch.by_32(), *world); // @note the website's item effects: a bonus item
                 if (item.type != type::SEED) grow_pass_break(event.peer);
                 if (item.type != type::SEED) ring_progress(event.peer, RT_BREAK, 1), ring_progress(event.peer, RT_BREAK_RARITY, item.rarity);
             }
