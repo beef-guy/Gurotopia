@@ -13,7 +13,7 @@
 <div class="page-head">
   <div>
     <h1>Players</h1>
-    <p class="muted">Every account on <%= server.name %>. Open one to ban, mute or change its role.</p>
+    <p class="muted">Every account on <%= server.name %>, <%= onlineNow.size %> online now. Open one to ban, mute, kick or change its role.</p>
   </div>
 </div>
 
@@ -68,7 +68,9 @@
     <tbody>
     <% for (const p of result.players) { %>
       <tr>
-        <td><a class="player-link" href="/servers/<%= server.id %>/players/<%= p.uid %>"><span class="pfp"><%= p.growid.slice(0, 1).toUpperCase() %></span><%= p.growid %></a></td>
+        <% const here = onlineNow.get(p.growid.toLowerCase()); %>
+        <td><a class="player-link" href="/servers/<%= server.id %>/players/<%= p.uid %>"><span class="pfp <%= here ? 'on' : '' %>"><%= p.growid.slice(0, 1).toUpperCase() %></span><%= p.growid %></a>
+          <% if (here) { %><span class="online-tag"><span class="live-dot"></span><%= here.world ? 'in ' + here.world : 'online' %></span><% } %></td>
         <td><span class="role r<%= p.role %>"><%= p.roleName %></span></td>
         <td><%= p.level %></td>
         <td><%= p.gems.toLocaleString('en-US') %></td>

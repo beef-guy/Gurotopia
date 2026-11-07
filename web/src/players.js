@@ -3,11 +3,12 @@
  * Read and moderate a server's players. Each server keeps its accounts in its own
  * database (srv_<id>), in the peer table the game creates on its first start.
  *
- * The game only reads role, banned_until, ban_reason and muted_until when a player
- * logs in, and never writes them back on save, so changes made here are safe and
- * take effect the next time that player logs in.
+ * Changes go straight into the database (the game never saves role, bans or mutes
+ * over it), then a running server is told to re-read the player right away, so an
+ * online player is kicked, muted or gets the new role within a second.
  */
 const db = require('./db');
+const live = require('./live');
 
 const ROLES = ['Player', 'Moderator', 'Developer']; // @note enum role in include/database/peer.hpp
 const SORTS = {
@@ -152,8 +153,20 @@ function untilFrom(duration) {
   return seconds < 0 ? -1 : Math.floor(Date.now() / 1000) + seconds;
 }
 
-/* @note every change runs as one statement on one uid, so nothing else in the account is touched */
+/*
+ * @note every change runs as one statement on one uid, so nothing else in the account is touched.
+ * @return { done, live } where live is false when a running server could not be told (an older game build)
+ */
 async function moderate(server, player, actor, action, form) {
+  const done = await change(server, player, actor, action, form);
+  let id;
+  if (action === 'kick') id = await live.queue(server, 'kick', player.growid, String(form.reason || '').trim().slice(0, 100));
+  else id = await live.queue(server, 'player_sync', player.growid);
+  if (id) await live.waitDone(server, id, 3000);
+  return { done, live: !server.reporting || Boolean(id) };
+}
+
+async function change(server, player, actor, action, form) {
   const pool = db.getPool();
   const peer = table(server, 'peer');
   switch (action) {
@@ -185,6 +198,10 @@ async function moderate(server, player, actor, action, form) {
       await logAction(server, actor, 'role', player.growid, ROLES[role]);
       return 'roleSet';
     }
+    case 'kick':
+      if (!server.reporting) throw new UserError('The server is not running, so nobody is online to kick.');
+      await logAction(server, actor, 'kick', player.growid, String(form.reason || '').trim().slice(0, 100));
+      return 'kicked';
     default:
       throw new UserError('Unknown action.');
   }

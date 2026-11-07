@@ -12,7 +12,7 @@
         <% if (player.banned) { %><span class="badge crashed">Banned</span><% } %>
         <% if (player.muted) { %><span class="badge busy">Muted</span><% } %>
       </h1>
-      <p class="muted">Account #<%= player.uid %> · joined <%= player.createdAt ? new Date(player.createdAt).toISOString().slice(0, 10) : '–' %></p>
+      <p class="muted"><% if (presence) { %><span class="online-tag"><span class="live-dot"></span>Online<%= presence.world ? ' in ' : '' %><% if (presence.world) { %><a href="/servers/<%= server.id %>/worlds/<%= presence.world %>"><%= presence.world %></a><% } %></span> · <% } %>Account #<%= player.uid %> · joined <%= player.createdAt ? new Date(player.createdAt).toISOString().slice(0, 10) : '–' %></p>
     </div>
   </div>
 </div>
@@ -24,7 +24,17 @@
   <div class="tile"><span class="tile-label">World Locks stored</span><span class="tile-value"><%= player.wlStorage.toLocaleString('en-US') %></span><span class="tile-foot"><%= more.worlds.length %> world<%= more.worlds.length === 1 ? '' : 's' %> owned</span></div>
 </section>
 
-<p class="notice info">Changes here apply the next time <%= player.growid %> logs in. If they're online right now, they keep playing until they reconnect.</p>
+<% if (presence) { %>
+<section class="card kick-card">
+  <form method="post" action="/servers/<%= server.id %>/players/<%= player.uid %>/kick" class="row-form">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <label>Kick <%= player.growid %> off the server now
+      <input name="reason" maxlength="100" placeholder="Reason (optional)">
+    </label>
+    <button type="submit" class="ghost danger-text">Kick</button>
+  </form>
+</section>
+<% } %>
 
 <div class="over-grid two">
   <section class="card">
@@ -85,7 +95,7 @@
   <section class="card">
     <div class="card-head"><h2><svg class="ic"><use href="#i-globe"/></svg>Worlds owned</h2><span class="chip"><%= more.worlds.length %></span></div>
     <% if (more.worlds.length) { %>
-      <div class="chips"><% for (const w of more.worlds) { %><span class="chip world"><%= w %></span><% } %></div>
+      <div class="chips"><% for (const w of more.worlds) { %><a class="chip world" href="/servers/<%= server.id %>/worlds/<%= w %>"><%= w %></a><% } %></div>
     <% } else { %><p class="muted">They don't own any worlds.</p><% } %>
   </section>
   <section class="card">
