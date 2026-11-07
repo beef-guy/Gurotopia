@@ -99,7 +99,11 @@ test('login page: token carries the server name, checktoken keeps it', async () 
     const xss = await post('/player/growid/login/validate', { _token: 'YWJj', mode: 'login', server: '"><script>', growId: 'Bob', password: 'pass12' });
     assert.ok(!xss.includes('<script>alert') && !xss.includes('"><script>'));
 
-    const check = await post('/player/growid/checktoken', { refreshToken: JSON.parse(login).token, clientData: 'xyz' });
+    const redirect = await fetch(base + '/player/growid/checktoken', { method: 'POST', redirect: 'manual' });
+    assert.equal(redirect.status, 307);
+    assert.equal(redirect.headers.get('location'), '/player/growid/validate/checktoken');
+
+    const check = await post('/player/growid/checktoken', { refreshToken: JSON.parse(login).token, clientData: 'xyz' }); // @note fetch follows the 307 with the body
     assert.equal(decode(check), `_token=${Buffer.from('xyz').toString('base64')}&growId=Bob&password=pass12&reg=0&server=Sky1`);
   } finally {
     server.close();
