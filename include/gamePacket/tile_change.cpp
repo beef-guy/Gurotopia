@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "database/roles.hpp"
 #include "action/event_buttons.hpp"
 
 #include "onVariant/NameChanged.hpp"
@@ -568,10 +569,8 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
             }
             else if (item.type == type::LOCK && !is_tile_lock(item.id))
             {
-                pPeer->display_growid = std::format("`w{}``", pPeer->growid);
-                on::NameChanged(event);
-                
                 world->owner = 0; // @todo have a seperate thing for 'range_lock'
+                roles::refresh_name(event.peer);
             }
 
             if (item.cat == CAT_RETURN)
@@ -1256,8 +1255,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                         world->owner = pPeer->user_id;
                         lock_visuals = true;
 
-                        pPeer->display_growid = std::format("`2{}``", pPeer->growid);
-                        on::NameChanged(event);
+                        roles::refresh_name(event.peer);
                         if (std::ranges::find(pPeer->my_worlds, world->name) == pPeer->my_worlds.end()) 
                         {
                             std::ranges::rotate(pPeer->my_worlds, pPeer->my_worlds.begin() + 1);

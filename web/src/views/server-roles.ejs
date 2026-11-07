@@ -1,0 +1,52 @@
+<%- include('partials/server-shell') %>
+<div class="page-head">
+  <div>
+    <h1>Roles</h1>
+    <p class="muted">A role sets a player's name colour, their staff powers and which commands they can use. Higher roles can kick, ban and give roles to the ones below them.</p>
+  </div>
+  <% if (result.ready) { %><a class="btn" href="/servers/<%= server.id %>/roles/new"><svg class="ic"><use href="#i-plus"/></svg>New role</a><% } %>
+</div>
+
+<% if (!result.ready) { %>
+<section class="card">
+  <div class="empty">
+    <svg class="ic big"><use href="#i-shield"/></svg>
+    <p>Start the server once with the latest game build, then you can edit roles here.</p>
+  </div>
+</section>
+<% } else { %>
+<section class="card flush">
+  <ol class="role-list">
+    <% result.roles.forEach((r, i) => { %>
+    <li class="role-row">
+      <span class="rank"><%= i + 1 %></span>
+      <div class="role-main">
+        <a class="role-title" href="/servers/<%= server.id %>/roles/<%= r.id %>"><span class="role gt-<%= r.colorKey %>"><%= r.tag %><%= r.name %></span></a>
+        <span class="role-meta">
+          <%= r.members %> <%= r.members === 1 ? 'player' : 'players' %>
+          · <%= r.allCommands ? 'every command' : `${r.commands.length} of ${total} commands` %>
+          · <%= r.powers === 2 ? 'developer powers' : r.powers === 1 ? 'moderator powers' : 'no staff powers' %>
+        </span>
+      </div>
+      <div class="role-actions">
+        <% if (r.id === 2) { %><span class="muted small">Always on top</span>
+        <% } else if (r.id === 0) { %><span class="muted small">Everyone starts here</span>
+        <% } else { %>
+          <form method="post" action="/servers/<%= server.id %>/roles/<%= r.id %>/up" class="inline">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <button type="submit" class="icon-btn" title="Move up" aria-label="Move <%= r.name %> up" <%= i <= 1 ? 'disabled' : '' %>><svg class="ic up"><use href="#i-back"/></svg></button>
+          </form>
+          <form method="post" action="/servers/<%= server.id %>/roles/<%= r.id %>/down" class="inline">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <button type="submit" class="icon-btn" title="Move down" aria-label="Move <%= r.name %> down" <%= i >= result.roles.length - 2 ? 'disabled' : '' %>><svg class="ic down"><use href="#i-back"/></svg></button>
+          </form>
+        <% } %>
+        <a class="btn ghost small" href="/servers/<%= server.id %>/roles/<%= r.id %>">Edit</a>
+      </div>
+    </li>
+    <% }) %>
+  </ol>
+</section>
+<p class="muted small">Changes apply right away to everyone online, name colours included. Give a role to a player on their page under <a href="/servers/<%= server.id %>/players">Players</a>, or in game with /setrole.</p>
+<% } %>
+<%- include('partials/server-shell-end') %>

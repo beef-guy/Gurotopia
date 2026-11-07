@@ -32,9 +32,9 @@
     <span class="tile-foot"><%= stats.week %> new this week</span>
   </a>
   <a class="tile tile-link <%= query.filter === 'staff' ? 'on' : '' %>" href="<%= link({ filter: 'staff', page: 1 }) %>">
-    <span class="tile-label"><svg class="ic"><use href="#i-shield"/></svg>Staff</span>
+    <span class="tile-label"><svg class="ic"><use href="#i-shield"/></svg>With a role</span>
     <span class="tile-value"><%= stats.staff %></span>
-    <span class="tile-foot">moderators and developers</span>
+    <span class="tile-foot">anything above Player</span>
   </a>
   <a class="tile tile-link <%= query.filter === 'banned' ? 'on' : '' %>" href="<%= link({ filter: 'banned', page: 1 }) %>">
     <span class="tile-label"><svg class="ic"><use href="#i-lock"/></svg>Banned</span>
@@ -71,7 +71,7 @@
         <% const here = onlineNow.get(p.growid.toLowerCase()); %>
         <td><a class="player-link" href="/servers/<%= server.id %>/players/<%= p.uid %>"><span class="pfp <%= here ? 'on' : '' %>"><%= p.growid.slice(0, 1).toUpperCase() %></span><%= p.growid %></a>
           <% if (here) { %><span class="online-tag"><span class="live-dot"></span><%= here.world ? 'in ' + here.world : 'online' %></span><% } %></td>
-        <td><span class="role r<%= p.role %>"><%= p.roleName %></span></td>
+        <% const r = roleMap.get(p.role); %><td><span class="role gt-<%= r ? r.colorKey : 'plain' %>"><%= r ? r.tag + r.name : p.roleName %></span></td>
         <td><%= p.level %></td>
         <td><%= p.gems.toLocaleString('en-US') %></td>
         <td><%= fmt.duration(p.playtime) %></td>

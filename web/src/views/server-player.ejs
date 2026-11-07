@@ -8,7 +8,7 @@
   <div class="player-head">
     <span class="pfp big"><%= player.growid.slice(0, 1).toUpperCase() %></span>
     <div>
-      <h1><%= player.growid %> <span class="role r<%= player.role %>"><%= player.roleName %></span>
+      <h1><%= player.growid %> <% const myRole = roleMap.get(player.role); %><span class="role gt-<%= myRole ? myRole.colorKey : 'plain' %>"><%= myRole ? myRole.tag + myRole.name : player.roleName %></span>
         <% if (player.banned) { %><span class="badge crashed">Banned</span><% } %>
         <% if (player.muted) { %><span class="badge busy">Muted</span><% } %>
       </h1>
@@ -83,8 +83,8 @@
     <form method="post" action="/servers/<%= server.id %>/players/<%= player.uid %>/role" class="row-form">
       <input type="hidden" name="_csrf" value="<%= csrf %>">
       <label>Role
-        <select name="role"><% roles.forEach((r, i) => { %><option value="<%= i %>" <%= i === player.role ? 'selected' : '' %>><%= r %></option><% }) %></select>
-        <small>Moderators can use staff commands. Developers have every command.</small>
+        <select name="role"><% for (const r of roles) { %><option value="<%= r.id %>" <%= r.id === player.role ? 'selected' : '' %>><%= r.name %></option><% } %></select>
+        <small>Changes their name colour and commands right away. <a href="/servers/<%= server.id %>/roles">Edit roles</a></small>
       </label>
       <button type="submit" class="ghost">Save role</button>
     </form>

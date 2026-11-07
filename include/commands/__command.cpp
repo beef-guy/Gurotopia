@@ -27,13 +27,16 @@
 
 #include <algorithm>
 
+#include "database/roles.hpp"
 #include "__command.hpp"
 
 bool can_use(const ::peer &peer, std::string_view name, const ::cmd_entry &entry)
 {
     if (name == "/find" && gServer_data.sandbox) return true;
     if (name == "/playermode") return peer.player_mode || peer.role >= DEVELOPER; // @note so it can be switched off again
-    return peer.role >= entry.role;
+    if (entry.run == on::Action || name == "/help" || name == "/?") return true; // @note emotes and help are for everyone
+    return roles::allows(peer.player_mode ? PLAYER : peer.role_id, name); // @note the server's owner picks them on the website
+
 }
 
 /* if you plan to use this outside of this file, please include in __command.hpp (^-^) - and just make it a void. */

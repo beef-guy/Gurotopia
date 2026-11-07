@@ -3,6 +3,7 @@
 #include "onVariant/ConsoleMessage.hpp"
 #include "action/quit_to_exit.hpp"
 #include "commands/moderation.hpp"
+#include "database/roles.hpp"
 #include "tools/terminal.hpp"
 
 #include "panel_bridge.hpp"
@@ -21,16 +22,6 @@ namespace
         std::string out(text.size() * 2 + 1, '\0');
         out.resize(mysql_real_escape_string(db.mysql, out.data(), text.c_str(), text.size()));
         return out;
-    }
-
-    std::string role_name(int role)
-    {
-        switch (role)
-        {
-            case DEVELOPER: return "Developer";
-            case MODERATOR: return "Moderator";
-            default: return "Player";
-        }
     }
 
     void disconnect(ENetPeer *peer, const std::string &message)
@@ -76,12 +67,11 @@ namespace
         if (is_muted && !was_muted) on::ConsoleMessage(peer, std::format("`4You were muted for {}.``", moderation::duration(muted_until < 0 ? -1 : muted_until - now)));
         if (!is_muted && was_muted) on::ConsoleMessage(peer, "`2You can talk again.``");
 
-        const u_char current = pPeer->player_mode ? pPeer->real_role : pPeer->role;
-        if (role != current)
+        if (role != pPeer->role_id)
         {
-            if (pPeer->player_mode) pPeer->real_role = static_cast<u_char>(role); // @note /playermode gives this back
-            else pPeer->role = static_cast<u_char>(role);
-            on::ConsoleMessage(peer, std::format("`2Your role is now {}.``", role_name(role)));
+            pPeer->role_id = role;
+            roles::apply(peer); // @note new powers, and everyone in the world sees the new name colour now
+            on::ConsoleMessage(peer, std::format("`2Your role is now {}.``", roles::get(role).name));
         }
     }
 
@@ -122,6 +112,7 @@ namespace
         else if (action == "kick") kick(target, value);
         else if (action == "world_empty") world_empty(target, "`4Everyone was sent out of this world by its server's owner.``");
         else if (action == "world_delete") world_delete(target);
+        else if (action == "roles_reload") roles::reload(); // @note a role was made, edited or deleted on the website
         else print(std::format("panel: unknown action {}", action));
     }
 

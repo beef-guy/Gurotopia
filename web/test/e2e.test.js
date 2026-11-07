@@ -47,7 +47,7 @@ class Browser {
         cookie: this.cookie,
         ...(form ? { 'content-type': 'application/x-www-form-urlencoded' } : {}),
       },
-      body: form ? new URLSearchParams(form).toString() : undefined,
+      body: form ? new URLSearchParams(Object.entries(form).flatMap(([k, val]) => [].concat(val).map((x) => [k, x]))).toString() : undefined,
     });
     const set = res.headers.get('set-cookie');
     if (set) this.cookie = set.split(';')[0];
@@ -301,6 +301,58 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     assert.deepEqual(left.map((w) => w.name), ['START'], 'the game deleted it');
     const [acts] = await admin.query(`SELECT action FROM ${srv}.panel_actions WHERE action LIKE 'world%' ORDER BY id`);
     assert.deepEqual(acts.map((a) => a.action), ['world_empty', 'world_delete']);
+  });
+
+  await t.test('roles can be made, ordered, given and deleted', async () => {
+    const srv = `srv_${id}`;
+    let r = await alice.get(`/servers/${id}/roles`);
+    assert.equal(r.status, 200);
+    assert.match(r.text, /Developer[\s\S]*Moderator[\s\S]*Player/, 'highest first');
+
+    r = await alice.get(`/servers/${id}/roles/new`);
+    assert.match(r.text, /\/newthing/, 'commands the game has but the website does not describe are listed too');
+    r = await alice.post(`/servers/${id}/roles`, { _csrf: await alice.csrf(), name: 'VIP', color: 'e', tag: '+', powers: '0', commands: ['/sb', '/give', '/bogus'] });
+    assert.equal(r.status, 302);
+    const vipId = Number(r.location.match(/roles\/(\d+)/)[1]);
+    assert.equal(vipId, 3);
+    let [[vip]] = await admin.query(`SELECT * FROM ${srv}.roles WHERE id = 3`);
+    assert.equal(vip.commands, '/give,/sb', 'unknown commands are dropped');
+    assert.equal(vip.color, 'e');
+    const [[mod]] = await admin.query(`SELECT priority FROM ${srv}.roles WHERE id = 1`);
+    assert.ok(vip.priority < mod.priority && vip.priority > 0, 'a new role starts just above Player');
+
+    assert.equal((await alice.post(`/servers/${id}/roles`, { _csrf: await alice.csrf(), name: 'vip', color: '', powers: '0' })).status, 400, 'names are unique');
+    assert.equal((await alice.post(`/servers/${id}/roles`, { _csrf: await alice.csrf(), name: 'Bad', color: '', tag: '`4', powers: '0' })).status, 400, 'no colour codes in tags');
+
+    r = await alice.post(`/servers/${id}/roles/3/up`, { _csrf: await alice.csrf() });
+    assert.equal(r.status, 302);
+    [[vip]] = await admin.query(`SELECT priority FROM ${srv}.roles WHERE id = 3`);
+    const [[mod2]] = await admin.query(`SELECT priority FROM ${srv}.roles WHERE id = 1`);
+    assert.ok(vip.priority > mod2.priority, 'moved above Moderator');
+    assert.equal((await alice.post(`/servers/${id}/roles/2/down`, { _csrf: await alice.csrf() })).status, 400, 'Developer stays on top');
+
+    r = await alice.post(`/servers/${id}/roles/2`, { _csrf: await alice.csrf(), name: 'Owner', color: '4', tag: '@', powers: '0', commands: ['/sb'] });
+    assert.equal(r.status, 302);
+    const [[dev]] = await admin.query(`SELECT name, powers, commands FROM ${srv}.roles WHERE id = 2`);
+    assert.equal(dev.name, 'Owner');
+    assert.equal(dev.powers, 2, 'the top role keeps every power');
+    assert.match(dev.commands, /\/give/, 'and its commands');
+
+    const [[g]] = await admin.query(`SELECT uid FROM ${srv}.peer WHERE growid = 'Griefer'`);
+    await alice.post(`/servers/${id}/players/${g.uid}/role`, { _csrf: await alice.csrf(), role: '3' });
+    assert.match((await alice.get(`/servers/${id}/players/${g.uid}`)).text, /gt-sky">\+VIP/);
+
+    assert.equal((await alice.post(`/servers/${id}/roles/1/delete`, { _csrf: await alice.csrf() })).status, 400, 'built-in roles stay');
+    r = await alice.post(`/servers/${id}/roles/3/delete`, { _csrf: await alice.csrf() });
+    assert.equal(r.status, 302);
+    const [[after]] = await admin.query(`SELECT role FROM ${srv}.peer WHERE uid = ?`, [g.uid]);
+    assert.equal(after.role, 0, 'its players became Players');
+
+    const [sent] = await admin.query(`SELECT done_at FROM ${srv}.panel_actions WHERE action = 'roles_reload'`);
+    assert.equal(sent.length, 4, 'the game re-read the roles after each change');
+    assert.ok(sent.every((a) => a.done_at));
+    const [log] = await admin.query(`SELECT action FROM ${srv}.mod_log WHERE action LIKE 'role%' ORDER BY id`);
+    assert.deepEqual(log.map((l) => l.action).slice(-5), ['role_create', 'role_move', 'role_edit', 'role', 'role_delete']);
   });
 
   await t.test('the log shows the server output', async () => {

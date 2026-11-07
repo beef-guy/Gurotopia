@@ -27,6 +27,13 @@ const login = Object.fromEntries(fs.readFileSync('mysql_login.txt', 'utf8').spli
     target VARCHAR(24) NOT NULL, value VARCHAR(255) DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, done_at DATETIME NULL)`);
   await own.query("CREATE TABLE IF NOT EXISTS panel_live (growid VARCHAR(18) NOT NULL PRIMARY KEY, world VARCHAR(24) DEFAULT '')");
   await own.query("REPLACE INTO panel_live VALUES ('Griefer', 'TRADE'), ('Noob', '')");
+  // @note what include/database/roles.cpp makes on start
+  await own.query(`CREATE TABLE IF NOT EXISTS roles (id INT NOT NULL PRIMARY KEY, name VARCHAR(24) NOT NULL, priority INT NOT NULL DEFAULT 0,
+    color VARCHAR(1) NOT NULL DEFAULT '', tag VARCHAR(4) NOT NULL DEFAULT '', powers INT NOT NULL DEFAULT 0, commands TEXT)`);
+  await own.query(`INSERT IGNORE INTO roles VALUES (0, 'Player', 0, '', '', 0, '/me,/msg,/sb,/who'),
+    (1, 'Moderator', 500, '#', '@', 1, '/ban,/kick,/me,/msg,/mute,/sb,/who'), (2, 'Developer', 1000, '6', '@', 2, '/ban,/give,/kick,/me,/msg,/mute,/sb,/who')`);
+  await own.query('CREATE TABLE IF NOT EXISTS panel_commands (name VARCHAR(32) NOT NULL PRIMARY KEY, min_role INT NOT NULL DEFAULT 0)');
+  await own.query("REPLACE INTO panel_commands VALUES ('/me', 0), ('/msg', 0), ('/sb', 0), ('/who', 0), ('/kick', 1), ('/ban', 1), ('/mute', 1), ('/give', 2), ('/newthing', 0)");
   setInterval(async () => {
     try {
       const [rows] = await own.query('SELECT id, action, target, value FROM panel_actions WHERE done_at IS NULL ORDER BY id');

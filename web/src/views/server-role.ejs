@@ -1,0 +1,101 @@
+<%- include('partials/server-shell') %>
+<%
+  const isDev = role && role.id === 2;
+  const isPlayer = role && role.id === 0;
+  const picked = new Set(shown.commands);
+  const action = role ? `/servers/${server.id}/roles/${role.id}` : `/servers/${server.id}/roles`;
+  const colorKey = (colors.find((c) => c.code === shown.color) || colors[0]).key;
+%>
+<p class="crumb"><a href="/servers/<%= server.id %>/roles"><svg class="ic"><use href="#i-back"/></svg>All roles</a></p>
+<div class="page-head">
+  <div>
+    <h1><%= role ? role.name : 'New role' %></h1>
+    <p class="muted"><% if (role) { %><%= role.members %> <%= role.members === 1 ? 'player has' : 'players have' %> this role.<% } else { %>Pick how it looks, what it can do and which commands it gets.<% } %></p>
+  </div>
+</div>
+
+<% if (!ready) { %>
+<section class="card"><div class="empty"><svg class="ic big"><use href="#i-shield"/></svg><p>Start the server once with the latest game build, then you can edit roles here.</p></div></section>
+<% } else { %>
+<form method="post" action="<%= action %>" class="role-form" id="role-form">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-user"/></svg>Name and look</h2>
+      <span class="name-preview gt-<%= colorKey %>" id="preview" aria-live="polite"><span data-p="tag"><%= shown.tag %></span>Psy7</span>
+    </div>
+    <div class="form-grid">
+      <label>Role name
+        <input name="name" value="<%= shown.name %>" maxlength="24" required autocomplete="off" placeholder="e.g. VIP">
+      </label>
+      <label>Tag
+        <input name="tag" id="tag" value="<%= shown.tag %>" maxlength="4" autocomplete="off" placeholder="none">
+        <small>Up to 4 characters shown before the name, like @.</small>
+      </label>
+    </div>
+    <fieldset class="swatches">
+      <legend>Name colour</legend>
+      <% for (const c of colors) { %>
+      <label class="swatch-pick" title="<%= c.label %>">
+        <input type="radio" name="color" value="<%= c.code %>" data-key="<%= c.key %>" <%= c.code === shown.color ? 'checked' : '' %>>
+        <span class="swatch gt-<%= c.key %>"></span><span class="swatch-name"><%= c.label %></span>
+      </label>
+      <% } %>
+    </fieldset>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-shield"/></svg>Staff powers</h2></div>
+    <% if (isDev || isPlayer) { %><p class="muted small"><%= isDev ? 'Developer always has every power and every command, so the server owner can never lock themselves out.' : 'Player is the role everyone starts with, so it never has staff powers.' %></p><% } %>
+    <div class="power-pick">
+      <% for (const p of powers) { %>
+      <label class="power <%= shown.powers === p.value ? 'on' : '' %>">
+        <input type="radio" name="powers" value="<%= p.value %>" <%= shown.powers === p.value ? 'checked' : '' %> <%= (isDev || isPlayer) && shown.powers !== p.value ? 'disabled' : '' %>>
+        <strong><%= p.label %></strong>
+        <span><%= p.text %></span>
+      </label>
+      <% } %>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-terminal"/></svg>Commands</h2>
+      <span class="chip" id="cmd-count"><%= isDev ? 'All' : picked.size %> selected</span></div>
+    <p class="muted small"><%= isDev ? 'Developer can use every command.' : 'Emotes and /help work for everyone. Tick what this role can use.' %></p>
+    <% for (const g of groups) { %>
+    <fieldset class="cmd-group" <%= isDev ? 'disabled' : '' %>>
+      <div class="cmd-head">
+        <legend><%= g.name %></legend>
+        <% if (g.risky) { %><span class="risk"><%= g.risky %></span><% } %>
+        <% if (!isDev) { %><button type="button" class="ghost small" data-all>Select all</button><% } %>
+      </div>
+      <div class="cmd-grid">
+        <% for (const c of g.commands) { %>
+        <label class="cmd">
+          <input type="checkbox" name="commands" value="<%= c.name %>" <%= isDev || picked.has(c.name) ? 'checked' : '' %>>
+          <code><%= c.name %></code><span><%= c.text %></span>
+        </label>
+        <% } %>
+      </div>
+    </fieldset>
+    <% } %>
+  </section>
+
+  <div class="save-bar">
+    <a class="btn ghost" href="/servers/<%= server.id %>/roles">Cancel</a>
+    <button type="submit"><%= role ? 'Save role' : 'Create role' %></button>
+  </div>
+</form>
+
+<% if (role && !role.builtin) { %>
+<section class="card danger">
+  <div class="card-head"><h2><svg class="ic"><use href="#i-trash"/></svg>Delete role</h2></div>
+  <p><%= role.members ? `The ${role.members} ${role.members === 1 ? 'player' : 'players'} with this role become Players.` : 'Nobody has this role.' %> It can't be undone.</p>
+  <form method="post" action="/servers/<%= server.id %>/roles/<%= role.id %>/delete">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <button type="submit" class="bad">Delete <%= role.name %></button>
+  </form>
+</section>
+<% } %>
+<% } %>
+<%- include('partials/server-shell-end') %>

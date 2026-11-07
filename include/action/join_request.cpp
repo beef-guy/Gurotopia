@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "database/roles.hpp"
 #include "action/event_buttons.hpp"
 
 #include "onVariant/EmoticonDataChanged.hpp"
@@ -89,16 +90,7 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
         } // @note delete name, first
         on::EmoticonDataChanged(event);
 
-        pPeer->display_growid = std::format("`w{}``", pPeer->growid);
-        if (pPeer->user_id == world.owner)
-            pPeer->display_growid = std::format("`2{}``", pPeer->growid);
-        else if (std::ranges::find(world.access, pPeer->user_id) != world.access.end()) 
-            pPeer->display_growid = std::format("`^{}``", pPeer->growid);
-
-        if (pPeer->role >= DEVELOPER)
-            pPeer->display_growid = std::format("`6@{}``", pPeer->growid);
-        else if (pPeer->role == MODERATOR)
-            pPeer->display_growid = std::format("`#@{}``", pPeer->growid);
+        pPeer->display_growid = roles::display_name(*pPeer); // @note role colour, or green for the owner and yellow with access
 
         pPeer->rest_pos = world.spawn;
         ::pos start = pPeer->rest_pos; // @note where the player appears: the main door, or the door they came through
