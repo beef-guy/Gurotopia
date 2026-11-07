@@ -43,6 +43,11 @@ const login = Object.fromEntries(fs.readFileSync('mysql_login.txt', 'utf8').spli
   await own.query(`INSERT IGNORE INTO titles (id, name, prefix, suffix, color, badge, grant_type, grant_value, sort, builtin) VALUES
     (1, 'Doctor', 'Dr.', '', '4', 'doctor', 'manual', 0, 10, 1), (2, 'Legendary', '', ' of Legend', '9', '', 'manual', 0, 900, 1),
     (3, 'Max Level', '', '', '', 'maxLevel', 'level', 125, 20, 1)`);
+  // @note what include/database/item_effects.cpp makes on start
+  await own.query(`CREATE TABLE IF NOT EXISTS item_effects (item INT NOT NULL PRIMARY KEY, gems INT NOT NULL DEFAULT 0, xp INT NOT NULL DEFAULT 0,
+    one_hit TINYINT NOT NULL DEFAULT 0, punch_range INT NOT NULL DEFAULT 0, build_range INT NOT NULL DEFAULT 0, drops INT NOT NULL DEFAULT 0,
+    harvest INT NOT NULL DEFAULT 0, enabled TINYINT NOT NULL DEFAULT 1, note VARCHAR(120) NOT NULL DEFAULT '',
+    updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`);
   // @note what include/database/items.cpp and panel_bridge.cpp make on start: a tiny items.dat
   await own.query(`CREATE TABLE IF NOT EXISTS item_edits (id INT NOT NULL PRIMARY KEY, base_id INT NULL, removed TINYINT NOT NULL DEFAULT 0,
     name VARCHAR(64) NULL, texture VARCHAR(64) NULL, info TEXT NULL, rarity INT NULL, hits INT NULL, hit_reset INT NULL, collision INT NULL,

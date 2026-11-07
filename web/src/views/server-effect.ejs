@@ -1,0 +1,91 @@
+<%- include('partials/server-shell') %>
+<%
+  const fx = shown;
+  const action = effect ? `/servers/${server.id}/effects/${effect.item}` : `/servers/${server.id}/effects`;
+%>
+<p class="crumb"><a href="/servers/<%= server.id %>/effects"><svg class="ic"><use href="#i-back"/></svg>All item effects</a></p>
+<div class="page-head">
+  <div>
+    <h1><%= effect ? effect.name : 'New item effect' %></h1>
+    <p class="muted"><% if (effect) { %>Item #<%= effect.item %>. Anyone wearing or holding it gets these effects.<% } else { %>Pick an item, then the buffs it gives while it's worn or held.<% } %></p>
+  </div>
+</div>
+
+<% if (!ready) { %>
+<section class="card"><div class="empty"><svg class="ic big"><use href="#i-spark"/></svg><p>Start the server once with the latest game build, then you can give items effects here.</p></div></section>
+<% } else { %>
+<form method="post" action="<%= action %>" class="role-form" id="effect-form" data-server="<%= server.id %>">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-box"/></svg>Item</h2></div>
+    <% if (effect) { %>
+    <div class="effect-item">
+      <span class="item-ic" data-letter="<%= effect.name.slice(0, 1).toUpperCase() %>"><img src="/servers/<%= server.id %>/items/<%= effect.item %>/icon.png" alt="" width="32" height="32"></span>
+      <div><strong><%= effect.name %></strong><span class="muted small">#<%= effect.item %><%= item ? ` · ${item.typeName}` : '' %></span></div>
+      <a class="btn ghost small" href="/servers/<%= server.id %>/items/<%= effect.item %>">Open in Item manager</a>
+    </div>
+    <% } else { %>
+    <input type="hidden" name="item" id="f-item" value="<%= fx.item || '' %>">
+    <label>Find an item
+      <input type="search" id="item-search" autocomplete="off" placeholder="Type an item name, like Golden Angel Wings, or #id" value="<%= item ? item.name : '' %>">
+    </label>
+    <ul class="base-results" id="item-results" role="listbox" aria-label="Matching items"></ul>
+    <div class="effect-item" id="item-chosen" <%= item ? '' : 'hidden' %>>
+      <span class="item-ic"><img id="item-chosen-img" src="<%= item ? `/servers/${server.id}/items/${item.id}/icon.png` : '' %>" alt="" width="32" height="32"></span>
+      <div><strong id="item-chosen-name"><%= item ? item.name : '' %></strong><span class="muted small" id="item-chosen-meta"><%= item ? `#${item.id} · ${item.typeName}` : '' %></span></div>
+    </div>
+    <p class="muted small">Clothes and held items work best, since effects count while the item is worn or held.</p>
+    <% } %>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-spark"/></svg>Effects</h2></div>
+    <p class="muted small">Leave anything you don't want at 0. If a player wears several items with effects, they add up (gems and XP up to +10,000%, reach up to +10 tiles).</p>
+    <div class="effect-grid">
+      <% for (const e of list) { %>
+      <% if (e.unit === 'switch') { %>
+      <label class="power <%= fx[e.key] ? 'on' : '' %>">
+        <input type="checkbox" name="<%= e.key %>" value="1" <%= fx[e.key] ? 'checked' : '' %>>
+        <strong><%= e.label %></strong>
+        <span><%= e.text %></span>
+      </label>
+      <% } else { %>
+      <label class="power effect-num <%= Number(fx[e.key]) ? 'on' : '' %>">
+        <strong><%= e.label %></strong>
+        <span><%= e.text %></span>
+        <span class="num-unit"><input type="number" name="<%= e.key %>" min="0" max="<%= e.max %>" step="1" value="<%= fx[e.key] %>" inputmode="numeric"><em><%= e.unit === 'tiles' ? 'tiles' : '%' %></em></span>
+      </label>
+      <% } %>
+      <% } %>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-sliders"/></svg>Settings</h2></div>
+    <div class="form-grid">
+      <label>Note <small class="inline-hint">only you see this</small>
+        <input name="note" value="<%= fx.note %>" maxlength="120" autocomplete="off" placeholder="e.g. Prize for the summer build contest">
+      </label>
+      <label class="check-row"><input type="checkbox" name="enabled" value="1" <%= fx.enabled ? 'checked' : '' %>> Effects are on <small class="inline-hint">switched off, the item works like normal until you turn them back on</small></label>
+    </div>
+  </section>
+
+  <div class="save-bar">
+    <a class="btn ghost" href="/servers/<%= server.id %>/effects">Cancel</a>
+    <button type="submit"><%= effect ? 'Save effects' : 'Create item effect' %></button>
+  </div>
+</form>
+
+<% if (effect) { %>
+<section class="card danger">
+  <div class="card-head"><h2><svg class="ic"><use href="#i-trash"/></svg>Remove effects</h2></div>
+  <p>The item goes back to normal for everyone. The item itself isn't touched.</p>
+  <form method="post" action="/servers/<%= server.id %>/effects/<%= effect.item %>/delete">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <button type="submit" class="bad">Remove effects from <%= effect.name %></button>
+  </form>
+</section>
+<% } %>
+<% } %>
+<%- include('partials/server-shell-end') %>

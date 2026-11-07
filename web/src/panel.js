@@ -23,6 +23,7 @@ const items = require('./items');
 const rttex = require('./rttex');
 const resources = require('./resources');
 const titles = require('./titles');
+const effects = require('./effects');
 
 const DONE_MESSAGES = {
   created: 'Server created and starting. It shows Online once it is ready.',
@@ -55,6 +56,9 @@ const DONE_MESSAGES = {
   titleSaved: 'Title saved. Everyone online sees the change right away.',
   titleDeleted: 'Title deleted and taken from everyone who had it.',
   titlesGiven: 'Titles saved. If they\'re online, they see the change right away.',
+  effectCreated: 'Item effects added. Anyone wearing or holding it gets them right away.',
+  effectSaved: 'Item effects saved. Everyone online gets the change right away.',
+  effectDeleted: 'Item effects removed. The item is back to normal.',
   itemsApplied: 'Restarting. Item changes are in the game once the server is back online, and players get them when they log in.',
 };
 
@@ -307,6 +311,7 @@ function buildApp() {
       { page: 'players', label: 'Players', icon: 'user', path: '/players' },
       { page: 'worlds', label: 'Worlds', icon: 'globe', path: '/worlds' },
       { page: 'items', label: 'Item manager', icon: 'box', path: '/items' },
+      { page: 'effects', label: 'Item effects', icon: 'spark', path: '/effects' },
       { page: 'resources', label: 'Resources', icon: 'image', path: '/resources' },
       { label: 'Gem shop', icon: 'grid', soon: true },
     ] },
@@ -441,7 +446,7 @@ function buildApp() {
 
   app.get('/servers/:id/items/search.json', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
     const result = await items.list(req.server, { q: String(req.query.q || ''), page: 1 });
-    res.json({ items: result.items.filter((i) => !i.custom).slice(0, 12).map((i) => ({ id: i.id, name: i.name, type: i.typeName })) });
+    res.json({ items: result.items.filter((i) => (req.query.custom === '1' || !i.custom) && (req.query.seeds !== '0' || !i.seed)).slice(0, 12).map((i) => ({ id: i.id, name: i.name, type: i.typeName })) });
   }));
 
   function sendIcon(res, png) {
@@ -712,6 +717,71 @@ function buildApp() {
       return renderTitle(req, res, { found: req.titleDef, error: err.message, status: 400 });
     }
     res.redirect(`/servers/${req.server.id}/titles?done=titleDeleted${result.live ? '' : '&live=0'}`);
+  }));
+
+  /* ---------- item effects ---------- */
+
+  app.get('/servers/:id/effects', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
+    const query = { q: String(req.query.q || '').slice(0, 40), page: Number(req.query.page) || 1 };
+    const result = await effects.list(req.server, query);
+    await renderServer(req, res, 'effects', { extra: { result, query, list: effects.EFFECTS, format: effects.format, title: `Item effects · ${req.server.name}` } });
+  }));
+
+  const loadEffect = asyncRoute(async (req, res, next) => {
+    const id = /^[0-9]{1,5}$/.test(req.params.item) ? Number(req.params.item) : null;
+    const found = id === null ? null : await effects.get(req.server, id);
+    if (!found) return res.status(404).render('error', { title: 'Not found', message: 'That item has no effects on this server.' });
+    req.effect = found;
+    next();
+  });
+
+  async function renderEffect(req, res, { found = null, form = null, error = '', status = 200 } = {}) {
+    const isReady = await effects.ready(req.server);
+    const blank = { item: 0, name: '', enabled: true, note: '' };
+    for (const e of effects.EFFECTS) blank[e.key] = e.unit === 'switch' ? false : 0;
+    let shown = found || blank;
+    if (form) {
+      shown = { ...shown, note: String(form.note || ''), enabled: Boolean(form.enabled) };
+      if (!found) shown.item = Number(form.item) || 0;
+      for (const e of effects.EFFECTS) shown[e.key] = e.unit === 'switch' ? Boolean(form[e.key]) : String(form[e.key] ?? '');
+    }
+    const item = shown.item ? await items.get(req.server, shown.item) : null;
+    await renderServer(req, res, 'effects', {
+      error, status, template: 'effect',
+      extra: { effect: found, shown, item, ready: isReady, list: effects.EFFECTS, title: `${found ? found.name : 'New item effect'} · ${req.server.name}` },
+    });
+  }
+
+  app.get('/servers/:id/effects/new', auth.requireUser, loadServer, asyncRoute((req, res) => renderEffect(req, res)));
+
+  app.post('/servers/:id/effects', auth.requireUser, loadServer, auth.checkCsrf, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      if (!(await effects.ready(req.server))) throw new effects.UserError('Start the server once (with the latest game build) before adding item effects.');
+      result = await effects.create(req.server, req.body, req.user.username);
+    } catch (err) {
+      if (!(err instanceof effects.UserError)) throw err;
+      return renderEffect(req, res, { form: req.body, error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/effects/${result.item}?done=effectCreated${result.live ? '' : '&live=0'}`);
+  }));
+
+  app.get('/servers/:id/effects/:item', auth.requireUser, loadServer, loadEffect, asyncRoute((req, res) => renderEffect(req, res, { found: req.effect })));
+
+  app.post('/servers/:id/effects/:item', auth.requireUser, loadServer, auth.checkCsrf, loadEffect, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      result = await effects.update(req.server, req.effect, req.body, req.user.username);
+    } catch (err) {
+      if (!(err instanceof effects.UserError)) throw err;
+      return renderEffect(req, res, { found: req.effect, form: req.body, error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/effects/${req.effect.item}?done=effectSaved${result.live ? '' : '&live=0'}`);
+  }));
+
+  app.post('/servers/:id/effects/:item/delete', auth.requireUser, loadServer, auth.checkCsrf, loadEffect, asyncRoute(async (req, res) => {
+    const result = await effects.remove(req.server, req.effect, req.user.username);
+    res.redirect(`/servers/${req.server.id}/effects?done=effectDeleted${result.live ? '' : '&live=0'}`);
   }));
 
   app.get('/servers/:id/status.json', auth.requireUser, loadServer, asyncRoute(async (req, res) => {

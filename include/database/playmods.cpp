@@ -4,6 +4,7 @@
 #include "onVariant/ConsoleMessage.hpp"
 
 #include "playmods.hpp"
+#include "item_effects.hpp"
 
 /*
 * @note which clothing gives which power. sorted by item id (binary searched).
@@ -984,6 +985,7 @@ std::string active_effects(const std::array<float, 10ull> &clothing, u_int xenon
     const u_short force = xenonite_mods(xenonite, true);
     for (const auto &[bit, name] : forced)
         if (force & bit) list.append(std::format("add_label_with_icon|small|`w{}`` `o(Xenonite Crystal)``|left|2072|\n", name));
+    list.append(item_effects::active_lines(clothing)); // @note +% gems, one-hit... from the website's Item Effects
 
     return list.empty() ? "add_label_with_icon|small|`wNone!``|left|2|\n" : list;
 }

@@ -4,6 +4,7 @@
 #include "commands/punch.hpp"
 #include "onVariant/ConsoleMessage.hpp"
 #include "database/playmods.hpp"
+#include "database/item_effects.hpp"
 #include "action/transform.hpp"
 
 #include "item_activate.hpp"
@@ -25,6 +26,8 @@ void item_activate(ENetEvent& event, ::gamePacket gamePacket)
         /* @note "(Double Jump mod added)" / "removed", like the real game */
         if (was_wearing != 0) playmod_message(event.peer, was_wearing, false);
         if (current_cloth != 0) playmod_message(event.peer, static_cast<u_short>(current_cloth), true);
+        if (was_wearing != 0) item_effects::equip_message(event.peer, was_wearing, false);
+        if (current_cloth != 0) item_effects::equip_message(event.peer, static_cast<u_short>(current_cloth), true);
 
         pPeer->update_effects();
         

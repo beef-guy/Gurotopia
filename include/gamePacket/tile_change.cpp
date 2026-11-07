@@ -32,6 +32,7 @@
 #include "action/ghosts.hpp"
 #include "action/steam.hpp"
 #include "database/playmods.hpp"
+#include "database/item_effects.hpp"
 
 #include "tile_change.hpp"
 
@@ -331,7 +332,8 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                     if (tree != world->trees.end() && ticks() - tree->tick >= item.tick) // @todo limit this check.
                     {
                         block.hits[0] = 99;
-                        add_break_drop(event, ::slot(item.id - 1, RandomRange(1, tree->fruit*3)), gamePacket.punch.by_32(), *world); // @note fruit (from tree)
+                        const int fruit = static_cast<int>(std::min<long long>(item_effects::boost(RandomRange(1, tree->fruit*3), item_effects::totals(*pPeer).harvest), 200)); // @note + item effects' harvest
+                        add_break_drop(event, ::slot(item.id - 1, fruit), gamePacket.punch.by_32(), *world); // @note fruit (from tree)
                         daily_challenge_harvest(event, static_cast<short>(item.id - 1));
                         grow_pass_harvest(event.peer);
                         ring_progress(event.peer, RT_HARVEST_RARITY, item.rarity);
@@ -484,6 +486,9 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 u_char &hits = (block.fg != 0) ? block.hits[0] : block.hits[1];
                 const bool dirt = item.raw_name.find("Dirt") != std::string::npos || item.id == 14/*Cave Background*/;
                 if (hits < item.hits && ((pPeer->mods & M_PUNCH_DAMAGE) || ((pPeer->mods & M_ENHANCED_DIGGING) && dirt))) ++hits;
+                /* @note the website's item effects: one-hit breaking. not for machines that check "is this the last hit?" above (they'd lose what's inside) */
+                const bool guarded = item.type == type::MAGPLANT || item.type == type::AUTO_BREAK_BLOCK || item.type == type::AUTO_BREAK_TREE || item.type == type::AUTO_BREAK;
+                if (hits < item.hits && !guarded && item_effects::totals(*pPeer).one_hit) hits = item.hits;
             }
 
             /* @note a loaded Fossil Prep Station or Geiger Charger can't be broken (the punch above collects instead) */
@@ -594,16 +599,19 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                         (item.rarity >= 32) ? 9 :
                         (item.rarity >= 24) ? 5 : 1;
 
+                    const ::effect_totals effects = item_effects::totals(*pPeer); // @note the website's item effects
                     if (!RandomRange(0, (rarity_to_gem > 1) ? 1 : 4)) // @note double chances if farmable.
                     {
                         /* @todo merge gems more effectively */
-                        u_char gems = RandomRange(1, rarity_to_gem);
-                        for (short i : {10, 5, 1}/* gem type */)
+                        long long gems = item_effects::boost(RandomRange(1, rarity_to_gem), effects.gems); // @note + item effects' gems
+                        for (short i : {100, 50, 10, 5, 1}/* gem type */)
                             for (; gems >= i; gems -= i/* downgrade type */)
                                 add_drop(event, {112, i}, gamePacket.punch.by_32(), *world);
                     }
                     if (!RandomRange(0, (rarity_to_gem > 1) ? 2 : 4)) add_break_drop(event, ::slot(item.id + 1, 1), gamePacket.punch.by_32(), *world); 
                     else if (!RandomRange(0, (rarity_to_gem > 1) ? 4 : 8)) add_break_drop(event, ::slot(item.id, 1), gamePacket.punch.by_32(), *world);
+                    for (int extra = item_effects::extra_rolls(effects.drops); extra > 0; --extra) // @note item effects' extra drops: a seed or the block
+                        add_break_drop(event, ::slot(RandomRange(0, 1) ? item.id + 1 : item.id, 1), gamePacket.punch.by_32(), *world);
                 } /* ~gem drop */
 
                 pPeer->add_xp(event, std::trunc(1.0f + item.rarity / 5.0f));

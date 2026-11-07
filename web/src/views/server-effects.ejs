@@ -1,0 +1,77 @@
+<%- include('partials/server-shell') %>
+<%
+  const link = (changes) => {
+    const p = new URLSearchParams();
+    const merged = { ...query, ...changes };
+    if (merged.q) p.set('q', merged.q);
+    if (Number(merged.page) > 1) p.set('page', merged.page);
+    const qs = p.toString();
+    return `/servers/${server.id}/effects${qs ? '?' + qs : ''}`;
+  };
+%>
+<div class="page-head">
+  <div>
+    <h1>Item effects</h1>
+    <p class="muted">Give items buffs while they're worn or held: extra gems, extra XP, one-hit breaking, longer reach and more drops. Everything a player wears adds up, and changes apply right away.</p>
+  </div>
+  <% if (result.ready) { %><a class="btn" href="/servers/<%= server.id %>/effects/new"><svg class="ic"><use href="#i-plus"/></svg>New item effect</a><% } %>
+</div>
+
+<% if (!result.ready) { %>
+<section class="card">
+  <div class="empty">
+    <svg class="ic big"><use href="#i-spark"/></svg>
+    <p>Start the server once with the latest game build, then you can give items effects here.</p>
+  </div>
+</section>
+<% } else { %>
+<section class="card flush">
+  <form class="toolbar" method="get" action="/servers/<%= server.id %>/effects">
+    <input type="search" name="q" value="<%= query.q %>" placeholder="Search item effects by name or #id" aria-label="Search item effects" maxlength="40">
+    <button type="submit" class="ghost small">Search</button>
+    <% if (query.q) { %><a class="btn ghost small" href="/servers/<%= server.id %>/effects">Clear</a><% } %>
+  </form>
+  <% if (!result.effects.length) { %>
+    <div class="empty">
+      <svg class="ic big"><use href="#i-spark"/></svg>
+      <p><%= query.q ? 'No item effects match that search.' : 'No items have effects yet. Pick an item, like a scarf or a sword, and give it +gems, +XP or one-hit breaking.' %></p>
+      <% if (!query.q) { %><a class="btn" href="/servers/<%= server.id %>/effects/new"><svg class="ic"><use href="#i-plus"/></svg>New item effect</a><% } %>
+    </div>
+  <% } else { %>
+  <div class="table-wrap">
+  <table class="table items effects">
+    <thead><tr><th>ID</th><th>Item</th><% for (const e of list) { %><th class="center"><%= e.short %></th><% } %><th></th></tr></thead>
+    <tbody>
+    <% for (const fx of result.effects) { %>
+      <tr class="<%= fx.enabled ? '' : 'off' %>">
+        <td class="mono">#<%= fx.item %></td>
+        <td><a class="item-link" href="/servers/<%= server.id %>/effects/<%= fx.item %>">
+          <span class="item-ic" data-letter="<%= fx.name.slice(0, 1).toUpperCase() %>"><img src="/servers/<%= server.id %>/items/<%= fx.item %>/icon.png" alt="" loading="lazy" width="32" height="32"></span>
+          <span class="item-name"><%= fx.name %></span></a>
+          <% if (!fx.enabled) { %><span class="tag off">Off</span><% } %>
+        </td>
+        <% for (const e of list) { const v = format(e, fx[e.key]); %>
+        <td class="center <%= v ? 'fx-on' : 'fx-none' %>"><%= v || '–' %></td>
+        <% } %>
+        <td class="right"><a class="btn ghost small" href="/servers/<%= server.id %>/effects/<%= fx.item %>">Edit</a></td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table>
+  </div>
+  <% } %>
+  <div class="pager">
+    <span class="muted small"><%= result.total.toLocaleString('en-US') %> <%= result.total === 1 ? 'item' : 'items' %> with effects</span>
+    <% if (result.pages > 1) { %>
+    <span class="pager-links">
+      <% if (result.page > 1) { %><a class="btn ghost small" href="<%= link({ page: result.page - 1 }) %>">Previous</a><% } %>
+      <span class="muted small">Page <%= result.page %> of <%= result.pages %></span>
+      <% if (result.page < result.pages) { %><a class="btn ghost small" href="<%= link({ page: result.page + 1 }) %>">Next</a><% } %>
+    </span>
+    <% } %>
+  </div>
+</section>
+<p class="muted small">Players see an item's effects in the console when they put it on, and under Active effects when they wrench themselves. For movement powers like double jump or speed, use the item's Powers in the <a href="/servers/<%= server.id %>/items">Item manager</a>.</p>
+<% if (!server.reporting) { %><p class="muted small">The server is not running. Changes are saved and apply when it starts.</p><% } %>
+<% } %>
+<%- include('partials/server-shell-end') %>
