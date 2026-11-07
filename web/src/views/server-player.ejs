@@ -1,0 +1,102 @@
+<%- include('partials/server-shell') %>
+<%
+  const until = (t) => t < 0 ? 'forever' : 'until ' + new Date(t * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+  const durations = [['1h', '1 hour'], ['1d', '1 day'], ['3d', '3 days'], ['7d', '7 days'], ['30d', '30 days'], ['forever', 'Forever']];
+%>
+<p class="crumb"><a href="/servers/<%= server.id %>/players"><svg class="ic"><use href="#i-back"/></svg>All players</a></p>
+<div class="page-head">
+  <div class="player-head">
+    <span class="pfp big"><%= player.growid.slice(0, 1).toUpperCase() %></span>
+    <div>
+      <h1><%= player.growid %> <span class="role r<%= player.role %>"><%= player.roleName %></span>
+        <% if (player.banned) { %><span class="badge crashed">Banned</span><% } %>
+        <% if (player.muted) { %><span class="badge busy">Muted</span><% } %>
+      </h1>
+      <p class="muted">Account #<%= player.uid %> · joined <%= player.createdAt ? new Date(player.createdAt).toISOString().slice(0, 10) : '–' %></p>
+    </div>
+  </div>
+</div>
+
+<section class="tiles">
+  <div class="tile"><span class="tile-label">Level</span><span class="tile-value"><%= player.level %></span><span class="tile-foot"><%= player.xp.toLocaleString('en-US') %> XP</span></div>
+  <div class="tile"><span class="tile-label">Gems</span><span class="tile-value"><%= player.gems.toLocaleString('en-US') %></span><span class="tile-foot"><%= player.piggyBank.toLocaleString('en-US') %> in the Piggy Bank</span></div>
+  <div class="tile"><span class="tile-label">Playtime</span><span class="tile-value"><%= fmt.duration(player.playtime) %></span><span class="tile-foot"><%= more.friends %> friend<%= more.friends === 1 ? '' : 's' %></span></div>
+  <div class="tile"><span class="tile-label">World Locks stored</span><span class="tile-value"><%= player.wlStorage.toLocaleString('en-US') %></span><span class="tile-foot"><%= more.worlds.length %> world<%= more.worlds.length === 1 ? '' : 's' %> owned</span></div>
+</section>
+
+<p class="notice info">Changes here apply the next time <%= player.growid %> logs in. If they're online right now, they keep playing until they reconnect.</p>
+
+<div class="over-grid two">
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-lock"/></svg>Ban</h2>
+      <% if (player.banned) { %><span class="muted small">Banned <%= until(player.bannedUntil) %></span><% } %>
+    </div>
+    <% if (player.banned) { %>
+      <% if (player.banReason) { %><p>Reason: <strong><%= player.banReason %></strong></p><% } %>
+      <form method="post" action="/servers/<%= server.id %>/players/<%= player.uid %>/unban">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button type="submit" class="ghost">Unban</button>
+      </form>
+    <% } else { %>
+      <form method="post" action="/servers/<%= server.id %>/players/<%= player.uid %>/ban" class="stack">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <label>How long
+          <select name="duration"><% for (const [k, l] of durations) { %><option value="<%= k %>" <%= k === '1d' ? 'selected' : '' %>><%= l %></option><% } %></select>
+        </label>
+        <label>Reason <small class="inline-hint">shown to them when they try to log in</small>
+          <input name="reason" maxlength="128" placeholder="e.g. scamming">
+        </label>
+        <button type="submit" class="bad">Ban <%= player.growid %></button>
+      </form>
+    <% } %>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-chat"/></svg>Mute</h2>
+      <% if (player.muted) { %><span class="muted small">Muted <%= until(player.mutedUntil) %></span><% } %>
+    </div>
+    <% if (player.muted) { %>
+      <form method="post" action="/servers/<%= server.id %>/players/<%= player.uid %>/unmute">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button type="submit" class="ghost">Unmute</button>
+      </form>
+    <% } else { %>
+      <form method="post" action="/servers/<%= server.id %>/players/<%= player.uid %>/mute" class="stack">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <label>How long
+          <select name="duration"><% for (const [k, l] of durations) { %><option value="<%= k %>" <%= k === '1h' ? 'selected' : '' %>><%= l %></option><% } %></select>
+        </label>
+        <button type="submit" class="ghost">Mute <%= player.growid %></button>
+      </form>
+    <% } %>
+    <div class="card-head sub"><h2><svg class="ic"><use href="#i-shield"/></svg>Role</h2></div>
+    <form method="post" action="/servers/<%= server.id %>/players/<%= player.uid %>/role" class="row-form">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <label>Role
+        <select name="role"><% roles.forEach((r, i) => { %><option value="<%= i %>" <%= i === player.role ? 'selected' : '' %>><%= r %></option><% }) %></select>
+        <small>Moderators can use staff commands. Developers have every command.</small>
+      </label>
+      <button type="submit" class="ghost">Save role</button>
+    </form>
+  </section>
+</div>
+
+<div class="over-grid two">
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-globe"/></svg>Worlds owned</h2><span class="chip"><%= more.worlds.length %></span></div>
+    <% if (more.worlds.length) { %>
+      <div class="chips"><% for (const w of more.worlds) { %><span class="chip world"><%= w %></span><% } %></div>
+    <% } else { %><p class="muted">They don't own any worlds.</p><% } %>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-book"/></svg>Moderation history</h2></div>
+    <% if (more.log.length) { %>
+      <ul class="history">
+      <% for (const e of more.log) { %>
+        <li><span class="h-action"><%= e.action %></span><span class="h-detail"><%= e.detail || '' %></span><span class="muted small">by <%= e.actor %> · <%= e.at ? new Date(e.at).toISOString().slice(0, 16).replace('T', ' ') : '' %></span></li>
+      <% } %>
+      </ul>
+    <% } else { %><p class="muted">Nothing yet.</p><% } %>
+  </section>
+</div>
+<%- include('partials/server-shell-end') %>

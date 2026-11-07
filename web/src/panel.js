@@ -15,6 +15,7 @@ const auth = require('./auth');
 const servers = require('./servers');
 const supervisor = require('./supervisorClient');
 const hostStats = require('./hostStats');
+const players = require('./players');
 
 const DONE_MESSAGES = {
   created: 'Server created and starting. It shows Online once it is ready.',
@@ -24,6 +25,11 @@ const DONE_MESSAGES = {
   restarted: 'Restarted.',
   saved: 'Saved. Restart the server for the change to take effect.',
   deleted: 'Server deleted.',
+  banned: 'Banned. It takes effect the next time they log in.',
+  unbanned: 'Unbanned. They can log in again.',
+  muted: 'Muted. It takes effect the next time they log in.',
+  unmuted: 'Unmuted. It takes effect the next time they log in.',
+  roleSet: 'Role changed. It takes effect the next time they log in.',
 };
 
 function describe(server, proc) {
@@ -267,7 +273,7 @@ function buildApp() {
       { label: 'Team members', icon: 'users', soon: true },
     ] },
     { group: 'Game data', items: [
-      { label: 'Players', icon: 'user', soon: true },
+      { page: 'players', label: 'Players', icon: 'user', path: '/players' },
       { label: 'Worlds', icon: 'globe', soon: true },
       { label: 'Items & shop', icon: 'box', soon: true },
     ] },
@@ -280,16 +286,60 @@ function buildApp() {
     ] },
   ];
 
-  async function renderServer(req, res, page, { error = '', status = 200 } = {}) {
+  async function renderServer(req, res, page, { error = '', status = 200, extra = {}, template = null } = {}) {
     const { server, proc, view } = await statusPayload(req.server);
-    res.status(status).render(`server-${page}`, {
-      title: server.name, server, proc, view, error, page, nav: SERVER_NAV,
+    res.status(status).render(`server-${template || page}`, {
+      title: extra.title || server.name, server, proc, view, error, page, nav: SERVER_NAV, ...extra,
     });
   }
 
   app.get('/servers/:id', auth.requireUser, loadServer, asyncRoute((req, res) => renderServer(req, res, 'overview')));
   app.get('/servers/:id/console', auth.requireUser, loadServer, asyncRoute((req, res) => renderServer(req, res, 'console')));
   app.get('/servers/:id/settings', auth.requireUser, loadServer, asyncRoute((req, res) => renderServer(req, res, 'settings')));
+
+  /* ---------- players ---------- */
+
+  app.get('/servers/:id/players', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
+    const query = {
+      q: String(req.query.q || ''),
+      sort: Object.hasOwn(players.SORTS, req.query.sort) ? req.query.sort : 'newest',
+      filter: ['all', 'staff', 'banned', 'muted'].includes(req.query.filter) ? req.query.filter : 'all',
+      page: req.query.page,
+    };
+    const [stats, result] = await Promise.all([players.summary(req.server), players.list(req.server, query)]);
+    await renderServer(req, res, 'players', { extra: { stats, result, query, title: `Players · ${req.server.name}` } });
+  }));
+
+  /* @note loads req.player from this server's own database */
+  const loadPlayer = asyncRoute(async (req, res, next) => {
+    const uid = /^[1-9][0-9]{0,9}$/.test(req.params.uid) ? Number(req.params.uid) : null;
+    const player = uid ? await players.get(req.server, uid) : null;
+    if (!player) return res.status(404).render('error', { title: 'Not found', message: 'That player does not exist on this server.' });
+    req.player = player;
+    next();
+  });
+
+  async function renderPlayer(req, res, { error = '', status = 200 } = {}) {
+    const player = await players.get(req.server, req.player.uid);
+    const more = await players.details(req.server, player);
+    await renderServer(req, res, 'players', {
+      error, status, template: 'player',
+      extra: { player, more, roles: players.ROLES, title: `${player.growid} · ${req.server.name}` },
+    });
+  }
+
+  app.get('/servers/:id/players/:uid', auth.requireUser, loadServer, loadPlayer, asyncRoute((req, res) => renderPlayer(req, res)));
+
+  app.post('/servers/:id/players/:uid/:action(ban|unban|mute|unmute|role)', auth.requireUser, loadServer, auth.checkCsrf, loadPlayer, asyncRoute(async (req, res) => {
+    let done;
+    try {
+      done = await players.moderate(req.server, req.player, req.user.username, req.params.action, req.body);
+    } catch (err) {
+      if (!(err instanceof players.UserError)) throw err;
+      return renderPlayer(req, res, { error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/players/${req.player.uid}?done=${done}`);
+  }));
 
   app.get('/servers/:id/status.json', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
     const { server, proc, view } = await statusPayload(req.server);

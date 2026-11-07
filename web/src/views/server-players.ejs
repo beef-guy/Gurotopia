@@ -1,0 +1,99 @@
+<%- include('partials/server-shell') %>
+<%
+  const link = (changes) => {
+    const p = new URLSearchParams();
+    const merged = { ...query, ...changes };
+    for (const [k, val] of Object.entries(merged)) {
+      if (val && !(k === 'sort' && val === 'newest') && !(k === 'filter' && val === 'all') && !(k === 'page' && Number(val) === 1)) p.set(k, val);
+    }
+    const qs = p.toString();
+    return `/servers/${server.id}/players${qs ? '?' + qs : ''}`;
+  };
+%>
+<div class="page-head">
+  <div>
+    <h1>Players</h1>
+    <p class="muted">Every account on <%= server.name %>. Open one to ban, mute or change its role.</p>
+  </div>
+</div>
+
+<% if (!stats.ready) { %>
+<section class="card">
+  <div class="empty">
+    <svg class="ic big"><use href="#i-users"/></svg>
+    <p>No player data yet. Start the server once and the player list appears here.</p>
+  </div>
+</section>
+<% } else { %>
+<section class="tiles">
+  <a class="tile tile-link <%= query.filter === 'all' ? 'on' : '' %>" href="<%= link({ filter: 'all', page: 1 }) %>">
+    <span class="tile-label"><svg class="ic"><use href="#i-users"/></svg>Accounts</span>
+    <span class="tile-value"><%= stats.total %></span>
+    <span class="tile-foot"><%= stats.week %> new this week</span>
+  </a>
+  <a class="tile tile-link <%= query.filter === 'staff' ? 'on' : '' %>" href="<%= link({ filter: 'staff', page: 1 }) %>">
+    <span class="tile-label"><svg class="ic"><use href="#i-shield"/></svg>Staff</span>
+    <span class="tile-value"><%= stats.staff %></span>
+    <span class="tile-foot">moderators and developers</span>
+  </a>
+  <a class="tile tile-link <%= query.filter === 'banned' ? 'on' : '' %>" href="<%= link({ filter: 'banned', page: 1 }) %>">
+    <span class="tile-label"><svg class="ic"><use href="#i-lock"/></svg>Banned</span>
+    <span class="tile-value"><%= stats.banned %></span>
+    <span class="tile-foot">can't log in right now</span>
+  </a>
+  <a class="tile tile-link <%= query.filter === 'muted' ? 'on' : '' %>" href="<%= link({ filter: 'muted', page: 1 }) %>">
+    <span class="tile-label"><svg class="ic"><use href="#i-chat"/></svg>Muted</span>
+    <span class="tile-value"><%= stats.muted %></span>
+    <span class="tile-foot">can't chat right now</span>
+  </a>
+</section>
+
+<section class="card flush">
+  <form class="toolbar" method="get" action="/servers/<%= server.id %>/players">
+    <% if (query.filter !== 'all') { %><input type="hidden" name="filter" value="<%= query.filter %>"><% } %>
+    <input type="search" name="q" value="<%= query.q %>" placeholder="Search by GrowID" aria-label="Search by GrowID" maxlength="18">
+    <label class="select-label">Sort
+      <select name="sort">
+        <% for (const [key, label] of [['newest', 'Newest'], ['oldest', 'Oldest'], ['name', 'Name'], ['level', 'Level'], ['gems', 'Gems'], ['playtime', 'Playtime']]) { %>
+        <option value="<%= key %>" <%= query.sort === key ? 'selected' : '' %>><%= label %></option>
+        <% } %>
+      </select>
+    </label>
+    <button type="submit" class="ghost small">Apply</button>
+    <% if (query.q || query.filter !== 'all') { %><a class="btn ghost small" href="/servers/<%= server.id %>/players">Clear</a><% } %>
+  </form>
+  <div class="table-wrap">
+  <table class="table players">
+    <thead><tr><th>GrowID</th><th>Role</th><th>Level</th><th>Gems</th><th>Playtime</th><th>Joined</th><th>Status</th></tr></thead>
+    <tbody>
+    <% for (const p of result.players) { %>
+      <tr>
+        <td><a class="player-link" href="/servers/<%= server.id %>/players/<%= p.uid %>"><span class="pfp"><%= p.growid.slice(0, 1).toUpperCase() %></span><%= p.growid %></a></td>
+        <td><span class="role r<%= p.role %>"><%= p.roleName %></span></td>
+        <td><%= p.level %></td>
+        <td><%= p.gems.toLocaleString('en-US') %></td>
+        <td><%= fmt.duration(p.playtime) %></td>
+        <td><%= p.createdAt ? new Date(p.createdAt).toISOString().slice(0, 10) : '–' %></td>
+        <td>
+          <% if (p.banned) { %><span class="badge crashed">Banned</span><% } %>
+          <% if (p.muted) { %><span class="badge busy">Muted</span><% } %>
+          <% if (!p.banned && !p.muted) { %><span class="muted">–</span><% } %>
+        </td>
+      </tr>
+    <% } %>
+    <% if (result.players.length === 0) { %><tr><td colspan="7" class="muted">No players match.</td></tr><% } %>
+    </tbody>
+  </table>
+  </div>
+  <% if (result.pages > 1) { %>
+  <nav class="pager">
+    <% if (result.page > 1) { %><a class="btn ghost small" href="<%= link({ page: result.page - 1 }) %>">Previous</a><% } %>
+    <span class="muted small">Page <%= result.page %> of <%= result.pages %> · <%= result.total %> players</span>
+    <% if (result.page < result.pages) { %><a class="btn ghost small" href="<%= link({ page: result.page + 1 }) %>">Next</a><% } %>
+  </nav>
+  <% } else { %>
+  <nav class="pager"><span class="muted small"><%= result.total %> player<%= result.total === 1 ? '' : 's' %></span></nav>
+  <% } %>
+</section>
+<% } %>
+<%- include('partials/server-shell-end') %>
