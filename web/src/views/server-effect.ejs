@@ -26,14 +26,16 @@
       <a class="btn ghost small" href="/servers/<%= server.id %>/items/<%= effect.item %>">Open in Item manager</a>
     </div>
     <% } else { %>
-    <input type="hidden" name="item" id="f-item" value="<%= fx.item || '' %>">
+    <div class="picker" data-picker="item">
+    <input type="hidden" name="item" data-pick="id" value="<%= fx.item || '' %>">
     <label>Find an item
-      <input type="search" id="item-search" autocomplete="off" placeholder="Type an item name, like Golden Angel Wings, or #id" value="<%= item ? item.name : '' %>">
+      <input type="search" data-pick="search" autocomplete="off" placeholder="Type an item name, like Golden Angel Wings, or #id" value="<%= item ? item.name : '' %>">
     </label>
-    <ul class="base-results" id="item-results" role="listbox" aria-label="Matching items"></ul>
-    <div class="effect-item" id="item-chosen" <%= item ? '' : 'hidden' %>>
-      <span class="item-ic"><img id="item-chosen-img" src="<%= item ? `/servers/${server.id}/items/${item.id}/icon.png` : '' %>" alt="" width="32" height="32"></span>
-      <div><strong id="item-chosen-name"><%= item ? item.name : '' %></strong><span class="muted small" id="item-chosen-meta"><%= item ? `#${item.id} · ${item.typeName}` : '' %></span></div>
+    <ul class="base-results" data-pick="results" role="listbox" aria-label="Matching items"></ul>
+    <div class="effect-item" data-pick="chosen" <%= item ? '' : 'hidden' %>>
+      <span class="item-ic"><img data-pick="img" src="<%= item ? `/servers/${server.id}/items/${item.id}/icon.png` : '' %>" alt="" width="32" height="32"></span>
+      <div><strong data-pick="name"><%= item ? item.name : '' %></strong><span class="muted small" data-pick="meta"><%= item ? `#${item.id} · ${item.typeName}` : '' %></span></div>
+    </div>
     </div>
     <p class="muted small">Clothes and held items work best, since effects count while the item is worn or held.</p>
     <% } %>
@@ -58,6 +60,31 @@
       </label>
       <% } %>
       <% } %>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-plus"/></svg>Bonus drop</h2></div>
+    <p class="muted small">An item of your choice that can drop when a player breaks a block while wearing or holding this item. Leave it empty for none.</p>
+    <div class="picker" data-picker="bonus">
+      <input type="hidden" name="bonusItem" data-pick="id" value="<%= bonusItem ? bonusItem.id : '' %>">
+      <label>Bonus item
+        <input type="search" data-pick="search" autocomplete="off" placeholder="Type an item name, like Golden Booty Chest, or #id" value="<%= bonusItem ? bonusItem.name : '' %>">
+      </label>
+      <ul class="base-results" data-pick="results" role="listbox" aria-label="Matching items"></ul>
+      <div class="effect-item" data-pick="chosen" <%= bonusItem ? '' : 'hidden' %>>
+        <span class="item-ic"><img data-pick="img" src="<%= bonusItem ? `/servers/${server.id}/items/${bonusItem.id}/icon.png` : '' %>" alt="" width="32" height="32"></span>
+        <div><strong data-pick="name"><%= bonusItem ? bonusItem.name : '' %></strong><span class="muted small" data-pick="meta"><%= bonusItem ? `#${bonusItem.id} · ${bonusItem.typeName}` : '' %></span></div>
+        <button type="button" class="ghost small" data-pick="clear">No bonus drop</button>
+      </div>
+    </div>
+    <div class="form-grid mt">
+      <label>Chance per block <small class="inline-hint">0.01 to 100</small>
+        <span class="num-unit"><input type="number" name="bonusChance" min="0.01" max="100" step="0.01" value="<%= fx.bonusChance || '' %>" placeholder="5"><em>%</em></span>
+      </label>
+      <label>Amount <small class="inline-hint">how many drop each time</small>
+        <input type="number" name="bonusAmount" min="1" max="200" step="1" value="<%= fx.bonusAmount || 1 %>">
+      </label>
     </div>
   </section>
 

@@ -724,7 +724,7 @@ function buildApp() {
   app.get('/servers/:id/effects', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
     const query = { q: String(req.query.q || '').slice(0, 40), page: Number(req.query.page) || 1 };
     const result = await effects.list(req.server, query);
-    await renderServer(req, res, 'effects', { extra: { result, query, list: effects.EFFECTS, format: effects.format, title: `Item effects · ${req.server.name}` } });
+    await renderServer(req, res, 'effects', { extra: { result, query, list: effects.EFFECTS, format: effects.format, chanceText: effects.chanceText, title: `Item effects · ${req.server.name}` } });
   }));
 
   const loadEffect = asyncRoute(async (req, res, next) => {
@@ -737,18 +737,20 @@ function buildApp() {
 
   async function renderEffect(req, res, { found = null, form = null, error = '', status = 200 } = {}) {
     const isReady = await effects.ready(req.server);
-    const blank = { item: 0, name: '', enabled: true, note: '' };
+    const blank = { item: 0, name: '', enabled: true, note: '', bonusItem: 0, bonusChance: 0, bonusAmount: 1 };
     for (const e of effects.EFFECTS) blank[e.key] = e.unit === 'switch' ? false : 0;
     let shown = found || blank;
     if (form) {
       shown = { ...shown, note: String(form.note || ''), enabled: Boolean(form.enabled) };
       if (!found) shown.item = Number(form.item) || 0;
       for (const e of effects.EFFECTS) shown[e.key] = e.unit === 'switch' ? Boolean(form[e.key]) : String(form[e.key] ?? '');
+      shown.bonusItem = Number(form.bonusItem) || 0; shown.bonusChance = String(form.bonusChance ?? ''); shown.bonusAmount = String(form.bonusAmount ?? '1');
     }
     const item = shown.item ? await items.get(req.server, shown.item) : null;
+    const bonusItem = shown.bonusItem ? await items.get(req.server, shown.bonusItem) : null;
     await renderServer(req, res, 'effects', {
       error, status, template: 'effect',
-      extra: { effect: found, shown, item, ready: isReady, list: effects.EFFECTS, title: `${found ? found.name : 'New item effect'} · ${req.server.name}` },
+      extra: { effect: found, shown, item, bonusItem, ready: isReady, list: effects.EFFECTS, title: `${found ? found.name : 'New item effect'} · ${req.server.name}` },
     });
   }
 

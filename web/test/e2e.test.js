@@ -365,14 +365,16 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     assert.equal(r.status, 200);
     assert.match(r.text, /One-hit breaking/);
 
-    r = await alice.post(`/servers/${id}/effects`, { _csrf: await alice.csrf(), item: '6', gems: '450', xp: '', oneHit: '1', punchRange: '2', buildRange: '0', drops: '50', harvest: '0', note: 'Prize', enabled: '1' });
+    r = await alice.post(`/servers/${id}/effects`, { _csrf: await alice.csrf(), item: '6', gems: '450', xp: '', oneHit: '1', punchRange: '2', buildRange: '0', drops: '50', harvest: '0',
+      bonusItem: '4', bonusChance: '2.5', bonusAmount: '3', note: 'Prize', enabled: '1' });
     assert.equal(r.status, 302, r.text.slice(0, 400));
     assert.match(r.location, /effects\/6\?done=effectCreated/);
     let [[row]] = await admin.query(`SELECT * FROM ${srv}.item_effects WHERE item = 6`);
     assert.deepEqual([row.gems, row.xp, row.one_hit, row.punch_range, row.drops, row.enabled, row.note], [450, 0, 1, 2, 50, 1, 'Prize']);
+    assert.deepEqual([row.bonus_item, row.bonus_chance, row.bonus_amount], [4, 250, 3], 'bonus chance is kept in hundredths of a percent');
 
     r = await alice.get(`/servers/${id}/effects`);
-    assert.match(r.text, /Legendary Wings[\s\S]*\+450%[\s\S]*Yes[\s\S]*\+2/, 'the list shows the effects');
+    assert.match(r.text, /Legendary Wings[\s\S]*\+450%[\s\S]*Yes[\s\S]*\+2[\s\S]*2\.5%<\/strong> ×3/, 'the list shows the effects and the bonus drop');
     r = await alice.get(`/servers/${id}/effects?q=dirt`);
     assert.match(r.text, /No item effects match/);
     r = await alice.get(`/servers/${id}/effects?q=6`);
@@ -387,11 +389,20 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     await bad({ item: '2', punchRange: '11' }, 'reach is capped');
     await bad({ item: '2', gems: '1.5' }, 'whole numbers');
     await bad({ item: '2', gems: '5', note: 'a|b' }, 'no | in notes');
+    await bad({ item: '2', bonusItem: '999', bonusChance: '5' }, 'the bonus item must exist');
+    await bad({ item: '2', bonusItem: '4', bonusChance: '0' }, 'a bonus drop needs a chance');
+    await bad({ item: '2', bonusItem: '4', bonusChance: '101' }, 'chance is at most 100');
+    await bad({ item: '2', bonusItem: '4', bonusChance: '0.001' }, 'two decimals at most');
+    await bad({ item: '2', bonusItem: '4', bonusChance: '5', bonusAmount: '201' }, 'amount is at most 200');
+    r = await alice.post(`/servers/${id}/effects`, { _csrf: await alice.csrf(), item: '2', bonusItem: '4', bonusChance: '0.25', enabled: '1' });
+    assert.equal(r.status, 302, 'a bonus drop alone is an effect');
+    await admin.query(`DELETE FROM ${srv}.item_effects WHERE item = 2`);
 
     r = await alice.post(`/servers/${id}/effects/6`, { _csrf: await alice.csrf(), gems: '200', xp: '100', punchRange: '0', buildRange: '3', drops: '0', harvest: '25', note: '' });
     assert.equal(r.status, 302);
     [[row]] = await admin.query(`SELECT * FROM ${srv}.item_effects WHERE item = 6`);
     assert.deepEqual([row.gems, row.xp, row.one_hit, row.build_range, row.harvest, row.enabled], [200, 100, 0, 3, 25, 0], 'unticked boxes switch off');
+    assert.equal(row.bonus_item, 0, 'an empty bonus item removes the bonus drop');
     r = await alice.get(`/servers/${id}/effects/6`);
     assert.match(r.text, /Save effects/);
     assert.equal((await alice.get(`/servers/${id}/effects/7`)).status, 404);
@@ -402,7 +413,7 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     assert.equal(gone.length, 0);
 
     const [sent] = await admin.query(`SELECT action, done_at FROM ${srv}.panel_actions WHERE action = 'effects_reload' ORDER BY id`);
-    assert.equal(sent.length, 3);
+    assert.equal(sent.length, 4);
     assert.ok(sent.every((a) => a.done_at), 'the game carried them out');
   });
 

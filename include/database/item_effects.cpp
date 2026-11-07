@@ -21,7 +21,7 @@ namespace
 
     void load()
     {
-        if (mysql_query(db.mysql, "SELECT item, gems, xp, one_hit, punch_range, build_range, drops, harvest FROM item_effects WHERE enabled = 1")) return;
+        if (mysql_query(db.mysql, "SELECT item, gems, xp, one_hit, punch_range, build_range, drops, harvest, bonus_item, bonus_chance, bonus_amount FROM item_effects WHERE enabled = 1")) return;
         MYSQL_RES *res = mysql_store_result(db.mysql);
         if (res == nullptr) return;
         std::unordered_map<u_short, ::item_effect> loaded{};
@@ -38,7 +38,12 @@ namespace
                 .build_range = number(row[5], 0, item_effects::MAX_RANGE),
                 .drops = number(row[6], 0, 1000),
                 .harvest = number(row[7], 0, 1000),
+                .bonus_item = static_cast<u_short>(number(row[8], 0, 65535)),
+                .bonus_chance = number(row[9], 0, 10000),
+                .bonus_amount = number(row[10], 1, 200),
             };
+            ::item_effect &fx = loaded[static_cast<u_short>(id)];
+            if (fx.bonus_item >= items.size() || fx.bonus_item == 112/*Gems*/) fx.bonus_item = 0; // @note gone from items.dat
         }
         mysql_free_result(res);
         table = std::move(loaded);
@@ -61,6 +66,10 @@ void item_effects::init()
         "note VARCHAR(120) NOT NULL DEFAULT ''," // @note the website's own note, the game doesn't read it
         "updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
     ")");
+    /* @note added after the first version of the table */
+    mysql_query(db.mysql, "ALTER TABLE item_effects ADD COLUMN IF NOT EXISTS bonus_item INT NOT NULL DEFAULT 0");
+    mysql_query(db.mysql, "ALTER TABLE item_effects ADD COLUMN IF NOT EXISTS bonus_chance INT NOT NULL DEFAULT 0"); // @note hundredths of a percent
+    mysql_query(db.mysql, "ALTER TABLE item_effects ADD COLUMN IF NOT EXISTS bonus_amount INT NOT NULL DEFAULT 1");
     load();
 }
 
@@ -122,6 +131,18 @@ int item_effects::extra_rolls(int percent)
     return n;
 }
 
+void item_effects::bonus_drops(ENetEvent &event, const ::peer &peer, const ::pos &pos, ::world &world)
+{
+    for (float cloth : peer.clothing)
+    {
+        if (cloth <= 0.0f) continue;
+        const ::item_effect *fx = get(static_cast<u_short>(cloth));
+        if (fx == nullptr || fx->bonus_item == 0 || fx->bonus_chance <= 0) continue;
+        if (RandomRange(0, 9999) >= fx->bonus_chance) continue;
+        add_break_drop(event, ::slot(static_cast<short>(fx->bonus_item), static_cast<short>(fx->bonus_amount)), pos, world);
+    }
+}
+
 std::string item_effects::describe(const ::item_effect &fx)
 {
     std::vector<std::string> parts{};
@@ -132,6 +153,11 @@ std::string item_effects::describe(const ::item_effect &fx)
     if (fx.build_range) parts.emplace_back(std::format("+{} build range", fx.build_range));
     if (fx.drops) parts.emplace_back(std::format("+{}% extra drops", fx.drops));
     if (fx.harvest) parts.emplace_back(std::format("+{}% harvest", fx.harvest));
+    if (fx.bonus_item && fx.bonus_chance)
+    {
+        const std::string chance = (fx.bonus_chance % 100 == 0) ? std::to_string(fx.bonus_chance / 100) : std::format("{:.2f}", fx.bonus_chance / 100.0);
+        parts.emplace_back(std::format("{}% chance of {} {}", chance, fx.bonus_amount, id_to_item(fx.bonus_item).raw_name));
+    }
     std::string out{};
     for (std::size_t i = 0; i < parts.size(); ++i) out += (i ? ", " : "") + parts[i];
     return out;

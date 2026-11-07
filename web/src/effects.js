@@ -42,7 +42,12 @@ function shape(row) {
     updated: row.updated || null,
   };
   for (const e of EFFECTS) out[e.key] = e.unit === 'switch' ? Number(row[e.column]) === 1 : Number(row[e.column] || 0);
-  out.count = EFFECTS.filter((e) => Boolean(out[e.key])).length;
+  out.bonusItem = Number(row.bonus_item || 0);
+  out.bonusName = row.bonus_name || (out.bonusItem ? `Item #${out.bonusItem}` : '');
+  out.bonusChance = Number(row.bonus_chance || 0) / 100; // @note stored in hundredths of a percent
+  out.bonusAmount = Number(row.bonus_amount || 1);
+  out.bonus = Boolean(out.bonusItem && out.bonusChance);
+  out.count = EFFECTS.filter((e) => Boolean(out[e.key])).length + (out.bonus ? 1 : 0);
   return out;
 }
 
@@ -54,15 +59,24 @@ function format(effect, value) {
   return `+${value}%`;
 }
 
-/* @return a short line for lists: "+450% gems, one-hit breaking" */
-function summary(fx) {
-  return EFFECTS.filter((e) => fx[e.key]).map((e) => (e.unit === 'switch' ? e.label.toLowerCase() : `${format(e, fx[e.key])} ${e.label.replace(/^Extra /, '').toLowerCase()}`)).join(', ');
+/* @return "5%", "0.25%" */
+function chanceText(chance) {
+  return `${Number(chance.toFixed(2))}%`;
 }
 
-const SELECT = (server) => `SELECT f.*, COALESCE(e.name, c.name) AS name
+/* @return a short line for lists: "+450% gems, one-hit breaking" */
+function summary(fx) {
+  const parts = EFFECTS.filter((e) => fx[e.key]).map((e) => (e.unit === 'switch' ? e.label.toLowerCase() : `${format(e, fx[e.key])} ${e.label.replace(/^Extra /, '').toLowerCase()}`));
+  if (fx.bonusItem && fx.bonusChance) parts.push(`${chanceText(fx.bonusChance)} bonus ${fx.bonusAmount}x #${fx.bonusItem}`);
+  return parts.join(', ');
+}
+
+const SELECT = (server) => `SELECT f.*, COALESCE(e.name, c.name) AS name, COALESCE(be.name, bc.name) AS bonus_name
   FROM ${table(server, 'item_effects')} f
   LEFT JOIN ${table(server, 'item_catalog')} c ON c.id = f.item
-  LEFT JOIN ${table(server, 'item_edits')} e ON e.id = f.item`;
+  LEFT JOIN ${table(server, 'item_edits')} e ON e.id = f.item
+  LEFT JOIN ${table(server, 'item_catalog')} bc ON bc.id = f.bonus_item
+  LEFT JOIN ${table(server, 'item_edits')} be ON be.id = f.bonus_item`;
 
 /* @return { ready, effects, total, page, pages } */
 async function list(server, { q = '', page = 1 } = {}) {
@@ -147,7 +161,21 @@ async function readForm(server, form, fx) {
     if (!Number.isInteger(v) || v < 0 || v > e.max) throw new UserError(`${e.label} is a whole number from 0 to ${e.max.toLocaleString('en-US')}.`);
     data[e.key] = v;
   }
-  if (!EFFECTS.some((e) => data[e.key])) throw new UserError('Give the item at least one effect.');
+  data.bonusItem = 0; data.bonusChance = 0; data.bonusAmount = 1;
+  const bonusId = String(form.bonusItem || '').trim();
+  if (bonusId && bonusId !== '0') {
+    const bonus = /^[0-9]{1,5}$/.test(bonusId) ? await items.get(server, Number(bonusId)) : null;
+    if (!bonus) throw new UserError('Pick the bonus item from the list.');
+    if (bonus.id === 112) throw new UserError('Gems can\'t be a bonus drop. Use Extra gems instead.');
+    const chanceRaw = String(form.bonusChance ?? '').trim();
+    if (!/^[0-9]{1,3}(\.[0-9]{1,2})?$/.test(chanceRaw) || Number(chanceRaw) <= 0 || Number(chanceRaw) > 100) {
+      throw new UserError('The bonus drop chance is a number above 0 and up to 100, like 5 or 0.25.');
+    }
+    const amount = Number(String(form.bonusAmount ?? '1').trim() || '1');
+    if (!Number.isInteger(amount) || amount < 1 || amount > 200) throw new UserError('The bonus drop amount is a whole number from 1 to 200.');
+    data.bonusItem = bonus.id; data.bonusChance = Math.round(Number(chanceRaw) * 100); data.bonusAmount = amount;
+  }
+  if (!EFFECTS.some((e) => data[e.key]) && !data.bonusItem) throw new UserError('Give the item at least one effect.');
   const note = String(form.note || '').trim().replace(/\s+/g, ' ');
   if (note.length > 120 || !NOTE_RE.test(note)) throw new UserError('The note can be up to 120 characters, without |.');
   data.note = note;
@@ -155,8 +183,8 @@ async function readForm(server, form, fx) {
   return data;
 }
 
-const COLUMNS = [...EFFECTS.map((e) => e.column), 'note', 'enabled'];
-const values = (d) => [...EFFECTS.map((e) => d[e.key]), d.note, d.enabled];
+const COLUMNS = [...EFFECTS.map((e) => e.column), 'bonus_item', 'bonus_chance', 'bonus_amount', 'note', 'enabled'];
+const values = (d) => [...EFFECTS.map((e) => d[e.key]), d.bonusItem, d.bonusChance, d.bonusAmount, d.note, d.enabled];
 
 /* @return { item, live } */
 async function create(server, form, actor) {
@@ -166,14 +194,14 @@ async function create(server, form, actor) {
   if (Number(n) >= MAX_EFFECTS) throw new UserError(`A server can have effects on up to ${MAX_EFFECTS} items.`);
   await db.getPool().query(`INSERT INTO ${table(server, 'item_effects')} (item, ${COLUMNS.join(', ')}) VALUES (?, ${COLUMNS.map(() => '?').join(', ')})`,
     [data.item, ...values(data)]);
-  await logAction(server, actor, 'effect_create', `#${data.item}`, summary(data));
+  await logAction(server, actor, 'effect_create', `#${data.item}`, summary({ ...data, bonusChance: data.bonusChance / 100 }));
   return { item: data.item, live: await tellGame(server) };
 }
 
 async function update(server, fx, form, actor) {
   const data = await readForm(server, form, fx);
   await db.getPool().query(`UPDATE ${table(server, 'item_effects')} SET ${COLUMNS.map((c) => `${c} = ?`).join(', ')} WHERE item = ?`, [...values(data), fx.item]);
-  await logAction(server, actor, 'effect_edit', `#${fx.item}`, summary(data));
+  await logAction(server, actor, 'effect_edit', `#${fx.item}`, summary({ ...data, bonusChance: data.bonusChance / 100 }));
   return { live: await tellGame(server) };
 }
 
@@ -183,4 +211,4 @@ async function remove(server, fx, actor) {
   return { live: await tellGame(server) };
 }
 
-module.exports = { EFFECTS, UserError, format, summary, list, ready, get, create, update, remove };
+module.exports = { EFFECTS, UserError, format, summary, chanceText, list, ready, get, create, update, remove };

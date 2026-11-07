@@ -46,7 +46,7 @@ const login = Object.fromEntries(fs.readFileSync('mysql_login.txt', 'utf8').spli
   // @note what include/database/item_effects.cpp makes on start
   await own.query(`CREATE TABLE IF NOT EXISTS item_effects (item INT NOT NULL PRIMARY KEY, gems INT NOT NULL DEFAULT 0, xp INT NOT NULL DEFAULT 0,
     one_hit TINYINT NOT NULL DEFAULT 0, punch_range INT NOT NULL DEFAULT 0, build_range INT NOT NULL DEFAULT 0, drops INT NOT NULL DEFAULT 0,
-    harvest INT NOT NULL DEFAULT 0, enabled TINYINT NOT NULL DEFAULT 1, note VARCHAR(120) NOT NULL DEFAULT '',
+    harvest INT NOT NULL DEFAULT 0, bonus_item INT NOT NULL DEFAULT 0, bonus_chance INT NOT NULL DEFAULT 0, bonus_amount INT NOT NULL DEFAULT 1, enabled TINYINT NOT NULL DEFAULT 1, note VARCHAR(120) NOT NULL DEFAULT '',
     updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`);
   // @note what include/database/items.cpp and panel_bridge.cpp make on start: a tiny items.dat
   await own.query(`CREATE TABLE IF NOT EXISTS item_edits (id INT NOT NULL PRIMARY KEY, base_id INT NULL, removed TINYINT NOT NULL DEFAULT 0,

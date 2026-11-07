@@ -12,7 +12,7 @@
 <div class="page-head">
   <div>
     <h1>Item effects</h1>
-    <p class="muted">Give items buffs while they're worn or held: extra gems, extra XP, one-hit breaking, longer reach and more drops. Everything a player wears adds up, and changes apply right away.</p>
+    <p class="muted">Give items buffs while they're worn or held: extra gems, extra XP, one-hit breaking, longer reach, more drops, and a bonus item of your choice. Everything a player wears adds up, and changes apply right away.</p>
   </div>
   <% if (result.ready) { %><a class="btn" href="/servers/<%= server.id %>/effects/new"><svg class="ic"><use href="#i-plus"/></svg>New item effect</a><% } %>
 </div>
@@ -40,7 +40,7 @@
   <% } else { %>
   <div class="table-wrap">
   <table class="table items effects">
-    <thead><tr><th>ID</th><th>Item</th><% for (const e of list) { %><th class="center"><%= e.short %></th><% } %><th></th></tr></thead>
+    <thead><tr><th>ID</th><th>Item</th><% for (const e of list) { %><th class="center"><%= e.short %></th><% } %><th>Bonus drop</th><th></th></tr></thead>
     <tbody>
     <% for (const fx of result.effects) { %>
       <tr class="<%= fx.enabled ? '' : 'off' %>">
@@ -53,6 +53,7 @@
         <% for (const e of list) { const v = format(e, fx[e.key]); %>
         <td class="center <%= v ? 'fx-on' : 'fx-none' %>"><%= v || '–' %></td>
         <% } %>
+        <td><% if (fx.bonus) { %><span class="bonus-cell" title="<%= chanceText(fx.bonusChance) %> chance of <%= fx.bonusAmount %> <%= fx.bonusName %>"><img src="/servers/<%= server.id %>/items/<%= fx.bonusItem %>/icon.png" alt="<%= fx.bonusName %>" loading="lazy" width="24" height="24"><span><strong><%= chanceText(fx.bonusChance) %></strong> ×<%= fx.bonusAmount %></span></span><% } else { %><span class="fx-none">–</span><% } %></td>
         <td class="right"><a class="btn ghost small" href="/servers/<%= server.id %>/effects/<%= fx.item %>">Edit</a></td>
       </tr>
     <% } %>
