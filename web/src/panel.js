@@ -18,6 +18,7 @@ const hostStats = require('./hostStats');
 const players = require('./players');
 const worlds = require('./worlds');
 const live = require('./live');
+const roles = require('./roles');
 
 const DONE_MESSAGES = {
   created: 'Server created and starting. It shows Online once it is ready.',
@@ -35,6 +36,10 @@ const DONE_MESSAGES = {
   kicked: 'Kicked.',
   worldEmptied: 'Everyone was sent out of the world.',
   worldDeleted: 'World deleted.',
+  roleCreated: 'Role created. Pick its commands below, then move it up the list if it should outrank other roles.',
+  roleSaved: 'Role saved. It applies right away, name colours too.',
+  roleMoved: 'Order saved.',
+  roleDeleted: 'Role deleted. Everyone who had it is a Player now.',
 };
 
 function describe(server, proc) {
@@ -287,7 +292,7 @@ function buildApp() {
     ] },
     { group: 'Development', items: [
       { label: 'Lua scripts', icon: 'code', soon: true },
-      { label: 'Roles', icon: 'shield', soon: true },
+      { page: 'roles', label: 'Roles', icon: 'shield', path: '/roles' },
     ] },
     { group: 'Settings', items: [
       { page: 'settings', label: 'Configuration', icon: 'sliders', path: '/settings' },
@@ -314,8 +319,8 @@ function buildApp() {
       filter: ['all', 'staff', 'banned', 'muted'].includes(req.query.filter) ? req.query.filter : 'all',
       page: req.query.page,
     };
-    const [stats, result, onlineNow] = await Promise.all([players.summary(req.server), players.list(req.server, query), live.online(req.server)]);
-    await renderServer(req, res, 'players', { extra: { stats, result, query, onlineNow, title: `Players · ${req.server.name}` } });
+    const [stats, result, onlineNow, roleMap] = await Promise.all([players.summary(req.server), players.list(req.server, query), live.online(req.server), roles.byId(req.server)]);
+    await renderServer(req, res, 'players', { extra: { stats, result, query, onlineNow, roleMap, title: `Players · ${req.server.name}` } });
   }));
 
   /* @note loads req.player from this server's own database */
@@ -329,10 +334,10 @@ function buildApp() {
 
   async function renderPlayer(req, res, { error = '', status = 200 } = {}) {
     const player = await players.get(req.server, req.player.uid);
-    const [more, onlineNow] = await Promise.all([players.details(req.server, player), live.online(req.server)]);
+    const [more, onlineNow, roleList] = await Promise.all([players.details(req.server, player), live.online(req.server), roles.list(req.server)]);
     await renderServer(req, res, 'players', {
       error, status, template: 'player',
-      extra: { player, more, roles: players.ROLES, presence: onlineNow.get(player.growid.toLowerCase()) || null, title: `${player.growid} · ${req.server.name}` },
+      extra: { player, more, roles: roleList.roles, roleMap: new Map(roleList.roles.map((r) => [r.id, r])), presence: onlineNow.get(player.growid.toLowerCase()) || null, title: `${player.growid} · ${req.server.name}` },
     });
   }
 
@@ -387,6 +392,77 @@ function buildApp() {
       return renderWorld(req, res, { error: err.message, status: 400 });
     }
     res.redirect(done === 'worldDeleted' ? `/servers/${req.server.id}/worlds?done=${done}` : `/servers/${req.server.id}/worlds/${req.world.name}?done=${done}`);
+  }));
+
+  /* ---------- roles ---------- */
+
+  app.get('/servers/:id/roles', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
+    const [result, groups] = await Promise.all([roles.list(req.server), roles.catalog(req.server)]);
+    const total = groups.reduce((n, g) => n + g.commands.length, 0);
+    await renderServer(req, res, 'roles', { extra: { result, total, title: `Roles · ${req.server.name}` } });
+  }));
+
+  /* @note loads req.role. "new" is the form for a new role */
+  const loadRole = asyncRoute(async (req, res, next) => {
+    const id = /^[0-9]{1,6}$/.test(req.params.rid) ? Number(req.params.rid) : null;
+    const role = id === null ? null : await roles.get(req.server, id);
+    if (!role) return res.status(404).render('error', { title: 'Not found', message: 'That role does not exist on this server.' });
+    req.role = role;
+    next();
+  });
+
+  async function renderRole(req, res, { role = null, form = null, error = '', status = 200 } = {}) {
+    const [result, groups] = await Promise.all([roles.list(req.server), roles.catalog(req.server)]);
+    const fresh = role ? (result.roles.find((r) => r.id === role.id) || role) : null;
+    const shown = form ? {
+      ...(fresh || {}), name: String(form.name || ''), color: String(form.color || ''), tag: String(form.tag || ''),
+      powers: Number(form.powers), commands: [].concat(form.commands || []).map(String),
+    } : (fresh || { name: '', color: 'e', tag: '', powers: roles.PLAYER, commands: [], builtin: false, members: 0 });
+    await renderServer(req, res, 'roles', {
+      error, status, template: 'role',
+      extra: { role: fresh, shown, ready: result.ready, groups, colors: roles.COLORS, powers: roles.POWERS, title: `${fresh ? fresh.name : 'New role'} · ${req.server.name}` },
+    });
+  }
+
+  app.get('/servers/:id/roles/new', auth.requireUser, loadServer, asyncRoute((req, res) => renderRole(req, res)));
+
+  app.post('/servers/:id/roles', auth.requireUser, loadServer, auth.checkCsrf, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      if (!(await roles.list(req.server)).ready) throw new roles.UserError('Start the server once (with the latest game build) before making roles.');
+      result = await roles.create(req.server, req.body, req.user.username);
+    } catch (err) {
+      if (!(err instanceof roles.UserError)) throw err;
+      return renderRole(req, res, { form: req.body, error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/roles/${result.id}?done=roleCreated${result.live ? '' : '&live=0'}`);
+  }));
+
+  app.get('/servers/:id/roles/:rid', auth.requireUser, loadServer, loadRole, asyncRoute((req, res) => renderRole(req, res, { role: req.role })));
+
+  app.post('/servers/:id/roles/:rid', auth.requireUser, loadServer, auth.checkCsrf, loadRole, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      result = await roles.update(req.server, req.role, req.body, req.user.username);
+    } catch (err) {
+      if (!(err instanceof roles.UserError)) throw err;
+      return renderRole(req, res, { role: req.role, form: req.body, error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/roles/${req.role.id}?done=roleSaved${result.live ? '' : '&live=0'}`);
+  }));
+
+  app.post('/servers/:id/roles/:rid/:action(up|down|delete)', auth.requireUser, loadServer, auth.checkCsrf, loadRole, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      result = req.params.action === 'delete'
+        ? await roles.remove(req.server, req.role, req.user.username)
+        : await roles.move(req.server, req.role, req.params.action, req.user.username);
+    } catch (err) {
+      if (!(err instanceof roles.UserError)) throw err;
+      return renderRole(req, res, { role: req.role, error: err.message, status: 400 });
+    }
+    const done = req.params.action === 'delete' ? 'roleDeleted' : 'roleMoved';
+    res.redirect(`/servers/${req.server.id}/roles?done=${done}${result.live ? '' : '&live=0'}`);
   }));
 
   app.get('/servers/:id/status.json', auth.requireUser, loadServer, asyncRoute(async (req, res) => {

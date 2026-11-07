@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <cctype>
 #include "include/tools/panel_bridge.hpp"
+#include "include/database/roles.hpp"
 
 #include <chrono>
 #include <csignal>
@@ -240,7 +241,11 @@ int main(int argc, char *argv[])
 
         db.load_login(); // @note ./mysql_login.txt, or --mysql-login
         db.mysql_connect();
-        if (!platform::gateway) panel_bridge_create_tables(); // @note the website's live actions (web/src/players.js, worlds.js)
+        if (!platform::gateway)
+        {
+            panel_bridge_create_tables(); // @note the website's live actions (web/src/players.js, worlds.js)
+            roles::init(); // @note the roles the website edits (web/src/roles.js)
+        }
 
         decode_items_dat();
         discord::load_webhook(discord_webhook_file); // @note ./discord_webhook.txt, or --discord-webhook

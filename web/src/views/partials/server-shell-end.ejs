@@ -3,4 +3,5 @@
 </div>
 <script src="/static/fmt.js?v=<%= v %>"></script>
 <script src="/static/server.js?v=<%= v %>"></script>
+<% if (page === 'roles') { %><script src="/static/roles.js?v=<%= v %>"></script><% } %>
 <%- include('foot', { shell: 'server' }) %>

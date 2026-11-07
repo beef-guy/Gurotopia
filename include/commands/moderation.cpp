@@ -7,6 +7,7 @@
 #include "action/join_request.hpp"
 #include "action/quit_to_exit.hpp"
 #include "database/mail.hpp"
+#include "database/roles.hpp"
 
 #include "moderation.hpp"
 
@@ -81,9 +82,9 @@ namespace
     }
 
     /* @return false (after telling the actor) when they may not act on someone with that role */
-    bool outranks(ENetEvent &event, const ::peer &actor, u_char target_role)
+    bool outranks(ENetEvent &event, const ::peer &actor, int target_role)
     {
-        if (actor.role > target_role) return true;
+        if (roles::get(actor.role_id).priority > roles::get(target_role).priority) return true;
         reply(event, "`4You can't do that to someone with the same or a higher role.``");
         return false;
     }
@@ -158,7 +159,7 @@ void kick(ENetEvent& event, const std::string_view text)
     ENetPeer *target = moderation::find_online(list[0]);
     if (target == nullptr) return reply(event, std::format("`4{}`` is not online.", list[0]));
     ::peer *pTarget = static_cast<::peer*>(target->data);
-    if (target == event.peer || !outranks(event, *pPeer, pTarget->role)) return;
+    if (target == event.peer || !outranks(event, *pPeer, pTarget->role_id)) return;
 
     const std::string reason = clean(rest(list, 1), 100);
     on::ConsoleMessage(target, std::format("`4You were kicked by staff.``{}", reason.empty() ? "" : " Reason: " + reason));
@@ -185,7 +186,7 @@ void ban(ENetEvent& event, const std::string_view text)
     if (target != nullptr)
     {
         ::peer *pTarget = static_cast<::peer*>(target->data);
-        if (target == event.peer || !outranks(event, *pPeer, pTarget->role)) return;
+        if (target == event.peer || !outranks(event, *pPeer, pTarget->role_id)) return;
         target_name = pTarget->growid;
 
         pTarget->banned_until = until;
@@ -213,7 +214,7 @@ void ban(ENetEvent& event, const std::string_view text)
         ::peer offline{};
         if (!offline.exists(target_name)) return reply(event, std::format("`4No account called {}.``", target_name));
         offline.growid = target_name;
-        if (!outranks(event, *pPeer, static_cast<u_char>(offline.mysql_select<signed>("role")))) return;
+        if (!outranks(event, *pPeer, offline.mysql_select<signed>("role"))) return;
         offline.mysql_update("banned_until", until);
         offline.mysql_update("ban_reason", reason);
     }
@@ -259,7 +260,7 @@ void mute(ENetEvent& event, const std::string_view text)
     if (target != nullptr)
     {
         ::peer *pTarget = static_cast<::peer*>(target->data);
-        if (target == event.peer || !outranks(event, *pPeer, pTarget->role)) return;
+        if (target == event.peer || !outranks(event, *pPeer, pTarget->role_id)) return;
         target_name = pTarget->growid;
         pTarget->muted_until = until;
         pTarget->mysql_update("muted_until", until);
@@ -270,7 +271,7 @@ void mute(ENetEvent& event, const std::string_view text)
         ::peer offline{};
         if (!offline.exists(target_name)) return reply(event, std::format("`4No account called {}.``", target_name));
         offline.growid = target_name;
-        if (!outranks(event, *pPeer, static_cast<u_char>(offline.mysql_select<signed>("role")))) return;
+        if (!outranks(event, *pPeer, offline.mysql_select<signed>("role"))) return;
         offline.mysql_update("muted_until", until);
     }
     moderation::log(*pPeer, "mute", target_name, std::format("{} {}", list[1], reason));
@@ -384,13 +385,12 @@ void setrole(ENetEvent& event, const std::string_view text)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
     const std::vector<std::string> list = words(text);
-    if (list.size() < 2ull) return reply(event, "Usage: /setrole <`$name``> <`$player``, `$mod`` or `$dev``>");
+    if (list.size() < 2ull) return reply(event, "Usage: /setrole <`$name``> <`$role``> (player, mod, dev, or a role made on the website)");
 
-    const std::string wanted = lower(list[1]);
-    const int role = (wanted == "player" || wanted == "0") ? PLAYER :
-                     (wanted == "mod" || wanted == "moderator" || wanted == "1") ? MODERATOR :
-                     (wanted == "dev" || wanted == "developer" || wanted == "2") ? DEVELOPER : -1;
-    if (role < 0) return reply(event, "`4The role must be player, mod or dev.``");
+    const role_def *role = roles::find(list[1]);
+    if (role == nullptr) return reply(event, std::format("`4There's no role called {}.``", list[1]));
+    const role_def &mine = roles::get(pPeer->role_id);
+    if (role->priority >= mine.priority && pPeer->role_id != DEVELOPER) return reply(event, "`4You can only give roles below your own.``");
 
     ENetPeer *target = moderation::find_online(list[0]);
     std::string target_name = list[0];
@@ -398,20 +398,23 @@ void setrole(ENetEvent& event, const std::string_view text)
     {
         ::peer *pTarget = static_cast<::peer*>(target->data);
         if (target == event.peer) return reply(event, "`4You can't change your own role.``");
+        if (!outranks(event, *pPeer, pTarget->role_id)) return;
         target_name = pTarget->growid;
-        pTarget->role = static_cast<u_char>(role);
-        pTarget->mysql_update("role", role);
-        on::ConsoleMessage(target, std::format("`2Your role is now {}. Rejoin the world to see your new name colour.``", list[1]));
+        pTarget->role_id = role->id;
+        pTarget->mysql_update("role", role->id);
+        roles::apply(target); // @note powers and name colour change right away
+        on::ConsoleMessage(target, std::format("`2Your role is now {}.``", role->name));
     }
     else
     {
         ::peer offline{};
         if (!offline.exists(target_name)) return reply(event, std::format("`4No account called {}.``", target_name));
         offline.growid = target_name;
-        offline.mysql_update("role", role);
+        if (!outranks(event, *pPeer, offline.mysql_select<signed>("role"))) return;
+        offline.mysql_update("role", role->id);
     }
-    moderation::log(*pPeer, "setrole", target_name, list[1]);
-    reply(event, std::format("`2{} is now {}.``", target_name, list[1]));
+    moderation::log(*pPeer, "setrole", target_name, role->name);
+    reply(event, std::format("`2{} is now {}.``", target_name, role->name));
 }
 
 void givegems(ENetEvent& event, const std::string_view text)
@@ -448,12 +451,14 @@ void playermode(ENetEvent& event, const std::string_view text)
         pPeer->real_role = pPeer->role;
         pPeer->role = PLAYER;
         pPeer->player_mode = true;
+        roles::refresh_name(event.peer);
         reply(event, "`2Player mode is ON.`` You're treated like a normal player: no staff commands, and your worlds, locks and machines don't know you're the owner. Type `$/playermode`` again to get your powers back (they also come back when you log in again).");
     }
     else
     {
         pPeer->role = pPeer->real_role;
         pPeer->player_mode = false;
+        roles::refresh_name(event.peer);
         reply(event, "`2Player mode is OFF.`` Your owner and staff powers are back.");
     }
 }

@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "database/roles.hpp"
 
 #include "onVariant/ConsoleMessage.hpp"
 #include "onVariant/SetClothing.hpp"
@@ -279,8 +280,8 @@ namespace
     {
         const ::peer *pPeer = static_cast<::peer*>(event.peer->data);
         std::string owned{};
-        if (pPeer->role >= DEVELOPER) owned += "add_label_with_icon|small|`6@Developer`` (shown in your name)|left|32|\n";
-        else if (pPeer->role == MODERATOR) owned += "add_label_with_icon|small|`#@Moderator`` (shown in your name)|left|32|\n";
+        if (const role_def &role = roles::get(pPeer->role_id); role.id != PLAYER)
+            owned += std::format("add_label_with_icon|small|`{}{}{}`` (shown in your name)|left|32|\n", role.color.empty() ? "w" : role.color, role.tag, role.name);
 
         ::create_dialog dialog = ::create_dialog()
             .set_default_color("`o")

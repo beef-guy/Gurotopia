@@ -9,6 +9,7 @@
  */
 const db = require('./db');
 const live = require('./live');
+const roles = require('./roles');
 
 const ROLES = ['Player', 'Moderator', 'Developer']; // @note enum role in include/database/peer.hpp
 const SORTS = {
@@ -192,10 +193,10 @@ async function change(server, player, actor, action, form) {
       await logAction(server, actor, 'unmute', player.growid, '');
       return 'unmuted';
     case 'role': {
-      const role = Number(form.role);
-      if (!Number.isInteger(role) || role < 0 || role >= ROLES.length) throw new UserError('Pick a role.');
-      await pool.query(`UPDATE ${peer} SET role = ? WHERE uid = ?`, [role, player.uid]);
-      await logAction(server, actor, 'role', player.growid, ROLES[role]);
+      const role = /^[0-9]{1,6}$/.test(String(form.role)) ? await roles.get(server, Number(form.role)) : null;
+      if (!role) throw new UserError('Pick a role.');
+      await pool.query(`UPDATE ${peer} SET role = ? WHERE uid = ?`, [role.id, player.uid]);
+      await logAction(server, actor, 'role', player.growid, role.name);
       return 'roleSet';
     }
     case 'kick':

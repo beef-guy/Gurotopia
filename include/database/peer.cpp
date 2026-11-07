@@ -11,6 +11,7 @@
 #include "tools/random.hpp"
 #include "action/carnival.hpp"
 
+#include "roles.hpp"
 #include "peer.hpp"
 
 bool peer::exists(const std::string &growid)
@@ -101,7 +102,8 @@ void peer::mysql_select_all(bool by_user_id)
     this->wl_storage = this->mysql_select<signed>("wl_storage", "", by_user_id);
     this->level[0]   = this->mysql_select<signed>("level", "", by_user_id);
     this->level[1]   = this->mysql_select<signed>("xp", "", by_user_id);
-    this->role       = static_cast<u_char>(this->mysql_select<signed>("role", "", by_user_id));
+    this->role_id    = this->mysql_select<signed>("role", "", by_user_id);
+    this->role       = roles::powers(this->role_id);
     this->banned_until = this->mysql_select<long long>("banned_until", "", by_user_id);
     this->ban_reason   = this->mysql_select<std::string>("ban_reason", "", by_user_id);
     this->muted_until  = this->mysql_select<long long>("muted_until", "", by_user_id);

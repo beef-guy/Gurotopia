@@ -99,13 +99,14 @@ void action::tankIDName(ENetEvent& event, const std::string& header)
         }
     }
     /* @note the server's owner (--owner) always gets developer rights */
-    if (!gServer_data.owner.empty() && pPeer->role < DEVELOPER)
+    if (!gServer_data.owner.empty() && pPeer->role_id != DEVELOPER)
     {
         std::string a = gServer_data.owner, b = pPeer->growid;
         for (char &c : a) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         for (char &c : b) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         if (a == b)
         {
+            pPeer->role_id = DEVELOPER;
             pPeer->role = DEVELOPER;
             pPeer->mysql_update("role", static_cast<signed>(DEVELOPER));
         }

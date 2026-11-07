@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "database/roles.hpp"
 #include "gamePacket/tile_change.hpp"
 
 #include "onVariant/ConsoleMessage.hpp"
@@ -105,7 +106,7 @@ void lock_edit(ENetEvent& event, const ::hPipe &hPipe)
             *empty = pOthers->user_id;
             on::ConsoleMessage(event.peer, std::format("`w{}`` was added to the access list.", pOthers->growid));
             on::ConsoleMessage(peer, std::format("`2You got access to `w{}`` from {}.``", world->name, pPeer->growid));
-            pOthers->display_growid = std::format("`^{}``", pOthers->growid);
+            roles::refresh_name(peer);
         });
     }
 
