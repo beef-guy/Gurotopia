@@ -36,20 +36,28 @@ const login = Object.fromEntries(fs.readFileSync('mysql_login.txt', 'utf8').spli
   // @note what include/database/items.cpp and panel_bridge.cpp make on start: a tiny items.dat
   await own.query(`CREATE TABLE IF NOT EXISTS item_edits (id INT NOT NULL PRIMARY KEY, base_id INT NULL, removed TINYINT NOT NULL DEFAULT 0,
     name VARCHAR(64) NULL, texture VARCHAR(64) NULL, info TEXT NULL, rarity INT NULL, hits INT NULL, hit_reset INT NULL, collision INT NULL,
-    cat INT NULL, tex_x INT NULL, tex_y INT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`);
+    cat INT NULL, tex_x INT NULL, tex_y INT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    type INT NULL, hit_sound INT NULL, cloth INT NULL, spread INT NULL, max_amount INT NULL, grow INT NULL, seed_base INT NULL, seed_overlay INT NULL,
+    tree_base INT NULL, tree_leaves INT NULL, seed_color BIGINT NULL, seed_overlay_color BIGINT NULL, extra_file VARCHAR(128) NULL, punch INT NULL, powers INT NULL)`);
   const catalog = async () => {
-    await own.query(`CREATE TABLE IF NOT EXISTS item_catalog (id INT NOT NULL PRIMARY KEY, name VARCHAR(64) NOT NULL DEFAULT '', type INT NOT NULL DEFAULT 0,
+    await own.query('DROP TABLE IF EXISTS item_catalog'); // @note made again on every start, like the game
+    await own.query(`CREATE TABLE item_catalog (id INT NOT NULL PRIMARY KEY, name VARCHAR(64) NOT NULL DEFAULT '', type INT NOT NULL DEFAULT 0,
       rarity INT NOT NULL DEFAULT 0, hits INT NOT NULL DEFAULT 0, hit_reset INT NOT NULL DEFAULT 0, collision INT NOT NULL DEFAULT 0, cat INT NOT NULL DEFAULT 0,
-      cloth INT NOT NULL DEFAULT 10, texture VARCHAR(64) NOT NULL DEFAULT '', tex_x INT NOT NULL DEFAULT 0, tex_y INT NOT NULL DEFAULT 0, info TEXT, custom TINYINT NOT NULL DEFAULT 0)`);
-    await own.query('DELETE FROM item_catalog');
+      cloth INT NOT NULL DEFAULT 10, texture VARCHAR(64) NOT NULL DEFAULT '', tex_x INT NOT NULL DEFAULT 0, tex_y INT NOT NULL DEFAULT 0, info TEXT, custom TINYINT NOT NULL DEFAULT 0,
+      hit_sound INT NOT NULL DEFAULT 0, spread INT NOT NULL DEFAULT 0, max_amount INT NOT NULL DEFAULT 0, grow INT NOT NULL DEFAULT 0, seed_base INT NOT NULL DEFAULT 0,
+      seed_overlay INT NOT NULL DEFAULT 0, tree_base INT NOT NULL DEFAULT 0, tree_leaves INT NOT NULL DEFAULT 0, seed_color BIGINT NOT NULL DEFAULT 0,
+      seed_overlay_color BIGINT NOT NULL DEFAULT 0, extra_file VARCHAR(255) NOT NULL DEFAULT '', punch INT NOT NULL DEFAULT 0, powers INT NOT NULL DEFAULT 0)`);
     const base = [['Blank', 17], ['Blank Seed', 19], ['Dirt', 17], ['Dirt Seed', 19], ['World Lock', 3], ['World Lock Seed', 19], ['Legendary Wings', 20], ['Legendary Wings Seed', 19]];
-    const rows = base.map(([name, type], id) => [id, name, type, type === 20 ? 50 : 1, type === 19 ? 0 : 3, 8, 1, 0, type === 20 ? 6 : 10, 'tiles_page1.rttex', id, 0, `This is ${name}.`, 0]);
+    const rows = base.map(([name, type], id) => [id, name, type, type === 20 ? 50 : 1, type === 19 ? 0 : 3, 8, 1, 0, type === 20 ? 6 : 10, 'tiles_page1.rttex', id, 0, `This is ${name}.`, 0,
+      type === 20 ? 2 : 1, 1, 200, type === 19 ? 31 : 0, 1, 2, 0, 0, 0xff0000ff, 0xffffffff, 'audio/punch.wav', type === 20 ? 5 : 0, type === 20 ? 1 : 0]);
     const [edits] = await own.query('SELECT * FROM item_edits ORDER BY id');
     for (const e of edits) {
       let row = rows.find((r) => r[0] === e.id);
       if (!row && e.base_id !== null && !e.removed) { row = [...rows[e.base_id]]; row[0] = e.id; row[13] = 1; rows.push(row); }
       if (!row || e.removed) continue;
-      const set = { name: 1, rarity: 3, hits: 4, hit_reset: 5, collision: 6, cat: 7, texture: 9, tex_x: 10, tex_y: 11, info: 12 };
+      const set = { name: 1, type: 2, rarity: 3, hits: 4, hit_reset: 5, collision: 6, cat: 7, cloth: 8, texture: 9, tex_x: 10, tex_y: 11, info: 12,
+        hit_sound: 14, spread: 15, max_amount: 16, grow: 17, seed_base: 18, seed_overlay: 19, tree_base: 20, tree_leaves: 21, seed_color: 22,
+        seed_overlay_color: 23, extra_file: 24, punch: 25, powers: 26 };
       for (const [k, i] of Object.entries(set)) if (e[k] !== null) row[i] = e[k];
     }
     await own.query('INSERT INTO item_catalog VALUES ?', [rows]);

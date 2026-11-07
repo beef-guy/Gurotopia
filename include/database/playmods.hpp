@@ -2,6 +2,8 @@
 
 #include <array>
 #include <string>
+#include <unordered_map>
+#include <utility>
 
 /* @note powers that clothing gives the wearer, like the real game's playmods ("Double Jump", "Speedy", ...) */
 enum mod : u_short {
@@ -39,6 +41,9 @@ struct playmod {
 
 /* @return the playmod `item_id` gives when worn, or nullptr */
 extern const ::playmod *get_playmod(u_short item_id);
+
+/* @note the website's powers per item (item manager): item -> {mods, name}. they win over the table, mods 0 = none */
+extern void set_playmod_overrides(std::unordered_map<u_short, std::pair<u_short, std::string>> overrides);
 
 /* @note what the worn clothes add up to, sent in SET_CHARACTER_STATE */
 struct cloth_effects {

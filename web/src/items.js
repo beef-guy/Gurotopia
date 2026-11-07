@@ -4,11 +4,10 @@
  * writes on start, and the changes the website makes, in item_edits (include/database/items.cpp).
  * - an edit changes an item of items.dat (name, description, rarity, breaking, flags, texture)
  * - a custom item is a new item (and its seed) copied from an existing one, added after the game's own
- * The game rebuilds items.dat within a second of a change. Players see it after they log in again,
- * because the game client only loads items.dat at login.
+ * Changes are saved here and the game puts them into items.dat when it starts, so the owner restarts
+ * the server to apply them (pending() counts what's waiting). Players get the new items.dat when they log in.
  */
 const db = require('./db');
-const live = require('./live');
 
 const PAGE_SIZE = 40;
 const SORTS = { id: 'c.id ASC', newest: 'c.id DESC', name: 'c.name ASC, c.id ASC', rarity: 'c.rarity DESC, c.id ASC' };
@@ -56,6 +55,31 @@ const FLAGS = [
   { bit: 0x10, key: 'public', label: 'Public', text: 'Anyone can smash it, even in a locked world.' },
 ];
 
+/* @note enum clothing in items.hpp */
+const CLOTH_SLOTS = ['Hair', 'Shirt', 'Pants', 'Shoes', 'Face', 'Hand', 'Back', 'Hat', 'Necklace', 'Ances'];
+
+/* @note item::spread in items.hpp */
+const SPREADS = [
+  { value: 1, label: 'Single (doesn\'t join)' }, { value: 2, label: 'Joins all 8 ways' }, { value: 3, label: 'Joins sideways' },
+  { value: 4, label: 'Sticks to a wall' }, { value: 5, label: 'Joins 4 ways' }, { value: 6, label: 'Random look' }, { value: 7, label: 'Joins up and down' },
+];
+
+/* @note enum mod in include/database/playmods.hpp: powers while worn */
+const POWERS = [
+  { bit: 0x0001, key: 'pw_double_jump', label: 'Double jump' },
+  { bit: 0x0002, key: 'pw_speedy', label: 'Speedy' },
+  { bit: 0x0004, key: 'pw_high_jump', label: 'High jump' },
+  { bit: 0x0008, key: 'pw_slow_fall', label: 'Slow fall' },
+  { bit: 0x0010, key: 'pw_punch_range', label: 'Long punch' },
+  { bit: 0x0020, key: 'pw_build_range', label: 'Long build' },
+  { bit: 0x0040, key: 'pw_punch_power', label: 'Strong punch (knockback)' },
+  { bit: 0x0080, key: 'pw_water_speed', label: 'Fast swimming' },
+  { bit: 0x0100, key: 'pw_punch_damage', label: 'Double punch damage' },
+  { bit: 0x0200, key: 'pw_fireproof', label: 'Heat resist' },
+  { bit: 0x0400, key: 'pw_digging', label: 'Faster digging (dirt)' },
+  { bit: 0x0800, key: 'pw_slow', label: 'Slow' },
+];
+
 class UserError extends Error {}
 
 function table(server, name) {
@@ -64,6 +88,21 @@ function table(server, name) {
 
 function missingTable(err) {
   return err && (err.code === 'ER_NO_SUCH_TABLE' || err.code === 'ER_BAD_DB_ERROR' || err.code === 'ER_BAD_FIELD_ERROR');
+}
+
+/* @note seed colours are 0xBBGGRRAA in items.dat (item::seed_color) */
+function colorHex(v) {
+  const n = Number(v) >>> 0;
+  const hex = (x) => x.toString(16).padStart(2, '0');
+  return `#${hex((n >>> 8) & 0xff)}${hex((n >>> 16) & 0xff)}${hex((n >>> 24) & 0xff)}`;
+}
+
+function colorValue(hex, old) {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ''));
+  if (!m) return null;
+  const [r, g, b] = [m[1], m[2], m[3]].map((x) => Number.parseInt(x, 16));
+  const alpha = (Number(old) >>> 0) & 0xff || 0xff;
+  return ((b << 24) | (g << 16) | (r << 8) | alpha) >>> 0;
 }
 
 function typeName(type) {
@@ -77,7 +116,7 @@ function shape(row, edit = null) {
   const item = {
     id: Number(row.id),
     name: pick('name', row.name || ''),
-    type: Number(row.type || 0),
+    type: Number(pick('type', row.type || 0)),
     rarity: Number(pick('rarity', row.rarity || 0)),
     hits: Number(pick('hits', row.hits || 0)),
     hitReset: Number(pick('hit_reset', row.hit_reset || 0)),
@@ -87,13 +126,31 @@ function shape(row, edit = null) {
     texX: Number(pick('tex_x', row.tex_x || 0)),
     texY: Number(pick('tex_y', row.tex_y || 0)),
     info: pick('info', row.info || ''),
+    hitSound: Number(pick('hit_sound', row.hit_sound || 0)),
+    cloth: Number(pick('cloth', row.cloth ?? 10)),
+    spread: Number(pick('spread', row.spread || 0)),
+    maxAmount: Number(pick('max_amount', row.max_amount || 0)),
+    grow: Number(pick('grow', row.grow || 0)),
+    seedBase: Number(pick('seed_base', row.seed_base || 0)),
+    seedOverlay: Number(pick('seed_overlay', row.seed_overlay || 0)),
+    treeBase: Number(pick('tree_base', row.tree_base || 0)),
+    treeLeaves: Number(pick('tree_leaves', row.tree_leaves || 0)),
+    seedColor: Number(pick('seed_color', row.seed_color || 0)),
+    seedOverlayColor: Number(pick('seed_overlay_color', row.seed_overlay_color || 0)),
+    extraFile: pick('extra_file', row.extra_file || ''),
+    punch: Number(pick('punch', row.punch || 0)),
+    powers: Number(pick('powers', row.powers || 0)),
     custom: Boolean(Number(row.custom || 0)) || Boolean(edit && edit.base_id !== null && edit.base_id !== undefined),
     edited: Boolean(edit) || Boolean(Number(row.edited || 0)),
     baseId: edit && edit.base_id !== null && edit.base_id !== undefined ? Number(edit.base_id) : null,
   };
   item.typeName = typeName(item.type);
   item.seed = item.type === 19;
+  item.wearable = item.type === 20 || item.type === 107;
   for (const f of FLAGS) item[f.key] = Boolean(cat & f.bit);
+  for (const p of POWERS) item[p.key] = Boolean(item.powers & p.bit);
+  item.seedHex = colorHex(item.seedColor);
+  item.seedOverlayHex = colorHex(item.seedOverlayColor);
   return item;
 }
 
@@ -139,12 +196,21 @@ async function list(server, { q = '', sort = 'id', filter = 'all', page = 1 } = 
     const pages = Math.max(1, Math.ceil(Number(n) / PAGE_SIZE));
     const pageNo = Math.min(current, pages);
     const [rows] = await pool.query(
-      `SELECT c.*, e.id AS e_id, e.base_id, e.name AS e_name, e.rarity AS e_rarity, e.texture AS e_texture, e.tex_x AS e_tex_x, e.tex_y AS e_tex_y
+      `SELECT c.*, e.id AS e_id, e.base_id, e.name AS e_name, e.rarity AS e_rarity, e.texture AS e_texture, e.tex_x AS e_tex_x, e.tex_y AS e_tex_y, e.type AS e_type
        FROM ${from} ${whereSql} ORDER BY ${order} LIMIT ? OFFSET ?`, [...args, PAGE_SIZE, (pageNo - 1) * PAGE_SIZE]);
     const items = rows.map((r) => shape(r, r.e_id === null ? null : {
-      base_id: r.base_id, name: r.e_name, rarity: r.e_rarity, texture: r.e_texture, tex_x: r.e_tex_x, tex_y: r.e_tex_y,
+      base_id: r.base_id, name: r.e_name, rarity: r.e_rarity, texture: r.e_texture, tex_x: r.e_tex_x, tex_y: r.e_tex_y, type: r.e_type,
     }));
-    return { ready: true, items, total: Number(n), page: pageNo, pages };
+    /* @note custom items made since the last restart aren't in the catalog yet: shown on top of the first page */
+    let waiting = [];
+    if (pageNo === 1 && (filter === 'all' || filter === 'custom' || !FILTERS[filter])) {
+      const [rows2] = await pool.query(
+        `SELECT e.id FROM ${table(server, 'item_edits')} e LEFT JOIN ${table(server, 'item_catalog')} c ON c.id = e.id
+         WHERE c.id IS NULL AND e.base_id IS NOT NULL AND e.removed = 0 AND e.id % 2 = 0 ORDER BY e.id DESC LIMIT 20`);
+      waiting = (await Promise.all(rows2.map((r) => get(server, Number(r.id))))).filter(Boolean)
+        .filter((it) => !search || (/^#?\d+$/.test(search) ? it.id === Number(search.replace('#', '')) : it.name.toLowerCase().includes(search.toLowerCase())));
+    }
+    return { ready: true, items: [...waiting, ...items], total: Number(n) + waiting.length, page: pageNo, pages };
   } catch (err) {
     if (missingTable(err)) return { ready: false, items: [], total: 0, page: 1, pages: 1 };
     throw err;
@@ -193,11 +259,39 @@ async function logAction(server, actor, action, target, detail = '') {
   }
 }
 
-/* @note asks a running game to rebuild items.dat. it takes a moment on a big items.dat */
-async function tellGame(server) {
-  const id = await live.queue(server, 'items_reload', '-');
-  if (id) await live.waitDone(server, id, 8000);
-  return !server.reporting || Boolean(id);
+const CHANGE_ACTIONS = ['item_edit', 'item_create', 'item_delete', 'item_reset'];
+
+/*
+ * @return how many item changes the game hasn't put into items.dat yet: the ones made after it last started
+ * @note the game makes item_catalog again on every start, so the table's creation time is when it last loaded them
+ */
+async function pending(server) {
+  try {
+    const [[row]] = await db.getPool().query(
+      `SELECT COUNT(*) AS n FROM ${table(server, 'mod_log')}
+       WHERE action IN (?) AND at > (SELECT CREATE_TIME FROM information_schema.tables WHERE table_schema = ? AND table_name = 'item_catalog')`,
+      [CHANGE_ACTIONS, server.dbName]);
+    return Number(row.n);
+  } catch (err) {
+    if (missingTable(err)) return 0;
+    throw err;
+  }
+}
+
+/* @return choices that are just numbers in items.dat, each named by an item that uses it: { hitSounds, punches } */
+async function choices(server) {
+  const examples = async (column, where) => {
+    const [rows] = await db.getPool().query(
+      `SELECT c.${column} AS value, COUNT(*) AS n, MIN(c.id) AS id, (SELECT name FROM ${table(server, 'item_catalog')} x WHERE x.id = MIN(c.id)) AS name
+       FROM ${table(server, 'item_catalog')} c WHERE c.custom = 0 AND c.name <> '' ${where} GROUP BY c.${column} ORDER BY c.${column}`);
+    return rows.map((r) => ({ value: Number(r.value), count: Number(r.n), example: r.name }));
+  };
+  try {
+    return { hitSounds: await examples('hit_sound', ''), punches: await examples('punch', 'AND c.punch > 0') };
+  } catch (err) {
+    if (missingTable(err)) return { hitSounds: [], punches: [] };
+    throw err;
+  }
 }
 
 const TEXT_RE = /^[\x20-\x5b\x5d-\x5f\x61-\x7b\x7d\x7e]*$/; // @note plain ASCII (items.dat isn't UTF-8), without ` | or \\
@@ -223,20 +317,61 @@ function readForm(form, item) {
   if (!/^[A-Za-z0-9_./-]{1,64}$/.test(texture) || texture.includes('..') || !texture.endsWith('.rttex')) throw new UserError('The texture must be a .rttex file name from the game folder.');
   const texX = num('texX', 0, 255, 'Texture column');
   const texY = num('texY', 0, 255, 'Texture row');
-  return { name, info, rarity, hits, hit_reset: hitReset, collision, cat, texture, tex_x: texX, tex_y: texY };
+  const out = { name, info, rarity, hits, hit_reset: hitReset, collision, cat, texture, tex_x: texX, tex_y: texY };
+
+  /* @note the rest of items.dat. a field the form didn't send stays as it is */
+  const has = (key) => form[key] !== undefined && form[key] !== '';
+  if (has('type')) {
+    const t = num('type', 0, 255, 'Item type');
+    if (!Object.hasOwn(TYPES, t) && t !== item.type) throw new UserError('Pick an item type from the list.');
+    out.type = t;
+  }
+  if (has('hitSound')) out.hit_sound = num('hitSound', 0, 255, 'Hit sound');
+  if (has('cloth')) out.cloth = num('cloth', 0, 10, 'Clothing slot');
+  if (has('spread')) out.spread = num('spread', 0, 7, 'How it joins');
+  if (has('maxAmount')) out.max_amount = num('maxAmount', 1, 250, 'Most in one slot');
+  if (has('grow')) out.grow = num('grow', 0, 31536000, 'Grow time');
+  for (const [key, col, label] of [['seedBase', 'seed_base', 'Seed shape'], ['seedOverlay', 'seed_overlay', 'Seed pattern'], ['treeBase', 'tree_base', 'Tree trunk'], ['treeLeaves', 'tree_leaves', 'Tree leaves']]) {
+    if (has(key)) out[col] = num(key, 0, 255, label);
+  }
+  if (has('seedHex')) {
+    const v = colorValue(form.seedHex, item.seedColor);
+    if (v === null) throw new UserError('Pick a seed colour.');
+    out.seed_color = v;
+  }
+  if (has('seedOverlayHex')) {
+    const v = colorValue(form.seedOverlayHex, item.seedOverlayColor);
+    if (v === null) throw new UserError('Pick a seed pattern colour.');
+    out.seed_overlay_color = v;
+  }
+  if (form.extraFile !== undefined) {
+    const f = String(form.extraFile).trim();
+    if (f && (!/^[A-Za-z0-9_./-]{1,128}$/.test(f) || f.includes('..'))) throw new UserError('The extra file must be a path like audio/punch.wav (letters, digits, _ . / -).');
+    out.extra_file = f;
+  }
+  if (has('punch')) out.punch = num('punch', 0, 255, 'Punch effect');
+  if (form.powersShown) {
+    let powers = 0;
+    for (const p of POWERS) if (form[p.key]) powers |= p.bit;
+    out.powers = powers;
+  }
+  return out;
 }
 
-const EDIT_COLUMNS = ['name', 'info', 'rarity', 'hits', 'hit_reset', 'collision', 'cat', 'texture', 'tex_x', 'tex_y'];
+const EDIT_COLUMNS = ['name', 'info', 'rarity', 'hits', 'hit_reset', 'collision', 'cat', 'texture', 'tex_x', 'tex_y',
+  'type', 'hit_sound', 'cloth', 'spread', 'max_amount', 'grow', 'seed_base', 'seed_overlay', 'tree_base', 'tree_leaves',
+  'seed_color', 'seed_overlay_color', 'extra_file', 'punch', 'powers'];
 
 async function update(server, item, form, actor) {
   const data = readForm(form, item);
-  const cols = EDIT_COLUMNS.map((c) => db.quoteIdent(c));
+  const cols = EDIT_COLUMNS.filter((c) => data[c] !== undefined).map((c) => db.quoteIdent(c));
+  const values = EDIT_COLUMNS.filter((c) => data[c] !== undefined).map((c) => data[c]);
   await db.getPool().query(
     `INSERT INTO ${table(server, 'item_edits')} (id, ${cols.join(', ')}) VALUES (?, ${cols.map(() => '?').join(', ')})
      ON DUPLICATE KEY UPDATE ${cols.map((c) => `${c} = VALUES(${c})`).join(', ')}, removed = 0`,
-    [item.id, ...EDIT_COLUMNS.map((c) => data[c])]);
+    [item.id, ...values]);
   await logAction(server, actor, 'item_edit', `#${item.id}`, data.name);
-  return { live: await tellGame(server) };
+  return {};
 }
 
 /* @note a new item (and its seed, which every block has right after it) copied from an existing item */
@@ -271,7 +406,7 @@ async function create(server, form, actor) {
     conn.release();
   }
   await logAction(server, actor, 'item_create', `#${id}`, `${name} (copy of #${baseId})`);
-  return { id, live: await tellGame(server) };
+  return { id };
 }
 
 /* @note an edited item goes back to how items.dat has it. a custom item (and its seed) is removed */
@@ -284,10 +419,10 @@ async function reset(server, item, actor) {
     await db.getPool().query(`DELETE FROM ${table(server, 'item_edits')} WHERE id = ?`, [item.id]);
     await logAction(server, actor, 'item_reset', `#${item.id}`, item.name);
   }
-  return { live: await tellGame(server) };
+  return {};
 }
 
 module.exports = {
-  PAGE_SIZE, SORTS, FILTERS, COLLISIONS, FLAGS, TYPES, UserError,
-  typeName, ready, summary, list, get, update, create, reset,
+  PAGE_SIZE, SORTS, FILTERS, COLLISIONS, FLAGS, TYPES, CLOTH_SLOTS, SPREADS, POWERS, UserError,
+  typeName, colorHex, colorValue, ready, summary, list, get, update, create, reset, pending, choices,
 };

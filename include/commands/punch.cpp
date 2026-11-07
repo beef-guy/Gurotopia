@@ -544,8 +544,13 @@ static constexpr std::pair<u_short, u_char> punch_ids[] {
     { 14572, 237 }, // Watermelon Dress
 };
 
+static std::unordered_map<u_short, u_char> punch_overrides{};
+
+void set_punch_overrides(std::unordered_map<u_short, u_char> overrides) { punch_overrides = std::move(overrides); }
+
 u_char get_punch_id(u_int item_id)
 {
+    if (auto o = punch_overrides.find(static_cast<u_short>(item_id)); o != punch_overrides.end()) return o->second;
     const auto it = std::ranges::lower_bound(punch_ids, item_id, {}, &std::pair<u_short, u_char>::first);
     return (it != std::ranges::end(punch_ids) && it->first == item_id) ? it->second : 0;
 }

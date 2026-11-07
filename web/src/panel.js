@@ -43,13 +43,14 @@ const DONE_MESSAGES = {
   roleSaved: 'Role saved. It applies right away, name colours too.',
   roleMoved: 'Order saved.',
   roleDeleted: 'Role deleted. Everyone who had it is a Player now.',
-  itemSaved: 'Saved. Players see the change after they log in again.',
-  itemCreated: 'Item created, with its seed. Change anything below, then players see it after they log in again.',
+  itemSaved: 'Saved. Restart the server to put it in the game.',
+  itemCreated: 'Item created, with its seed. Change anything below, then restart the server to put it in the game.',
   textureUploaded: 'Texture uploaded. Pick it in an item\'s Texture box to use it.',
   textureExisted: 'You already had that exact picture, so the existing texture was kept.',
   textureDeleted: 'Texture deleted. Items that still use it show a blank square.',
-  itemReset: 'Back to how items.dat has it. Players see it after they log in again.',
-  itemDeleted: 'Custom item deleted, with its seed.',
+  itemReset: 'Back to how items.dat has it. Restart the server to put it in the game.',
+  itemDeleted: 'Custom item deleted, with its seed. Restart the server to take it out of the game.',
+  itemsApplied: 'Restarting. Item changes are in the game once the server is back online, and players get them when they log in.',
 };
 
 function describe(server, proc) {
@@ -417,8 +418,8 @@ function buildApp() {
       filter: Object.hasOwn(items.FILTERS, req.query.filter) ? req.query.filter : 'all',
       page: req.query.page,
     };
-    const [stats, result] = await Promise.all([items.summary(req.server), items.list(req.server, query)]);
-    await renderServer(req, res, 'items', { extra: { stats, result, query, filters: items.FILTERS, title: `Items · ${req.server.name}` } });
+    const [stats, result, pending] = await Promise.all([items.summary(req.server), items.list(req.server, query), items.pending(req.server)]);
+    await renderServer(req, res, 'items', { extra: { stats, result, query, pending, filters: items.FILTERS, title: `Items · ${req.server.name}` } });
   }));
 
   app.get('/servers/:id/items/search.json', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
@@ -428,7 +429,7 @@ function buildApp() {
 
   function sendIcon(res, png) {
     if (!png) return res.status(404).end();
-    res.set('Cache-Control', 'private, max-age=300');
+    res.set('Cache-Control', 'private, no-cache'); // @note an edited item's icon shows at once (the ETag makes it cheap)
     res.type('png').send(png);
   }
 
@@ -460,6 +461,8 @@ function buildApp() {
       error, status, template: 'item',
       extra: {
         item: fresh, form: form || {}, base, ready: await items.ready(req.server), textures: await resources.list(config.cdn.dir, req.server),
+        pending: await items.pending(req.server), choices: fresh ? await items.choices(req.server) : null,
+        types: items.TYPES, clothSlots: items.CLOTH_SLOTS, spreads: items.SPREADS, powers: items.POWERS,
         collisions: items.COLLISIONS, flags: items.FLAGS, title: `${fresh ? fresh.name : 'New item'} · ${req.server.name}`,
       },
     });
@@ -476,7 +479,7 @@ function buildApp() {
       if (!(err instanceof items.UserError)) throw err;
       return renderItemForm(req, res, { form: req.body, error: err.message, status: 400 });
     }
-    res.redirect(`/servers/${req.server.id}/items/${result.id}?done=itemCreated${result.live ? '' : '&live=0'}`);
+    res.redirect(`/servers/${req.server.id}/items/${result.id}?done=itemCreated`);
   }));
 
   app.get('/servers/:id/items/:itemId', auth.requireUser, loadServer, loadItem, asyncRoute((req, res) => renderItemForm(req, res, { item: req.item })));
@@ -489,15 +492,15 @@ function buildApp() {
       if (!(err instanceof items.UserError)) throw err;
       return renderItemForm(req, res, { item: req.item, form: req.body, error: err.message, status: 400 });
     }
-    res.redirect(`/servers/${req.server.id}/items/${req.item.id}?done=itemSaved${result.live ? '' : '&live=0'}`);
+    res.redirect(`/servers/${req.server.id}/items/${req.item.id}?done=itemSaved`);
   }));
 
   app.post('/servers/:id/items/:itemId/reset', auth.requireUser, loadServer, auth.checkCsrf, loadItem, asyncRoute(async (req, res) => {
-    const result = await items.reset(req.server, req.item, req.user.username);
+    await items.reset(req.server, req.item, req.user.username);
     const done = req.item.custom ? 'itemDeleted' : 'itemReset';
     res.redirect(req.item.custom
-      ? `/servers/${req.server.id}/items?filter=custom&done=${done}${result.live ? '' : '&live=0'}`
-      : `/servers/${req.server.id}/items/${req.item.id}?done=${done}${result.live ? '' : '&live=0'}`);
+      ? `/servers/${req.server.id}/items?filter=custom&done=${done}`
+      : `/servers/${req.server.id}/items/${req.item.id}?done=${done}`);
   }));
 
   /* ---------- resources (custom textures) ---------- */
@@ -664,6 +667,7 @@ function buildApp() {
       } catch (err) {
         return renderServer(req, res, 'overview', { error: `Could not ${name} the server: ${err.message}`, status: 502 });
       }
+      if (name !== 'stop' && req.body.back === 'items') return res.redirect(`/servers/${req.server.id}/items?done=itemsApplied`); // @note the item manager's "restart to apply"
       res.redirect(`/servers/${req.server.id}?done=${action.done}`);
     }));
   }

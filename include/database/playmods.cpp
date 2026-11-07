@@ -907,8 +907,23 @@ static constexpr ::playmod playmods[] {
     { 16444, 1, "Double Jump" },
 };
 
+static std::unordered_map<u_short, std::string> override_names{};
+static std::unordered_map<u_short, ::playmod> overrides{};
+
+void set_playmod_overrides(std::unordered_map<u_short, std::pair<u_short, std::string>> list)
+{
+    overrides.clear();
+    override_names.clear();
+    for (auto &[id, value] : list)
+    {
+        const std::string &name = override_names.emplace(id, std::move(value.second)).first->second; // @note node based: c_str() stays put
+        overrides.emplace(id, ::playmod{ id, value.first, name.c_str() });
+    }
+}
+
 const ::playmod *get_playmod(u_short item_id)
 {
+    if (auto o = overrides.find(item_id); o != overrides.end()) return o->second.mods ? &o->second : nullptr;
     const auto it = std::ranges::lower_bound(playmods, item_id, {}, &::playmod::item);
     return (it != std::ranges::end(playmods) && it->item == item_id) ? &*it : nullptr;
 }

@@ -32,8 +32,57 @@
       clearTimeout(timer);
       timer = setTimeout(() => {
         const q = new URLSearchParams({ file: tex.value.trim(), x: x.value || '0', y: y.value || '0' });
-        img.src = `/servers/${server}/items/texture.png?${q}`;
-      }, 250);
+        const url = `/servers/${server}/items/texture.png?${q}`;
+        img.src = url;
+        for (const live of document.querySelectorAll('.live-icon')) live.src = url; // @note the header and "In game" card follow too
+        cell();
+      }, 200);
+    }
+
+    /* ---------- texture picker: your uploads, or a game file ---------- */
+    const source = $('tex-source'); const gameTex = $('game-tex'); const pick = $('sheet-pick');
+    const pickImg = $('pick-img'); const pickCell = $('pick-cell');
+    let scale = 1;
+    function sheet() {
+      const w = Number(pickImg.dataset.w); const h = Number(pickImg.dataset.h);
+      if (!w || !h) return;
+      const room = pickImg.closest('.sheet-wrap').clientWidth - 2;
+      scale = Math.max(1, Math.min(w <= 128 && h <= 128 ? 4 : w <= 512 ? 2 : 1, Math.floor(room / w)));
+      pickImg.style.width = `${w * scale}px`; pickImg.style.height = `${h * scale}px`;
+      cell();
+    }
+    function cell() {
+      if (!pickCell || pick.hidden) return;
+      const cx = Number(x.value) || 0; const cy = Number(y.value) || 0;
+      pickCell.hidden = false;
+      pickCell.style.left = `${cx * 32 * scale}px`; pickCell.style.top = `${cy * 32 * scale}px`;
+      pickCell.style.width = `${32 * scale}px`; pickCell.style.height = `${32 * scale}px`;
+    }
+    if (source) {
+      source.addEventListener('change', () => {
+        const opt = source.selectedOptions[0];
+        const own = Boolean(source.value);
+        gameTex.hidden = own;
+        pick.hidden = !own;
+        if (own) {
+          tex.value = source.value;
+          pickImg.dataset.w = opt.dataset.w; pickImg.dataset.h = opt.dataset.h;
+          pickImg.src = `/servers/${server}/resources/${encodeURIComponent(source.value)}/sheet.png`;
+          x.value = '0'; y.value = '0';
+          sheet();
+        } else {
+          tex.focus();
+        }
+        texture();
+      });
+      pickImg.addEventListener('click', (e) => {
+        const r = pickImg.getBoundingClientRect();
+        const cx = Math.floor((e.clientX - r.left) / scale / 32); const cy = Math.floor((e.clientY - r.top) / scale / 32);
+        if (cx < 0 || cy < 0 || (cx + 1) * 32 > Number(pickImg.dataset.w) || (cy + 1) * 32 > Number(pickImg.dataset.h)) return;
+        x.value = String(cx); y.value = String(cy);
+        texture();
+      });
+      if (!pick.hidden) sheet();
     }
     form.addEventListener('input', (e) => {
       if ([name, info, rarity].includes(e.target)) paint();

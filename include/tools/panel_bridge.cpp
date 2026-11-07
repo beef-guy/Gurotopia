@@ -4,6 +4,8 @@
 #include "action/quit_to_exit.hpp"
 #include "commands/moderation.hpp"
 #include "database/roles.hpp"
+#include "database/playmods.hpp"
+#include "commands/punch.hpp"
 #include "tools/terminal.hpp"
 
 #include "panel_bridge.hpp"
@@ -201,6 +203,15 @@ void panel_bridge_create_tables()
         "rarity INT NULL, hits INT NULL, hit_reset INT NULL, collision INT NULL, cat INT NULL, tex_x INT NULL, tex_y INT NULL,"
         "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
     ")");
+    /* @note added later: more of items.dat, and the server's punch effect and powers per item */
+    mysql_query(db.mysql,
+        "ALTER TABLE item_edits "
+        "ADD COLUMN IF NOT EXISTS type INT NULL, ADD COLUMN IF NOT EXISTS hit_sound INT NULL, ADD COLUMN IF NOT EXISTS cloth INT NULL,"
+        "ADD COLUMN IF NOT EXISTS spread INT NULL, ADD COLUMN IF NOT EXISTS max_amount INT NULL, ADD COLUMN IF NOT EXISTS grow INT NULL,"
+        "ADD COLUMN IF NOT EXISTS seed_base INT NULL, ADD COLUMN IF NOT EXISTS seed_overlay INT NULL,"
+        "ADD COLUMN IF NOT EXISTS tree_base INT NULL, ADD COLUMN IF NOT EXISTS tree_leaves INT NULL,"
+        "ADD COLUMN IF NOT EXISTS seed_color BIGINT NULL, ADD COLUMN IF NOT EXISTS seed_overlay_color BIGINT NULL,"
+        "ADD COLUMN IF NOT EXISTS extra_file VARCHAR(128) NULL, ADD COLUMN IF NOT EXISTS punch INT NULL, ADD COLUMN IF NOT EXISTS powers INT NULL");
 }
 
 void panel_items_catalog()
@@ -216,6 +227,10 @@ void panel_items_catalog()
         "collision INT NOT NULL DEFAULT 0, cat INT NOT NULL DEFAULT 0, cloth INT NOT NULL DEFAULT 10,"
         "texture VARCHAR(255) NOT NULL DEFAULT '', tex_x INT NOT NULL DEFAULT 0, tex_y INT NOT NULL DEFAULT 0,"
         "info TEXT, custom TINYINT NOT NULL DEFAULT 0,"
+        "hit_sound INT NOT NULL DEFAULT 0, spread INT NOT NULL DEFAULT 0, max_amount INT NOT NULL DEFAULT 0, grow INT NOT NULL DEFAULT 0,"
+        "seed_base INT NOT NULL DEFAULT 0, seed_overlay INT NOT NULL DEFAULT 0, tree_base INT NOT NULL DEFAULT 0, tree_leaves INT NOT NULL DEFAULT 0,"
+        "seed_color BIGINT NOT NULL DEFAULT 0, seed_overlay_color BIGINT NOT NULL DEFAULT 0, extra_file VARCHAR(255) NOT NULL DEFAULT '',"
+        "punch INT NOT NULL DEFAULT 0, powers INT NOT NULL DEFAULT 0,"
         "INDEX (name)"
     ") DEFAULT CHARSET=utf8mb4");
 
@@ -229,11 +244,15 @@ void panel_items_catalog()
     const std::size_t original = items_original_count();
     const auto row = [&](const ::item &item)
     {
-        return std::format("({},'{}',{},{},{},{},{},{},{},'{}',{},{},'{}',{})",
+        const ::playmod *mod = get_playmod(item.id);
+        return std::format("({},'{}',{},{},{},{},{},{},{},'{}',{},{},'{}',{},{},{},{},{},{},{},{},{},{},{},'{}',{},{})",
             item.id, plain(item.raw_name, 255), item.type, item.rarity, item.hits, item.hit_reset, item.collision, item.cat, item.cloth_type,
-            plain(item.texture, 255), item.tex_x, item.tex_y, plain(item.info, 4000), item.id >= original ? 1 : 0);
+            plain(item.texture, 255), item.tex_x, item.tex_y, plain(item.info, 4000), item.id >= original ? 1 : 0,
+            item.hit_sound, item.spread, item.max_amount, item.tick, item.seed_base, item.seed_overlay, item.tree_base, item.tree_leaves,
+            item.seed_color, item.seed_overlay_color, plain(item.extra_file, 255), get_punch_id(item.id), mod ? mod->mods : 0);
     };
-    const std::string insert = "INSERT INTO item_catalog (id, name, type, rarity, hits, hit_reset, collision, cat, cloth, texture, tex_x, tex_y, info, custom) VALUES ";
+    const std::string insert = "INSERT INTO item_catalog (id, name, type, rarity, hits, hit_reset, collision, cat, cloth, texture, tex_x, tex_y, info, custom, "
+        "hit_sound, spread, max_amount, grow, seed_base, seed_overlay, tree_base, tree_leaves, seed_color, seed_overlay_color, extra_file, punch, powers) VALUES ";
 
     std::size_t written = 0, failed = 0;
     for (std::size_t from = 0; from < items.size(); from += 500)

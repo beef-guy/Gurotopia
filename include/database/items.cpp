@@ -10,6 +10,8 @@
 #include <optional>
 
 #include "items.hpp"
+#include "commands/punch.hpp"
+#include "database/playmods.hpp"
 
 std::vector<::item> items;
 
@@ -69,6 +71,8 @@ namespace
     struct fields
     {
         u_int name{}, texture{}, tex_x{}, tex_y{}, collision{}, hits{}, hit_reset{}, rarity{}, cat{}, info{};
+        u_int type{}, hit_sound{}, spread{}, cloth{}, max_amount{}, extra_file{};
+        u_int seed_base{}, seed_overlay{}, tree_base{}, tree_leaves{}, seed_color{}, seed_overlay_color{}, grow{};
         bool has_info{};
     };
 
@@ -91,8 +95,10 @@ namespace
         at.cat = pos - start;
         shift_pos(data, pos, item.cat);
 
+        at.type = pos - start;
         shift_pos(data, pos, item.type);
-        pos += sizeof(u_char);
+        at.hit_sound = pos - start;
+        shift_pos(data, pos, item.hit_sound);
 
         at.name = pos - start;
         short len = read_len(data, pos);
@@ -118,6 +124,7 @@ namespace
         shift_pos(data, pos, item.tex_x);
         at.tex_y = pos - start;
         shift_pos(data, pos, item.tex_y);
+        at.spread = pos - start;
         shift_pos(data, pos, item.spread);
         pos += sizeof(u_char);
 
@@ -130,18 +137,22 @@ namespace
         at.hit_reset = pos - start;
         shift_pos(data, pos, item.hit_reset);
 
+        at.cloth = pos - start;
         if (item.type == type::CLOTHING) shift_pos(data, pos, item.cloth_type);
         else pos += 1; // @note assign nothing
         if (item.type == type::AURA) item.cloth_type = clothing::ANCES;
         at.rarity = pos - start;
         shift_pos(data, pos, item.rarity);
 
-        pos += sizeof(u_char);
+        at.max_amount = pos - start;
+        shift_pos(data, pos, item.max_amount);
         {
+            at.extra_file = pos - start;
             len = read_len(data, pos);
             pos += sizeof(short);
             if (len < 0 || pos + len > data.size()) return 0;
             std::string audio_directory(reinterpret_cast<char*>(&data[pos]), len);
+            item.extra_file = audio_directory;
             pos += len;
 
             if (audio_directory.ends_with(".mp3"))
@@ -153,13 +164,21 @@ namespace
 
         for (int i = 0; i < 4; ++i) pos += read_len(data, pos) + sizeof(short);
 
+        at.seed_base = pos - start;
         shift_pos(data, pos, item.seed_base);
+        at.seed_overlay = pos - start;
         shift_pos(data, pos, item.seed_overlay);
-        pos += sizeof(std::array<u_char, 2ull>); // @note tree base, tree leaves
+        at.tree_base = pos - start;
+        shift_pos(data, pos, item.tree_base);
+        at.tree_leaves = pos - start;
+        shift_pos(data, pos, item.tree_leaves);
+        at.seed_color = pos - start;
         shift_pos(data, pos, item.seed_color);
+        at.seed_overlay_color = pos - start;
         shift_pos(data, pos, item.seed_overlay_color);
         pos += sizeof(int); // @note ingredient (unused)
 
+        at.grow = pos - start;
         shift_pos(data, pos, item.tick);
 
         pos += sizeof(short);
@@ -265,8 +284,11 @@ namespace
     {
         int id{}, base{-1};
         bool removed{};
-        std::optional<std::string> name, texture, info;
+        std::optional<std::string> name, texture, info, extra_file;
         std::optional<int> rarity, hits, hit_reset, collision, cat, tex_x, tex_y;
+        std::optional<int> type, hit_sound, cloth, spread, max_amount, grow, seed_base, seed_overlay, tree_base, tree_leaves;
+        std::optional<long long> seed_color, seed_overlay_color;
+        std::optional<int> punch, powers; // @note not in items.dat: the server's punch effect and powers when worn
     };
 
     void apply(std::vector<u_char> &record, const edit &e)
@@ -280,7 +302,16 @@ namespace
         if (e.hit_reset) data_modify(record, at.hit_reset, std::clamp(*e.hit_reset, 0, 86400));
         if (e.rarity) data_modify(record, at.rarity, static_cast<short>(std::clamp(*e.rarity, 0, 999)));
         if (e.cat) data_modify(record, at.cat, static_cast<u_char>(std::clamp(*e.cat, 0, 255)));
-        if (e.info && at.has_info) set_string(record, at.info, *e.info); // @note later in the record than the others, so their places don't move
+        const auto byte = [&](const std::optional<int> &v, u_int where) { if (v) data_modify(record, where, static_cast<u_char>(std::clamp(*v, 0, 255))); };
+        byte(e.type, at.type); byte(e.hit_sound, at.hit_sound); byte(e.cloth, at.cloth); byte(e.spread, at.spread);
+        byte(e.max_amount, at.max_amount);
+        byte(e.seed_base, at.seed_base); byte(e.seed_overlay, at.seed_overlay); byte(e.tree_base, at.tree_base); byte(e.tree_leaves, at.tree_leaves);
+        if (e.seed_color) data_modify(record, at.seed_color, static_cast<u_int>(std::clamp<long long>(*e.seed_color, 0, 0xffffffffLL)));
+        if (e.seed_overlay_color) data_modify(record, at.seed_overlay_color, static_cast<u_int>(std::clamp<long long>(*e.seed_overlay_color, 0, 0xffffffffLL)));
+        if (e.grow) data_modify(record, at.grow, std::clamp(*e.grow, 0, 31536000));
+        /* @note strings last, latest in the record first, so the places read above don't move */
+        if (e.info && at.has_info) set_string(record, at.info, *e.info);
+        if (e.extra_file) set_string(record, at.extra_file, *e.extra_file);
         if (e.texture) set_string(record, at.texture, *e.texture);
         if (e.name) set_name(record, *e.name);
     }
@@ -289,7 +320,9 @@ namespace
     {
         std::vector<edit> out{};
         if (db.mysql == nullptr || mysql_query(db.mysql,
-            "SELECT id, base_id, removed, name, texture, info, rarity, hits, hit_reset, collision, cat, tex_x, tex_y FROM item_edits ORDER BY id"))
+            "SELECT id, base_id, removed, name, texture, info, rarity, hits, hit_reset, collision, cat, tex_x, tex_y, "
+            "type, hit_sound, cloth, spread, max_amount, grow, seed_base, seed_overlay, tree_base, tree_leaves, seed_color, seed_overlay_color, "
+            "extra_file, punch, powers FROM item_edits ORDER BY id"))
             return out; // @note no table yet: nothing was changed on the website
         MYSQL_RES *res = mysql_store_result(db.mysql);
         if (res == nullptr) return out;
@@ -304,6 +337,11 @@ namespace
             e.name = text(row[3]); e.texture = text(row[4]); e.info = text(row[5]);
             e.rarity = num(row[6]); e.hits = num(row[7]); e.hit_reset = num(row[8]);
             e.collision = num(row[9]); e.cat = num(row[10]); e.tex_x = num(row[11]); e.tex_y = num(row[12]);
+            e.type = num(row[13]); e.hit_sound = num(row[14]); e.cloth = num(row[15]); e.spread = num(row[16]); e.max_amount = num(row[17]);
+            e.grow = num(row[18]); e.seed_base = num(row[19]); e.seed_overlay = num(row[20]); e.tree_base = num(row[21]); e.tree_leaves = num(row[22]);
+            e.seed_color = row[23] ? std::optional<long long>(std::atoll(row[23])) : std::nullopt;
+            e.seed_overlay_color = row[24] ? std::optional<long long>(std::atoll(row[24])) : std::nullopt;
+            e.extra_file = text(row[25]); e.punch = num(row[26]); e.powers = num(row[27]);
             if (e.id >= 0 && e.id < 0xffff) out.push_back(e);
         }
         mysql_free_result(res);
@@ -381,6 +419,25 @@ int items_apply_edits()
         ++applied;
     }
     rebuild();
+
+    /* @note punch effects and powers live in the server, not items.dat. a custom item keeps its original's unless the website set them */
+    set_punch_overrides({});
+    set_playmod_overrides({});
+    std::unordered_map<u_short, u_char> punches{};
+    std::unordered_map<u_short, std::pair<u_short, std::string>> powers{};
+    for (const edit &e : edits)
+    {
+        if (e.id >= static_cast<int>(items.size()) || e.removed) continue;
+        const bool custom = e.base >= 0 && e.id >= original;
+        const u_short id = static_cast<u_short>(e.id);
+        if (e.punch) punches[id] = static_cast<u_char>(std::clamp(*e.punch, 0, 255));
+        else if (custom) { if (u_char p = get_punch_id(static_cast<u_int>(e.base)); p) punches[id] = p; }
+        const ::playmod *base_mod = custom ? get_playmod(static_cast<u_short>(e.base)) : nullptr;
+        if (e.powers) powers[id] = { static_cast<u_short>(*e.powers & 0xffff), base_mod ? base_mod->name : items[id].raw_name };
+        else if (base_mod) powers[id] = { base_mod->mods, base_mod->name };
+    }
+    set_punch_overrides(std::move(punches));
+    set_playmod_overrides(std::move(powers));
     return applied;
 }
 

@@ -196,6 +196,12 @@ public:
     u_char spread{}; // @note how it joins its neighbours: 1 single, 2 eight ways, 3 sideways, 4 sticks to a wall, 5 four ways, 6 random, 7 up and down
     u_char seed_base{}, seed_overlay{}; // @note seed.rttex icons
     u_int seed_color{}, seed_overlay_color{}; // @note 0xBBGGRRAA
+    u_char tree_base{}, tree_leaves{}; // @note tree.rttex shapes
+
+    /* @note more of items.dat, for the website's item manager */
+    u_char hit_sound{}; // @note what punching it sounds like (the byte after the item type)
+    u_char max_amount{}; // @note most of it in one backpack slot
+    std::string extra_file{}; // @note an extra file the client loads for it (a sound, an animation, ...)
 };
 extern std::vector<::item> items;
 
