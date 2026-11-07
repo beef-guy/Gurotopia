@@ -51,15 +51,26 @@ function Remove-PSNodeCA {
 }
 
 Write-Host ''
-Write-Host '  PSNode setup'
-Write-Host '  ------------'
-Write-Host '  1 = Play on PSNode'
-Write-Host '  2 = Go back to the official Growtopia'
+Write-Host '  ===== PSNode setup ====='
 Write-Host ''
-$choice = Read-Host '  Type 1 or 2 and press Enter'
+Write-Host '  This will set your PC up to play on PSNode. It makes two changes:'
+Write-Host '   1. Points Growtopia at the PSNode server ({{IP}}).'
+Write-Host '   2. Trusts the PSNode Game CA, which only works for the Growtopia'
+Write-Host '      login addresses and nothing else.'
+Write-Host ''
+Write-Host '  Press Enter to set up PSNode now.'
+Write-Host '  (Type R then Enter instead to remove PSNode and go back to the official game.)'
+Write-Host ''
+$choice = Read-Host '  Your choice'
 
 try {
-    if ($choice -eq '1') {
+    if ($choice -match '^[Rr]') {
+        Save-Hosts (Remove-GrowtopiaLines)
+        Remove-PSNodeCA
+        Write-Host ''
+        Write-Host '  Done. Growtopia goes to the official servers again (restart it).' -ForegroundColor Green
+    }
+    else {
         # @note the certificate first: if antivirus blocks it, the hosts file is still untouched
         Remove-PSNodeCA
         $tmp = Join-Path $env:TEMP 'psnode-game-ca.crt'
@@ -74,13 +85,6 @@ try {
         Write-Host ''
         Write-Host '  Done! Close Growtopia completely, open it again, and type a server name on the login page.' -ForegroundColor Green
     }
-    elseif ($choice -eq '2') {
-        Save-Hosts (Remove-GrowtopiaLines)
-        Remove-PSNodeCA
-        Write-Host ''
-        Write-Host '  Done. Growtopia goes to the official servers again (restart it).' -ForegroundColor Green
-    }
-    else { Write-Host '  Nothing changed.' }
 }
 catch {
     Write-Host ''
