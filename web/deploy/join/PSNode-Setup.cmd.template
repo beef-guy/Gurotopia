@@ -60,15 +60,16 @@ $choice = Read-Host '  Type 1 or 2 and press Enter'
 
 try {
     if ($choice -eq '1') {
-        $lines = Remove-GrowtopiaLines
-        foreach ($n in $names) { $lines += "$ip $n" }
-        Save-Hosts $lines
-
+        # @note the certificate first: if antivirus blocks it, the hosts file is still untouched
         Remove-PSNodeCA
         $tmp = Join-Path $env:TEMP 'psnode-game-ca.crt'
         [IO.File]::WriteAllText($tmp, $caPem)
         Import-Certificate -FilePath $tmp -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
         Remove-Item $tmp
+
+        $lines = Remove-GrowtopiaLines
+        foreach ($n in $names) { $lines += "$ip $n" }
+        Save-Hosts $lines
 
         Write-Host ''
         Write-Host '  Done! Close Growtopia completely, open it again, and type a server name on the login page.' -ForegroundColor Green
