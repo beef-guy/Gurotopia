@@ -121,7 +121,8 @@ function createApp() {
     // @note a saved token never registers again
     success(res, makeToken({ clientToken: b64(String(clientData)), growId, password, server, register: false }));
   };
-  app.all('/player/growid/checktoken', checktoken);
+  // @note the client only reads the new token from validate/checktoken, so send it there (307 keeps the POST body)
+  app.all('/player/growid/checktoken', (_req, res) => res.redirect(307, '/player/growid/validate/checktoken'));
   app.all('/player/growid/validate/checktoken', checktoken);
 
   app.use((_req, res) => res.status(404).type('text/plain').send('Not found'));
