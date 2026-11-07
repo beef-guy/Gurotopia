@@ -13,10 +13,12 @@
 <div class="page-head">
   <div>
     <h1>Item manager</h1>
-    <p class="muted">Every item in <%= server.name %>'s items.dat. Rename, recolour or rebalance any of them, or make new items from existing ones. Players see changes after they log in again.</p>
+    <p class="muted">Every item in <%= server.name %>'s items.dat. Rename, recolour or rebalance any of them, or make new items from existing ones. Changes go into the game when the server restarts.</p>
   </div>
   <% if (stats.ready) { %><a class="btn" href="/servers/<%= server.id %>/items/new"><svg class="ic"><use href="#i-plus"/></svg>New item</a><% } %>
 </div>
+
+<%- include('partials/items-pending') %>
 
 <% if (!stats.ready) { %>
 <section class="card">
@@ -80,6 +82,7 @@
         <td><a class="item-link" href="/servers/<%= server.id %>/items/<%= it.id %>">
           <span class="item-ic <%= it.seed ? 'seed' : '' %>" data-letter="<%= (it.name || '?').slice(0, 1).toUpperCase() %>"><% if (!it.seed) { %><img src="/servers/<%= server.id %>/items/<%= it.id %>/icon.png" alt="" loading="lazy" width="32" height="32"><% } %></span>
           <span class="item-name"><%= it.name %></span></a>
+          <% if (it.pending) { %><span class="tag edited">After restart</span><% } %>
           <% if (it.custom) { %><span class="tag custom">Custom</span><% } else if (it.edited) { %><span class="tag edited">Edited</span><% } %>
         </td>
         <td class="mono">#<%= it.id %></td>

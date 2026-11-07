@@ -376,9 +376,35 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     assert.equal(edit.name, 'Golden Dirt');
     assert.equal(edit.cat, 0x80, 'untradeable flag set, nothing else');
     assert.equal(edit.rarity, 42);
-    const [[cat]] = await admin.query(`SELECT name, rarity FROM ${srv}.item_catalog WHERE id = 2`);
-    assert.equal(cat.name, 'Golden Dirt', 'the game rebuilt items.dat and its list');
+    assert.equal((await admin.query(`SELECT name FROM ${srv}.item_catalog WHERE id = 2`))[0][0].name, 'Dirt', 'not in the game until it restarts');
     assert.match((await alice.get(`/servers/${id}/items?filter=edited`)).text, /Golden Dirt/);
+    r = await alice.get(`/servers/${id}/items`);
+    assert.match(r.text, /1 item change is saved but not in the game yet/);
+    assert.match(r.text, /Restart to apply/);
+    r = await alice.post(`/servers/${id}/restart`, { _csrf: await alice.csrf(), back: 'items' });
+    assert.equal(r.location, `/servers/${id}/items?done=itemsApplied`);
+    await waitFor(async () => (await admin.query(`SELECT name FROM ${srv}.item_catalog WHERE id = 2`).catch(() => [[]]))[0][0]?.name === 'Golden Dirt', 'restart to apply the edit');
+    await waitFor(async () => !/saved but not in the game yet/.test((await alice.get(`/servers/${id}/items`)).text), 'the banner to go');
+
+    r = await alice.get(`/servers/${id}/items/6`);
+    assert.match(r.text, /When worn/);
+    assert.match(r.text, /Punch effect/);
+    r = await alice.post(`/servers/${id}/items/6`, { _csrf: await alice.csrf(), name: 'Legendary Wings', info: '', rarity: '50', hits: '3', hitReset: '8', collision: '0',
+      texture: 'tiles_page1.rttex', texX: '6', texY: '0', type: '20', maxAmount: '200', hitSound: '2', spread: '1', extraFile: 'audio/wings.wav',
+      cloth: '6', punch: '7', powersShown: '1', pw_double_jump: '1', pw_speedy: '1' });
+    assert.equal(r.status, 302);
+    [[edit]] = await admin.query(`SELECT cloth, punch, powers, extra_file, max_amount FROM ${srv}.item_edits WHERE id = 6`);
+    assert.deepEqual([edit.cloth, edit.punch, edit.powers, edit.extra_file, edit.max_amount], [6, 7, 3, 'audio/wings.wav', 200]);
+    assert.equal((await alice.post(`/servers/${id}/items/6`, { _csrf: await alice.csrf(), name: 'Legendary Wings', info: '', rarity: '50', hits: '3', hitReset: '8', collision: '0',
+      texture: 'tiles_page1.rttex', texX: '6', texY: '0', extraFile: '../../etc/passwd' })).status, 400);
+    r = await alice.post(`/servers/${id}/items/7`, { _csrf: await alice.csrf(), name: 'Legendary Wings Seed', info: '', rarity: '50', hits: '0', hitReset: '8', collision: '0',
+      texture: 'seed.rttex', texX: '0', texY: '0', grow: '3600', seedHex: '#ff8800', seedOverlayHex: '#00ff00', seedBase: '2', seedOverlay: '3', treeBase: '1', treeLeaves: '2' });
+    assert.equal(r.status, 302);
+    [[edit]] = await admin.query(`SELECT grow, seed_color FROM ${srv}.item_edits WHERE id = 7`);
+    assert.equal(edit.grow, 3600);
+    assert.equal(Number(edit.seed_color), 0x0088ffff, 'colours are 0xBBGGRRAA, keeping the alpha');
+    await alice.post(`/servers/${id}/items/6/reset`, { _csrf: await alice.csrf() });
+    await alice.post(`/servers/${id}/items/7/reset`, { _csrf: await alice.csrf() });
     assert.equal((await alice.post(`/servers/${id}/items/2`, { _csrf: await alice.csrf(), name: 'Bad|Name', info: '', rarity: '1', hits: '1', hitReset: '1', collision: '1', texture: 'a.rttex', texX: '0', texY: '0' })).status, 400);
     assert.equal((await alice.post(`/servers/${id}/items/2`, { _csrf: await alice.csrf(), name: 'Ok', info: '', rarity: '1', hits: '1', hitReset: '1', collision: '1', texture: '../x.rttex', texX: '0', texY: '0' })).status, 400);
 
@@ -404,8 +430,7 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     assert.equal((await alice.get(`/servers/${id}/items/8`)).status, 404);
 
     const [sent] = await admin.query(`SELECT done_at FROM ${srv}.panel_actions WHERE action = 'items_reload'`);
-    assert.equal(sent.length, 4);
-    assert.ok(sent.every((a) => a.done_at));
+    assert.equal(sent.length, 0, 'changes wait for a restart now');
     assert.equal((await alice.get(`/servers/${id}/items/2/icon.png`)).status, 404, 'no textures on this machine: the page shows a letter instead');
   });
 

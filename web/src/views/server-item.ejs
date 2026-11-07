@@ -2,8 +2,11 @@
 <%
   const v = (key, fallback) => (form[key] !== undefined ? form[key] : fallback);
   const raritySet = (r) => r > 0 && r < 999;
+  const iconSrc = (it) => `/servers/${server.id}/items/texture.png?file=${encodeURIComponent(v('texture', it.texture))}&x=${v('texX', it.texX)}&y=${v('texY', it.texY)}`;
 %>
 <p class="crumb"><a href="/servers/<%= server.id %>/items"><svg class="ic"><use href="#i-back"/></svg>All items</a></p>
+
+<%- include('partials/items-pending') %>
 
 <% if (!ready) { %>
 <section class="card"><div class="empty"><svg class="ic big"><use href="#i-box"/></svg><p>Start the server once with the latest game build and its items show up here.</p></div></section>
@@ -40,7 +43,7 @@
 <!-- ---------- edit item ---------- -->
 <div class="page-head">
   <div class="player-head">
-    <span class="item-ic huge <%= item.seed ? 'seed' : '' %>" data-letter="<%= (item.name || '?').slice(0, 1).toUpperCase() %>"><% if (!item.seed) { %><img src="/servers/<%= server.id %>/items/<%= item.id %>/icon.png" alt="" width="32" height="32"><% } %></span>
+    <span class="item-ic huge <%= item.seed ? 'seed' : '' %>" data-letter="<%= (item.name || '?').slice(0, 1).toUpperCase() %>"><% if (!item.seed) { %><img class="live-icon" src="<%= iconSrc(item) %>" alt="" width="32" height="32"><% } %></span>
     <div>
       <h1><%= item.name %>
         <% if (item.custom) { %><span class="tag custom">Custom</span><% } else if (item.edited) { %><span class="tag edited">Edited</span><% } %>
@@ -105,12 +108,22 @@
   </section>
 
   <section class="card">
-    <div class="card-head"><h2><svg class="ic"><use href="#i-box"/></svg>Look</h2></div>
-    <p class="muted small">Which picture it uses: a texture file and the 32×32 cell in it (counted from 0). Use one of the game's files, or your own from <a href="/servers/<%= server.id %>/resources">Resources</a>.</p>
+    <div class="card-head"><h2><svg class="ic"><use href="#i-image"/></svg>Look</h2><a class="btn ghost small" href="/servers/<%= server.id %>/resources"><svg class="ic"><use href="#i-upload"/></svg>Upload textures</a></div>
+    <% const curTex = v('texture', item.texture); const own = textures.find((t) => t.file === curTex); %>
     <div class="tex-grid">
-      <label>Texture file
-        <input name="texture" id="f-texture" value="<%= v('texture', item.texture) %>" maxlength="64" spellcheck="false" list="own-textures" autocomplete="off">
-        <datalist id="own-textures"><% for (const t of textures) { %><option value="<%= t.file %>"><%= t.w %>×<%= t.h %></option><% } %></datalist>
+      <label>Texture
+        <select id="tex-source">
+          <% if (textures.length) { %>
+          <optgroup label="Your uploads">
+            <% for (const t of textures) { %><option value="<%= t.file %>" data-w="<%= t.w %>" data-h="<%= t.h %>" <%= own && own.file === t.file ? 'selected' : '' %>><%= t.file.replace(/^ps[0-9]+_/, '').replace(/_[0-9a-f]{8}\.rttex$/, '') %> (<%= t.cols * t.rows %> <%= t.cols * t.rows === 1 ? 'cell' : 'cells' %>)</option><% } %>
+          </optgroup>
+          <% } %>
+          <option value="" <%= own ? '' : 'selected' %>>A game texture file…</option>
+        </select>
+        <small><%= textures.length ? 'Pick one of your uploads, or type a file from the game.' : 'Upload your own on the Resources page, or type a file from the game.' %></small>
+      </label>
+      <label id="game-tex" <%= own ? 'hidden' : '' %>>Game texture file
+        <input name="texture" id="f-texture" value="<%= curTex %>" maxlength="64" spellcheck="false" autocomplete="off">
       </label>
       <label>Column
         <input type="number" name="texX" id="f-x" min="0" max="255" value="<%= v('texX', item.texX) %>">
@@ -118,9 +131,113 @@
       <label>Row
         <input type="number" name="texY" id="f-y" min="0" max="255" value="<%= v('texY', item.texY) %>">
       </label>
-      <span class="item-ic huge preview" id="tex-preview" data-letter="?"><img id="tex-img" src="/servers/<%= server.id %>/items/texture.png?file=<%= encodeURIComponent(v('texture', item.texture)) %>&x=<%= v('texX', item.texX) %>&y=<%= v('texY', item.texY) %>" alt="Texture preview" width="32" height="32"></span>
+      <span class="item-ic huge preview" id="tex-preview" data-letter="?"><img id="tex-img" src="<%= iconSrc(item) %>" alt="Texture preview" width="32" height="32"></span>
+    </div>
+    <div class="sheet-pick" id="sheet-pick" <%= own ? '' : 'hidden' %>>
+      <p class="muted small">Click the picture you want.</p>
+      <div class="sheet-wrap"><div class="sheet"><img id="pick-img" alt="Your texture" <% if (own) { %>src="/servers/<%= server.id %>/resources/<%= encodeURIComponent(own.file) %>/sheet.png" data-w="<%= own.w %>" data-h="<%= own.h %>"<% } %>><span class="sheet-cell" id="pick-cell" hidden></span></div></div>
     </div>
   </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-sliders"/></svg>What it is</h2></div>
+    <div class="form-grid">
+      <label>Item type
+        <select name="type" id="f-type">
+          <% const ty = Number(v('type', item.type)); %>
+          <% if (!Object.hasOwn(types, ty)) { %><option value="<%= ty %>" selected>Type <%= ty %></option><% } %>
+          <% for (const [k, label] of Object.entries(types).sort((a, b) => a[1].localeCompare(b[1]))) { %><option value="<%= k %>" <%= Number(k) === ty ? 'selected' : '' %>><%= label %></option><% } %>
+        </select>
+        <small>Changes how the game treats it. Careful with special types.</small>
+      </label>
+      <label>Most in one slot
+        <input type="number" name="maxAmount" min="1" max="250" value="<%= v('maxAmount', item.maxAmount || 200) %>">
+        <small>Usually 200.</small>
+      </label>
+      <label>Hit sound
+        <select name="hitSound">
+          <% const hs = Number(v('hitSound', item.hitSound)); const hsList = choices.hitSounds.some((c) => c.value === hs) ? choices.hitSounds : [...choices.hitSounds, { value: hs, example: '', count: 0 }]; %>
+          <% for (const c of hsList) { %><option value="<%= c.value %>" <%= c.value === hs ? 'selected' : '' %>><%= c.example ? `Like ${c.example}` : `Sound ${c.value}` %><%= c.count > 1 ? ` (+${c.count - 1} more)` : '' %></option><% } %>
+        </select>
+        <small>What punching it sounds like.</small>
+      </label>
+      <label>How it joins its neighbours
+        <select name="spread">
+          <% const sp = Number(v('spread', item.spread)); %>
+          <% if (!spreads.some((x) => x.value === sp)) { %><option value="<%= sp %>" selected>Game setting (<%= sp %>)</option><% } %>
+          <% for (const x of spreads) { %><option value="<%= x.value %>" <%= x.value === sp ? 'selected' : '' %>><%= x.label %></option><% } %>
+        </select>
+        <small>For blocks drawn with joining edges.</small>
+      </label>
+    </div>
+    <label class="mt">Extra file
+      <input name="extraFile" value="<%= v('extraFile', item.extraFile) %>" maxlength="128" spellcheck="false" placeholder="e.g. audio/punch.wav">
+      <small>A sound or animation file the game loads for this item. Leave as it is if you're not sure.</small>
+    </label>
+  </section>
+
+  <% if (item.wearable) { %>
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-user"/></svg>When worn</h2></div>
+    <input type="hidden" name="powersShown" value="1">
+    <div class="form-grid">
+      <label>Clothing slot
+        <select name="cloth">
+          <% const cl = Number(v('cloth', item.cloth)); %>
+          <% clothSlots.forEach((label, i) => { %><option value="<%= i %>" <%= i === cl ? 'selected' : '' %>><%= label %></option><% }) %>
+        </select>
+      </label>
+      <label>Punch effect
+        <select name="punch">
+          <% const pu = Number(v('punch', item.punch)); %>
+          <option value="0" <%= pu === 0 ? 'selected' : '' %>>None (plain punch)</option>
+          <% const puList = choices.punches.some((c) => c.value === pu) || pu === 0 ? choices.punches : [...choices.punches, { value: pu, example: '', count: 0 }]; %>
+          <% for (const c of puList) { %><option value="<%= c.value %>" <%= c.value === pu ? 'selected' : '' %>><%= c.example ? `Like ${c.example}` : `Effect ${c.value}` %> (#<%= c.value %>)</option><% } %>
+        </select>
+        <small>The animation and sound when the wearer punches.</small>
+      </label>
+    </div>
+    <p class="muted small mt">Powers the wearer gets</p>
+    <div class="flag-list powers">
+      <% for (const p of powers) { const on = form._csrf ? Boolean(form[p.key]) : item[p.key]; %>
+      <label class="flag"><input type="checkbox" name="<%= p.key %>" value="1" <%= on ? 'checked' : '' %>><span><strong><%= p.label %></strong></span></label>
+      <% } %>
+    </div>
+  </section>
+  <% } %>
+
+  <% if (item.seed) { %>
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-globe"/></svg>Seed and tree</h2></div>
+    <div class="form-grid">
+      <label>Grow time (seconds)
+        <input type="number" name="grow" min="0" max="31536000" value="<%= v('grow', item.grow) %>">
+        <small>How long the tree takes. 3600 is an hour.</small>
+      </label>
+      <label>Seed colour
+        <input type="color" name="seedHex" value="<%= v('seedHex', item.seedHex) %>">
+      </label>
+      <label>Seed pattern colour
+        <input type="color" name="seedOverlayHex" value="<%= v('seedOverlayHex', item.seedOverlayHex) %>">
+      </label>
+      <label>Seed shape
+        <input type="number" name="seedBase" min="0" max="255" value="<%= v('seedBase', item.seedBase) %>">
+      </label>
+      <label>Seed pattern
+        <input type="number" name="seedOverlay" min="0" max="255" value="<%= v('seedOverlay', item.seedOverlay) %>">
+      </label>
+      <label>Tree trunk
+        <input type="number" name="treeBase" min="0" max="255" value="<%= v('treeBase', item.treeBase) %>">
+      </label>
+      <label>Tree leaves
+        <input type="number" name="treeLeaves" min="0" max="255" value="<%= v('treeLeaves', item.treeLeaves) %>">
+      </label>
+    </div>
+    <p class="muted small mt">Shapes are numbered pictures in the game's seed and tree textures.</p>
+  </section>
+  <% } else if (item.id % 2 === 0) { %>
+  <p class="muted small">Its seed's colours and grow time are on <a href="/servers/<%= server.id %>/items/<%= item.id + 1 %>">the seed's page</a>.</p>
+  <% } %>
 
   <div class="save-bar">
     <a class="btn ghost" href="/servers/<%= server.id %>/items">Cancel</a>
@@ -132,7 +249,7 @@
   <section class="card info-card" aria-label="How players see it">
     <p class="eyebrow">In game</p>
     <div class="info-head">
-      <span class="item-ic big <%= item.seed ? 'seed' : '' %>" data-letter="<%= (item.name || '?').slice(0, 1).toUpperCase() %>"><% if (!item.seed) { %><img src="/servers/<%= server.id %>/items/<%= item.id %>/icon.png" alt="" width="32" height="32"><% } %></span>
+      <span class="item-ic big <%= item.seed ? 'seed' : '' %>" data-letter="<%= (item.name || '?').slice(0, 1).toUpperCase() %>"><% if (!item.seed) { %><img class="live-icon" src="<%= iconSrc(item) %>" alt="" width="32" height="32"><% } %></span>
       <div>
         <strong id="p-name"><%= v('name', item.name) %></strong>
         <span class="muted small" id="p-rarity" <%= raritySet(Number(v('rarity', item.rarity))) ? '' : 'hidden' %>>Rarity: <span id="p-rarity-n"><%= v('rarity', item.rarity) %></span></span>
