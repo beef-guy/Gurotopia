@@ -200,7 +200,7 @@ async function tellGame(server) {
   return !server.reporting || Boolean(id);
 }
 
-const TEXT_RE = /^[^`|\\\r\n]*$/;
+const TEXT_RE = /^[\x20-\x5b\x5d-\x5f\x61-\x7b\x7d\x7e]*$/; // @note plain ASCII (items.dat isn't UTF-8), without ` | or \\
 
 function readForm(form, item) {
   const name = String(form.name ?? item.name).trim().replace(/\s+/g, ' ');
