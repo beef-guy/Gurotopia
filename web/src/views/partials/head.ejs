@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title><%= title ? title + ' · ' : '' %>PSNode</title>
-  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="/static/favicon.svg?v=<%= v %>" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css?v=<%= v %>">
 </head>
 <body class="<%= typeof bodyClass !== 'undefined' ? bodyClass : '' %>">
 <%- include('icons') %>
