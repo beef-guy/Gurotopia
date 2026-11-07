@@ -34,6 +34,10 @@ players ──► gateway UDP 17091 ──(server name)──► that server's U
 
 `src/login.js` is the page the game client opens to log in. It has a **Server name** box, so players pick which server the gateway sends them to. It puts the server name, GrowID and password into the login token and never checks passwords itself: the gateway does that in the chosen server's database. So it needs no database and no secrets. It runs on 127.0.0.1:3002 as `gurotopia-login`, and nginx serves it as `login.psnode.cloud`. Set `loginurl|login.psnode.cloud` in the gateway's `/opt/gurotopia/server_data.php`. Try it locally with `npm run login`.
 
+## Letting players connect (psnode.cloud/join)
+
+The game asks `www.growtopia1.com` which server to join, over HTTPS, and only accepts a certificate Windows trusts. `deploy/join/make-game-cert.sh <public IP>` (run as root) makes a **PSNode Game CA** that is name-constrained to growtopia1.com and growtopia2.com, signs the game certificate with it, installs it in `/opt/gurotopia/resources/ctx/`, and writes `PSNode-Setup.cmd` and a short guide to `/var/www/psnode-join/`, which nginx serves at https://psnode.cloud/join/. Players run the setup once: it points the four growtopia hosts lines at the VPS and trusts that CA (choice 2 removes both). The CA key stays in `/root/psnode-ca`. Re-running the script keeps the CA and renews the game certificate (it lasts 825 days).
+
 ## Running it on your PC
 
 You need Node.js 20 or newer and MariaDB.
