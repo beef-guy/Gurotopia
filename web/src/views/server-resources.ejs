@@ -1,0 +1,76 @@
+<%- include('partials/server-shell') %>
+<%
+  const kb = (n) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+%>
+<div class="page-head">
+  <div>
+    <h1>Resources</h1>
+    <p class="muted">Your own pictures for custom items. Upload a PNG or an .rttex, and PNGs are turned into .rttex for you. Then put the texture's name in an item's Look box in the Item manager.</p>
+  </div>
+</div>
+
+<% if (!cdnReady) { %>
+<p class="notice warn">Uploads work, but players can't download them yet: this panel has no CDN_HOST set. Ask the panel's admin to turn it on.</p>
+<% } %>
+
+<section class="card">
+  <div class="card-head"><h2><svg class="ic"><use href="#i-upload"/></svg>Upload a texture</h2><span class="muted small"><%= files.length %> of <%= maxFiles %> · <%= kb(totalBytes) %> used</span></div>
+  <form method="post" action="/servers/<%= server.id %>/resources" id="upload-form" class="upload">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <input type="hidden" name="name" id="up-name">
+    <input type="hidden" name="data" id="up-data">
+    <label class="drop" id="drop">
+      <input type="file" id="up-file" accept=".png,.rttex,image/png">
+      <svg class="ic big"><use href="#i-image"/></svg>
+      <strong id="drop-title">Drop a PNG or .rttex here, or click to pick one</strong>
+      <small class="muted">Up to 1024×1024 pixels and 2 MB. Each item picture is a 32×32 cell, so a 32×32 PNG is one item and a bigger one is a sheet of many.</small>
+    </label>
+    <div class="save-row"><button type="submit" id="up-send" disabled>Upload</button></div>
+  </form>
+</section>
+
+<% if (files.length === 0) { %>
+<section class="card"><div class="empty"><svg class="ic big"><use href="#i-image"/></svg><p>No textures yet. Upload one above.</p></div></section>
+<% } else { %>
+<div class="res-layout">
+  <section class="card flush res-list" aria-label="Your textures">
+    <ul>
+      <% for (const f of files) { %>
+      <li class="<%= picked && picked.file === f.file ? 'on' : '' %>">
+        <a href="/servers/<%= server.id %>/resources?file=<%= encodeURIComponent(f.file) %>">
+          <span class="item-ic"><img src="/servers/<%= server.id %>/items/texture.png?file=<%= encodeURIComponent(f.file) %>&x=0&y=0" alt="" width="32" height="32" loading="lazy"></span>
+          <span class="res-meta"><strong class="mono"><%= f.file %></strong><small class="muted"><%= f.w %>×<%= f.h %> · <%= f.cols * f.rows %> <%= f.cols * f.rows === 1 ? 'cell' : 'cells' %> · <%= kb(f.bytes) %></small></span>
+        </a>
+      </li>
+      <% } %>
+    </ul>
+  </section>
+
+  <% if (picked) { %>
+  <section class="card res-view" id="res-view" data-file="<%= picked.file %>" data-w="<%= picked.w %>" data-h="<%= picked.h %>">
+    <div class="card-head">
+      <h2 class="mono"><%= picked.file %></h2>
+      <a class="btn ghost small" href="/servers/<%= server.id %>/resources/<%= encodeURIComponent(picked.file) %>/download">Download</a>
+    </div>
+    <p class="muted small">Click a cell to see its column and row. Use those with the texture name in an item's Look box.</p>
+    <div class="sheet-wrap">
+      <div class="sheet" id="sheet">
+        <img src="/servers/<%= server.id %>/resources/<%= encodeURIComponent(picked.file) %>/sheet.png" alt="The whole texture" id="sheet-img">
+        <span class="sheet-cell" id="sheet-cell" hidden></span>
+      </div>
+    </div>
+    <div class="use-box">
+      <div><span class="muted small">Texture file</span><code id="use-file"><%= picked.file %></code></div>
+      <div><span class="muted small">Column</span><code id="use-x">0</code></div>
+      <div><span class="muted small">Row</span><code id="use-y">0</code></div>
+      <button type="button" class="ghost small" id="use-copy"><svg class="ic"><use href="#i-copy"/></svg>Copy name</button>
+    </div>
+    <form method="post" action="/servers/<%= server.id %>/resources/<%= encodeURIComponent(picked.file) %>/delete" class="inline del-form" id="del-form">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button type="submit" class="ghost small danger-text"><svg class="ic"><use href="#i-trash"/></svg>Delete texture</button>
+    </form>
+  </section>
+  <% } %>
+</div>
+<% } %>
+<%- include('partials/server-shell-end') %>

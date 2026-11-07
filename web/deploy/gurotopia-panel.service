@@ -18,6 +18,9 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
+# @note the Resources page saves uploaded textures here (CDN_DIR). Make it first:
+#   install -d -o gurotopia -g gurotopia -m 755 /srv/gurotopia/www /srv/gurotopia/www/cdn
+ReadWritePaths=-/srv/gurotopia/www/cdn
 
 [Install]
 WantedBy=multi-user.target

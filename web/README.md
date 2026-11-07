@@ -124,6 +124,22 @@ Useful commands: `journalctl -u gurotopia-supervisor -f` (supervisor), `journalc
 
 **Updating the website**: `git pull` in `/opt/gurotopia-src`, copy `web/` over `/opt/gurotopia-web` (keep `node_modules`), run `npm ci --omit=dev`, then `systemctl restart gurotopia-panel`. The game servers keep running. Only restart `gurotopia-supervisor` when its own code changed, because that stops every server (they save first and start again by themselves).
 
+## Custom item textures (Resources page)
+
+Owners upload a PNG or .rttex on a server's Resources page. PNGs are converted to .rttex (padded to a
+power-of-two size, cells stay where they were). Files are saved as `CDN_DIR/<server id>/cache/game/ps<id>_<name>_<hash>.rttex`;
+the hash in the name means a changed picture always gets a new name, so players never keep a stale copy.
+
+To let players download them:
+
+1. `install -d -o gurotopia -g gurotopia -m 755 /srv/gurotopia/www /srv/gurotopia/www/cdn`
+2. Set `CDN_HOST=panel.psnode.cloud` (and `CDN_DIR` if not the default) in `/etc/gurotopia/panel.env`.
+3. Install the new `gurotopia-panel.service` (it may write to CDN_DIR) and the `/cdn/` blocks from `deploy/nginx.conf`,
+   then `systemctl daemon-reload`, restart the panel and supervisor, and `nginx -t && systemctl reload nginx`.
+
+Game servers then start with `--cdn-host CDN_HOST --cdn-path cdn/<id>/cache/`, and the client downloads any file it
+doesn't have from there. nginx serves the server's own uploads and fetches everything else from Growtopia's CDN.
+
 ## Security notes
 
 - Passwords are hashed with bcrypt. Logins are limited to 10 tries per 15 minutes per IP and username, and sign-ups to 5 per hour per IP.

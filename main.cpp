@@ -66,6 +66,8 @@ static void print_help()
         "  --owner NAME        this account is always a developer (staff commands, /find, /give)\n"
         "  --sandbox           let every player use /find (a creative server)\n"
         "  --textures DIR      Growtopia's game folder, for /renderworld (default: %LOCALAPPDATA%\\Growtopia\\game)\n"
+        "  --cdn-host HOST     where the client downloads files it doesn't have, e.g. custom item textures (default: Growtopia's)\n"
+        "  --cdn-path PATH     folder on that host, ending in cache/ (default: Growtopia's)\n"
         "  --discord-webhook F file with the Discord webhook URL /renderworld posts to (default: discord_webhook.txt)\n"
         "\n"
         "  many servers behind one IP:\n"
@@ -161,6 +163,19 @@ static bool parse_options(int argc, char *argv[])
         {
             if (value.empty() || value.size() > 18 || !isalnum(value)) { print("--owner must be a GrowID: letters and digits, at most 18"); return false; }
             gServer_data.owner = value;
+        }
+        else if (option == "--cdn-host")
+        {
+            if (value.empty() || value.size() > 128 || value.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-:") != std::string::npos)
+                { print("--cdn-host must be a host name like cdn.example.com"); return false; }
+            gServer_data.cdn_host = value;
+        }
+        else if (option == "--cdn-path")
+        {
+            if (value.size() > 128 || !value.ends_with('/') || value.starts_with('/') || value.find("..") != std::string::npos ||
+                value.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./-") != std::string::npos)
+                { print("--cdn-path must be a folder like psnode/1/cache/ (no leading /, ends with /)"); return false; }
+            gServer_data.cdn_path = value;
         }
         else if (option == "--https-bind") gServer_data.https_bind = value;
         else if (option == "--server-data") gServer_data.config_file = value;

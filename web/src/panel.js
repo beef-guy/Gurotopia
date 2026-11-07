@@ -21,6 +21,7 @@ const live = require('./live');
 const roles = require('./roles');
 const items = require('./items');
 const rttex = require('./rttex');
+const resources = require('./resources');
 
 const DONE_MESSAGES = {
   created: 'Server created and starting. It shows Online once it is ready.',
@@ -44,6 +45,9 @@ const DONE_MESSAGES = {
   roleDeleted: 'Role deleted. Everyone who had it is a Player now.',
   itemSaved: 'Saved. Players see the change after they log in again.',
   itemCreated: 'Item created, with its seed. Change anything below, then players see it after they log in again.',
+  textureUploaded: 'Texture uploaded. Pick it in an item\'s Texture box to use it.',
+  textureExisted: 'You already had that exact picture, so the existing texture was kept.',
+  textureDeleted: 'Texture deleted. Items that still use it show a blank square.',
   itemReset: 'Back to how items.dat has it. Players see it after they log in again.',
   itemDeleted: 'Custom item deleted, with its seed.',
 };
@@ -151,7 +155,9 @@ function buildApp() {
     next();
   });
   app.use('/static', express.static(path.join(__dirname, '..', 'public'), { maxAge: '1h' }));
-  app.use(express.urlencoded({ extended: false, limit: '10kb' }));
+  const smallForms = express.urlencoded({ extended: false, limit: '10kb' });
+  const uploadForms = express.urlencoded({ extended: false, limit: '3mb' }); // @note a texture arrives as base64 (2 MB file)
+  app.use((req, res, next) => (req.method === 'POST' && /^\/servers\/[0-9]+\/resources$/.test(req.path) ? uploadForms : smallForms)(req, res, next));
   app.use(auth.loadSession);
   app.use((req, res, next) => {
     res.locals.done = DONE_MESSAGES[req.query.done] || '';
@@ -295,6 +301,7 @@ function buildApp() {
       { page: 'players', label: 'Players', icon: 'user', path: '/players' },
       { page: 'worlds', label: 'Worlds', icon: 'globe', path: '/worlds' },
       { page: 'items', label: 'Item manager', icon: 'box', path: '/items' },
+      { page: 'resources', label: 'Resources', icon: 'image', path: '/resources' },
       { label: 'Gem shop', icon: 'grid', soon: true },
     ] },
     { group: 'Development', items: [
@@ -430,7 +437,8 @@ function buildApp() {
     const x = Number(req.query.x);
     const y = Number(req.query.y);
     if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x > 255 || y > 255) return res.status(400).end();
-    sendIcon(res, rttex.icon(config.texturesDir, String(req.query.file || ''), x, y));
+    const file = String(req.query.file || '');
+    sendIcon(res, rttex.icon(resources.folderFor(config.cdn.dir, config.texturesDir, req.server, file), file, x, y));
   });
 
   const loadItem = asyncRoute(async (req, res, next) => {
@@ -442,7 +450,7 @@ function buildApp() {
   });
 
   app.get('/servers/:id/items/:itemId/icon.png', auth.requireUser, loadServer, loadItem, (req, res) => {
-    sendIcon(res, rttex.icon(config.texturesDir, req.item.texture, req.item.texX, req.item.texY));
+    sendIcon(res, rttex.icon(resources.folderFor(config.cdn.dir, config.texturesDir, req.server, req.item.texture), req.item.texture, req.item.texX, req.item.texY));
   });
 
   async function renderItemForm(req, res, { item = null, form = null, error = '', status = 200 } = {}) {
@@ -451,7 +459,7 @@ function buildApp() {
     await renderServer(req, res, 'items', {
       error, status, template: 'item',
       extra: {
-        item: fresh, form: form || {}, base, ready: await items.ready(req.server),
+        item: fresh, form: form || {}, base, ready: await items.ready(req.server), textures: await resources.list(config.cdn.dir, req.server),
         collisions: items.COLLISIONS, flags: items.FLAGS, title: `${fresh ? fresh.name : 'New item'} · ${req.server.name}`,
       },
     });
@@ -490,6 +498,53 @@ function buildApp() {
     res.redirect(req.item.custom
       ? `/servers/${req.server.id}/items?filter=custom&done=${done}${result.live ? '' : '&live=0'}`
       : `/servers/${req.server.id}/items/${req.item.id}?done=${done}${result.live ? '' : '&live=0'}`);
+  }));
+
+  /* ---------- resources (custom textures) ---------- */
+
+  async function renderResources(req, res, { error = '', status = 200 } = {}) {
+    const files = await resources.list(config.cdn.dir, req.server);
+    const picked = files.find((f) => f.file === req.query.file) || files[0] || null;
+    await renderServer(req, res, 'resources', {
+      error, status,
+      extra: {
+        files, picked, cdnReady: Boolean(config.cdn.host), maxFiles: resources.MAX_FILES,
+        totalBytes: files.reduce((n, f) => n + f.bytes, 0), title: `Resources · ${req.server.name}`,
+      },
+    });
+  }
+
+  app.get('/servers/:id/resources', auth.requireUser, loadServer, asyncRoute((req, res) => renderResources(req, res)));
+
+  app.post('/servers/:id/resources', auth.requireUser, loadServer, auth.checkCsrf, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      const b64 = String(req.body.data || '');
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) throw new resources.UserError('That upload was damaged. Try again.');
+      result = await resources.upload(config.cdn.dir, req.server, String(req.body.name || ''), Buffer.from(b64, 'base64'));
+    } catch (err) {
+      if (!(err instanceof resources.UserError)) throw err;
+      return renderResources(req, res, { error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/resources?file=${encodeURIComponent(result.file)}&done=${result.existed ? 'textureExisted' : 'textureUploaded'}`);
+  }));
+
+  app.get('/servers/:id/resources/:file/sheet.png', auth.requireUser, loadServer, (req, res) => {
+    if (!resources.isOwnName(req.server, req.params.file)) return res.status(404).end();
+    sendIcon(res, rttex.sheetPng(resources.dirFor(config.cdn.dir, req.server), req.params.file));
+  });
+
+  app.get('/servers/:id/resources/:file/download', auth.requireUser, loadServer, (req, res) => {
+    if (!resources.exists(config.cdn.dir, req.server, req.params.file)) return res.status(404).end();
+    res.download(path.join(resources.dirFor(config.cdn.dir, req.server), req.params.file), req.params.file);
+  });
+
+  app.post('/servers/:id/resources/:file/delete', auth.requireUser, loadServer, auth.checkCsrf, asyncRoute(async (req, res) => {
+    try { await resources.remove(config.cdn.dir, req.server, req.params.file); } catch (err) {
+      if (!(err instanceof resources.UserError)) throw err;
+      return renderResources(req, res, { error: err.message, status: 404 });
+    }
+    res.redirect(`/servers/${req.server.id}/resources?done=textureDeleted`);
   }));
 
   /* ---------- roles ---------- */
