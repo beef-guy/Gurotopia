@@ -6,6 +6,7 @@
 #include "daily_quest.hpp"
 #include "commands/weather.hpp"
 #include "action/ghosts.hpp"
+#include "database/machines.hpp"
 
 #include "wrenchables.hpp"
 
@@ -914,10 +915,7 @@ void weather_edit(ENetEvent &event, const ::hPipe &hPipe)
 
 namespace
 {
-    constexpr short ID_MAGPLANT = 5638;
     constexpr short ID_MAGPLANT_REMOTE = 5640;
-    constexpr short ID_GAIAS_BEACON = 6946;
-    constexpr short ID_UNSTABLE_TESSERACT = 6948;
 
     ::magplant &magplant_at(::world &world, const ::pos &pos)
     {
@@ -940,8 +938,9 @@ namespace
             item.type == type::AURA || item.type == type::GEM || item.type == type::FIST || item.type == type::WRENCH ||
             item.id == ID_MAGPLANT_REMOTE)
             return "This item is not compatible with this machine.";
-        if (machine == ID_UNSTABLE_TESSERACT && item.type == type::SEED) return "This item is not compatible with this machine.";
-        if (machine == ID_GAIAS_BEACON && item.type != type::SEED) return "This item is not compatible with this machine.";
+        const machines::accepts takes = machines::takes(machine); // @note Unstable Tesseract: no seeds, Gaia's Beacon: seeds only (the website can change it)
+        if (takes == machines::NO_SEEDS && item.type == type::SEED) return "This item is not compatible with this machine.";
+        if (takes == machines::SEEDS_ONLY && item.type != type::SEED) return "This item is not compatible with this machine.";
         return "";
     }
 }
@@ -1006,6 +1005,7 @@ void magplant_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
     const std::string name = id_to_item(mag.item).raw_name;
     dialog.add_label_with_icon("small", std::format("`2{}``", name), mag.item);
     dialog.add_label("small", (mag.count > 0) ? std::format("`6The machine contains {} `2{}``", mag.count, name) : "`6The machine is currently empty!``");
+    dialog.add_smalltext(std::format("`oIt holds up to {} items.``", magplant_limit(machine.id))); // @note the website's Machine Capacities
 
     if (owner)
     {
@@ -1015,12 +1015,12 @@ void magplant_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
         if (200 - have > 0 && mag.count > 0) dialog.add_button("TakeItem", "Retrieve Items");
         if (mag.count < 1) dialog.add_item_picker("SelectItem", "`wChange Item``", std::format("Choose an item to put in the {}!", machine.raw_name));
     }
-    if (machine.id == ID_MAGPLANT)
+    if (machines::has_remote(machine.id))
     {
         dialog.add_label("small", std::format("Building Mode: {}", mag.remote ? "ACTIVE" : "`6DISABLED"));
         if (owner || (mag.remote && !linked))
             dialog.add_label("small", mag.remote ? 
-                std::format("Use the MAGPLANT 5000 Remote to build `2{}`` directly from the MAGPLANT 5000's storage.", name) : "Punch to activate building mode.");
+                std::format("Use the MAGPLANT 5000 Remote to build `2{}`` directly from the {}'s storage.", name, machine.raw_name) : "Punch to activate building mode.");
         dialog.add_spacer("small");
         if (!linked && mag.remote) dialog.add_button("GetRemote", "Get Remote");
     }
@@ -1047,7 +1047,7 @@ void magplant_edit(ENetEvent &event, const ::hPipe &hPipe)
 
     if (button == "GetRemote")
     {
-        if (machine.id != ID_MAGPLANT || mag.item == 0 || !mag.remote) return;
+        if (!machines::has_remote(machine.id) || mag.item == 0 || !mag.remote) return;
         magplant_give_remote(event, *world, pos);
         pPeer->mysql_update_all();
         return;

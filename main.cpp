@@ -31,6 +31,7 @@
 #include "include/database/roles.hpp"
 #include "include/database/titles.hpp"
 #include "include/database/item_effects.hpp"
+#include "include/database/machines.hpp"
 
 #include <chrono>
 #include <csignal>
@@ -268,6 +269,7 @@ int main(int argc, char *argv[])
 
         decode_items_dat();
         if (!platform::gateway) panel_items_catalog();
+        if (!platform::gateway) machines::init(); // @note the machine capacities the website edits (web/src/machines.js)
         discord::load_webhook(discord_webhook_file); // @note ./discord_webhook.txt, or --discord-webhook
         parse_store();
         check_for_holiday();

@@ -33,6 +33,7 @@
 #include "action/steam.hpp"
 #include "database/playmods.hpp"
 #include "database/item_effects.hpp"
+#include "database/machines.hpp"
 
 #include "tile_change.hpp"
 
@@ -113,7 +114,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
         if (gamePacket.id == 5640/*MAGPLANT 5000 Remote*/)
         {
             if (pPeer->magplant_world == world->name && valid_tile(*world, pPeer->magplant) &&
-                world->blocks[cord(pPeer->magplant.x_int(), pPeer->magplant.y_int())].fg == 5638/*MAGPLANT 5000*/)
+                machines::has_remote(world->blocks[cord(pPeer->magplant.x_int(), pPeer->magplant.y_int())].fg)) // @note MAGPLANT 5000, or a custom magplant with building mode
             {
                 auto mag = std::ranges::find(world->magplants, pPeer->magplant, &::magplant::pos);
                 if (mag != world->magplants.end() && mag->remote && mag->item != 0) remote_from = &*mag;
@@ -414,7 +415,7 @@ void tile_change(ENetEvent& event, ::gamePacket gamePacket)
                 {
                     auto mag = std::ranges::find(world->magplants, gamePacket.punch, &::magplant::pos);
                     if (mag == world->magplants.end()) break;
-                    if (item.id == 5638/*MAGPLANT 5000*/ && mag->item != 0) // @note punching turns building mode on and off
+                    if (machines::has_remote(item.id) && mag->item != 0) // @note punching turns building mode on and off (MAGPLANT 5000, or a custom magplant with building mode)
                     {
                         mag->remote = !mag->remote;
                         world_tile_update(*world, gamePacket.punch);

@@ -526,25 +526,98 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     r = await alice.post(`/servers/${id}/items`, { _csrf: await alice.csrf(), base: '7', name: 'Emerald Wings' });
     assert.equal(r.status, 302);
     const newId = Number(r.location.match(/items\/(\d+)/)[1]);
-    assert.equal(newId, 8, 'first even id after the game\'s items');
+    assert.equal(newId, 12, 'first even id after the game\'s items');
     const [made] = await admin.query(`SELECT id, base_id, name FROM ${srv}.item_edits WHERE base_id IS NOT NULL ORDER BY id`);
-    assert.deepEqual(made.map((m) => [m.id, m.base_id, m.name]), [[8, 6, 'Emerald Wings'], [9, 7, 'Emerald Wings Seed']], 'a seed picked the block, and the seed came too');
+    assert.deepEqual(made.map((m) => [m.id, m.base_id, m.name]), [[12, 6, 'Emerald Wings'], [13, 7, 'Emerald Wings Seed']], 'a seed picked the block, and the seed came too');
     assert.match((await alice.get(`/servers/${id}/items?filter=custom`)).text, /Emerald Wings/);
     assert.equal((await alice.post(`/servers/${id}/items`, { _csrf: await alice.csrf(), base: '6', name: 'emerald wings' })).status, 400, 'names are unique');
-    assert.equal((await alice.post(`/servers/${id}/items`, { _csrf: await alice.csrf(), base: '8', name: 'Copy Of Copy' })).status, 400, 'only from the game\'s own items');
+    assert.equal((await alice.post(`/servers/${id}/items`, { _csrf: await alice.csrf(), base: '12', name: 'Copy Of Copy' })).status, 400, 'only from the game\'s own items');
 
     r = await alice.post(`/servers/${id}/items/2/reset`, { _csrf: await alice.csrf() });
     assert.equal(r.status, 302);
     assert.equal((await admin.query(`SELECT * FROM ${srv}.item_edits WHERE id = 2`))[0].length, 0, 'reset removes the edit');
-    r = await alice.post(`/servers/${id}/items/8/reset`, { _csrf: await alice.csrf() });
+    r = await alice.post(`/servers/${id}/items/12/reset`, { _csrf: await alice.csrf() });
     assert.equal(r.status, 302);
-    const [gone] = await admin.query(`SELECT removed FROM ${srv}.item_edits WHERE id IN (8, 9)`);
+    const [gone] = await admin.query(`SELECT removed FROM ${srv}.item_edits WHERE id IN (12, 13)`);
     assert.ok(gone.every((g) => g.removed === 1), 'deleting a custom item removes its seed too');
-    assert.equal((await alice.get(`/servers/${id}/items/8`)).status, 404);
+    assert.equal((await alice.get(`/servers/${id}/items/12`)).status, 404);
 
     const [sent] = await admin.query(`SELECT done_at FROM ${srv}.panel_actions WHERE action = 'items_reload'`);
     assert.equal(sent.length, 0, 'changes wait for a restart now');
     assert.equal((await alice.get(`/servers/${id}/items/2/icon.png`)).status, 404, 'no textures on this machine: the page shows a letter instead');
+  });
+
+  await t.test('machine capacities: change a machine, make a custom magplant', async () => {
+    const srv = `srv_${id}`;
+    let r = await alice.get(`/servers/${id}/machines`);
+    assert.equal(r.status, 200);
+    assert.match(r.text, /MAGPLANT 5000[\s\S]*Magplant[\s\S]*5,000[\s\S]*Any item[\s\S]*Yes/, 'the game\'s magplant with its numbers');
+    assert.match(r.text, /Vending Machine[\s\S]*No limit/, 'vending machines have no limit by default');
+    assert.doesNotMatch(r.text, /Legendary Wings/, 'only machines are listed');
+    assert.match((await alice.get(`/servers/${id}/machines?q=vend`)).text, /1 machine</);
+    assert.match((await alice.get(`/servers/${id}/machines?sort=capacity&dir=desc`)).text, /Vending Machine[\s\S]*MAGPLANT 5000/, 'no limit sorts as the biggest');
+    assert.match((await alice.get(`/servers/${id}/machines?sort=capacity`)).text, /MAGPLANT 5000[\s\S]*Vending Machine/);
+
+    r = await alice.post(`/servers/${id}/machines/8`, { _csrf: await alice.csrf(), capacity: '20,000', accepts: '1', note: 'Bigger' });
+    assert.equal(r.status, 302, r.text.slice(0, 400));
+    let [[row]] = await admin.query(`SELECT * FROM ${srv}.machines WHERE item = 8`);
+    assert.deepEqual([row.capacity, row.accepts, row.remote, row.note], [20000, 1, 0, 'Bigger'], 'unticked building mode switches it off');
+    assert.match((await alice.get(`/servers/${id}/machines`)).text, /20,000[\s\S]*Seeds only[\s\S]*Changed|Changed[\s\S]*20,000/);
+    r = await alice.post(`/servers/${id}/machines/8/reset`, { _csrf: await alice.csrf() });
+    assert.equal(r.status, 302);
+    [[row]] = await admin.query(`SELECT * FROM ${srv}.machines WHERE item = 8`);
+    assert.deepEqual([row.capacity, row.accepts, row.remote], [5000, 0, 1], 'reset to the real game\'s numbers');
+    assert.equal((await alice.post(`/servers/${id}/machines/8/delete`, { _csrf: await alice.csrf() })).status, 400, 'the game\'s machines stay');
+
+    const bad = async (item, form, why) => assert.equal((await alice.post(`/servers/${id}/machines/${item}`, { _csrf: await alice.csrf(), ...form })).status, 400, why);
+    await bad(8, { capacity: '0' }, 'a magplant holds at least 1');
+    await bad(8, { capacity: '1000000001' }, 'capacity is capped');
+    await bad(8, { capacity: '1.5' }, 'whole numbers');
+    await bad(8, { capacity: '-5' }, 'no negative numbers');
+    await bad(8, { capacity: '100', accepts: '7' }, 'accepts is checked');
+    await bad(8, { capacity: '100', note: 'a|b' }, 'no | in notes');
+    r = await alice.post(`/servers/${id}/machines/10`, { _csrf: await alice.csrf(), capacity: '0', accepts: '1', remote: '1' });
+    assert.equal(r.status, 302, 'vending machines may have no limit');
+    [[row]] = await admin.query(`SELECT * FROM ${srv}.machines WHERE item = 10`);
+    assert.deepEqual([row.capacity, row.accepts, row.remote], [0, 0, 0], 'magplant settings are ignored for a vending machine');
+    await alice.post(`/servers/${id}/machines/10`, { _csrf: await alice.csrf(), capacity: '2500' });
+    assert.equal((await alice.get(`/servers/${id}/machines/2`)).status, 404, 'Dirt is not a machine');
+
+    r = await alice.get(`/servers/${id}/machines/new`);
+    assert.equal(r.status, 200);
+    assert.match(r.text, /Copy from[\s\S]*MAGPLANT 5000[\s\S]*Vending Machine/);
+    r = await alice.post(`/servers/${id}/machines`, { _csrf: await alice.csrf(), name: 'MAGPLANT 100K', base: '8', capacity: '100000', accepts: '0', remote: '1' });
+    assert.equal(r.status, 302, r.text.slice(0, 400));
+    const mag = Number(r.location.match(/machines\/(\d+)/)[1]);
+    assert.ok(mag > 11 && mag % 2 === 0, 'a new item after the game\'s own');
+    const [[made]] = await admin.query(`SELECT base_id, name FROM ${srv}.item_edits WHERE id = ?`, [mag]);
+    assert.deepEqual([made.base_id, made.name], [8, 'MAGPLANT 100K'], 'copied from the MAGPLANT 5000');
+    [[row]] = await admin.query(`SELECT * FROM ${srv}.machines WHERE item = ?`, [mag]);
+    assert.deepEqual([row.capacity, row.accepts, row.remote, row.builtin], [100000, 0, 1, 0]);
+    r = await alice.get(`/servers/${id}/machines`);
+    assert.match(r.text, /MAGPLANT 100K[\s\S]*Custom[\s\S]*Restart to add[\s\S]*100,000/);
+    assert.match(r.text, /item change is saved but not in the game yet|item changes are saved but not in the game yet/);
+    assert.match((await alice.get(`/servers/${id}/machines/${mag}`)).text, /Delete MAGPLANT 100K/);
+
+    const badNew = async (form, why) => assert.equal((await alice.post(`/servers/${id}/machines`, { _csrf: await alice.csrf(), ...form })).status, 400, why);
+    await badNew({ name: 'Copy', base: '2', capacity: '10' }, 'only copies a machine');
+    await badNew({ name: 'Copy', base: String(mag), capacity: '10' }, 'only copies the game\'s machines');
+    await badNew({ name: 'magplant 100k', base: '8', capacity: '10' }, 'names are unique');
+    await badNew({ name: '', base: '8', capacity: '10' }, 'needs a name');
+    await badNew({ name: 'Tiny', base: '8', capacity: '0' }, 'capacity is checked');
+
+    r = await alice.post(`/servers/${id}/machines/${mag}/delete`, { _csrf: await alice.csrf() });
+    assert.equal(r.status, 302);
+    const [gone] = await admin.query(`SELECT item FROM ${srv}.machines WHERE item = ?`, [mag]);
+    assert.equal(gone.length, 0);
+    const [removed] = await admin.query(`SELECT removed FROM ${srv}.item_edits WHERE id IN (?, ?)`, [mag, mag + 1]);
+    assert.ok(removed.length === 2 && removed.every((x) => x.removed === 1), 'its item and seed are deleted too');
+
+    const [sent] = await admin.query(`SELECT done_at FROM ${srv}.panel_actions WHERE action = 'machines_reload'`);
+    assert.equal(sent.length, 6, 'the game re-read the machines after each change');
+    assert.ok(sent.every((a) => a.done_at), 'the game carried them out');
+    const [log] = await admin.query(`SELECT action FROM ${srv}.mod_log WHERE action LIKE 'machine%' ORDER BY id`);
+    assert.deepEqual(log.map((l) => l.action), ['machine_edit', 'machine_reset', 'machine_edit', 'machine_edit', 'machine_create', 'machine_delete']);
   });
 
   await t.test('resources: a PNG upload becomes an .rttex players can download', async () => {

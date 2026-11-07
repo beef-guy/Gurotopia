@@ -5,6 +5,7 @@
 #include "tools/sound.hpp"
 #include "onVariant/SetClothing.hpp"
 #include "database/playmods.hpp"
+#include "database/machines.hpp"
 
 #include "tile_extras.hpp"
 
@@ -101,9 +102,11 @@ void vending_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
         else
         {
             const ::item &item = id_to_item(vend->id);
-            dialog.add_label_with_icon("small", std::format("`wThe machine contains a total of {} `2{}``.``", vend->count, item.raw_name), item.id)
-                  .add_button("pullstock", "`wRemove items``");
-            if (pPeer->have_slot(::slot(vend->id, 0)) > 0) dialog.add_button("addstock", std::format("`wAdd {} from backpack``", item.raw_name));
+            const int cap = machines::capacity(machine.id); // @note the website's Machine Capacities, 0 = no limit
+            dialog.add_label_with_icon("small", std::format("`wThe machine contains a total of {} `2{}``.``", vend->count, item.raw_name), item.id);
+            if (cap > 0) dialog.add_smalltext(std::format("`oIt holds up to {} items.``", cap));
+            dialog.add_button("pullstock", "`wRemove items``");
+            if (pPeer->have_slot(::slot(vend->id, 0)) > 0 && (cap <= 0 || vend->count < cap)) dialog.add_button("addstock", std::format("`wAdd {} from backpack``", item.raw_name));
             dialog.add_spacer("small")
                   .add_text_input("setprice", "Price:", static_cast<short>(std::abs(vend->price)), 5)
                   .add_checkbox("chk_peritem", "World Locks per Item", vend->price >= 0)
@@ -152,13 +155,14 @@ void vending_edit(ENetEvent &event, const ::hPipe &hPipe)
     if (const short id = static_cast<short>(atoi(hPipe["stockitem"].c_str())); id > 0 && (vend == world->vendings.end() || vend->count == 0))
     {
         if (!sellable(id)) throw std::runtime_error("You can't put that in a Vending Machine.");
-        const int have = pPeer->have_slot(::slot(id, 0));
+        const int cap = machines::capacity(world->blocks[cord(pos.x_int(), pos.y_int())].fg); // @note the website's Machine Capacities, 0 = no limit
+        const int have = (cap > 0) ? std::min<int>(pPeer->have_slot(::slot(id, 0)), cap) : pPeer->have_slot(::slot(id, 0));
         if (have <= 0) return;
 
         if (vend == world->vendings.end()) vend = world->vendings.emplace(world->vendings.end(), ::vending{.pos = pos});
         if (vend->id != id) vend->price = 0; // @note a new item needs a new price
         vend->id = id;
-        vend->count = have; // @note the whole stack goes in, like real Growtopia
+        vend->count = have; // @note the whole stack goes in, like real Growtopia (up to the machine's capacity)
         modify_item_inventory(event, ::slot(id, static_cast<short>(-have)));
         on::ConsoleMessage(event.peer, std::format("`7[```9You put {} {} in the machine.```7]``", have, id_to_item(id).raw_name));
         update_tile(event, *world, pos);
@@ -180,8 +184,10 @@ void vending_edit(ENetEvent &event, const ::hPipe &hPipe)
     }
     if (button == "addstock" && vend->count > 0)
     {
-        const int have = pPeer->have_slot(::slot(vend->id, 0));
-        if (have <= 0) return;
+        const int cap = machines::capacity(world->blocks[cord(pos.x_int(), pos.y_int())].fg); // @note 0 = no limit
+        int have = pPeer->have_slot(::slot(vend->id, 0));
+        if (cap > 0) have = std::min(have, cap - vend->count);
+        if (have <= 0) throw std::runtime_error(std::format("The machine is full! It holds up to {} items.", cap));
         modify_item_inventory(event, ::slot(vend->id, static_cast<short>(-have)));
         vend->count += have;
         on::ConsoleMessage(event.peer, std::format("`7[```9You put {} more {} in the machine.```7]``", have, id_to_item(vend->id).raw_name));

@@ -62,7 +62,8 @@ const login = Object.fromEntries(fs.readFileSync('mysql_login.txt', 'utf8').spli
       hit_sound INT NOT NULL DEFAULT 0, spread INT NOT NULL DEFAULT 0, max_amount INT NOT NULL DEFAULT 0, grow INT NOT NULL DEFAULT 0, seed_base INT NOT NULL DEFAULT 0,
       seed_overlay INT NOT NULL DEFAULT 0, tree_base INT NOT NULL DEFAULT 0, tree_leaves INT NOT NULL DEFAULT 0, seed_color BIGINT NOT NULL DEFAULT 0,
       seed_overlay_color BIGINT NOT NULL DEFAULT 0, extra_file VARCHAR(255) NOT NULL DEFAULT '', punch INT NOT NULL DEFAULT 0, powers INT NOT NULL DEFAULT 0)`);
-    const base = [['Blank', 17], ['Blank Seed', 19], ['Dirt', 17], ['Dirt Seed', 19], ['World Lock', 3], ['World Lock Seed', 19], ['Legendary Wings', 20], ['Legendary Wings Seed', 19]];
+    const base = [['Blank', 17], ['Blank Seed', 19], ['Dirt', 17], ['Dirt Seed', 19], ['World Lock', 3], ['World Lock Seed', 19], ['Legendary Wings', 20], ['Legendary Wings Seed', 19],
+      ['MAGPLANT 5000', 111], ['MAGPLANT 5000 Seed', 19], ['Vending Machine', 62], ['Vending Machine Seed', 19]];
     const rows = base.map(([name, type], id) => [id, name, type, type === 20 ? 50 : 1, type === 19 ? 0 : 3, 8, 1, 0, type === 20 ? 6 : 10, 'tiles_page1.rttex', id, 0, `This is ${name}.`, 0,
       type === 20 ? 2 : 1, 1, 200, type === 19 ? 31 : 0, 1, 2, 0, 0, 0xff0000ff, 0xffffffff, 'audio/punch.wav', type === 20 ? 5 : 0, type === 20 ? 1 : 0]);
     const [edits] = await own.query('SELECT * FROM item_edits ORDER BY id');
@@ -76,6 +77,12 @@ const login = Object.fromEntries(fs.readFileSync('mysql_login.txt', 'utf8').spli
       for (const [k, i] of Object.entries(set)) if (e[k] !== null) row[i] = e[k];
     }
     await own.query('INSERT INTO item_catalog VALUES ?', [rows]);
+    // @note what include/database/machines.cpp makes on start: a row for every machine, with the real game's numbers
+    await own.query(`CREATE TABLE IF NOT EXISTS machines (item INT NOT NULL PRIMARY KEY, capacity INT NOT NULL DEFAULT 5000, accepts TINYINT NOT NULL DEFAULT 0,
+      remote TINYINT NOT NULL DEFAULT 0, builtin TINYINT NOT NULL DEFAULT 0, note VARCHAR(120) NOT NULL DEFAULT '',
+      updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`);
+    const machines = rows.filter((r) => [111, 62, 125].includes(r[2])).map((r) => [r[0], r[2] === 62 ? 0 : 5000, 0, r[2] === 111 ? 1 : 0, r[13] ? 0 : 1]);
+    if (machines.length) await own.query('INSERT IGNORE INTO machines (item, capacity, accepts, remote, builtin) VALUES ?', [machines]);
   };
   await catalog();
   await own.query("REPLACE INTO panel_commands VALUES ('/me', 0), ('/msg', 0), ('/sb', 0), ('/who', 0), ('/kick', 1), ('/ban', 1), ('/mute', 1), ('/give', 2), ('/newthing', 0)");

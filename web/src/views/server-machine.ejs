@@ -1,0 +1,124 @@
+<%- include('partials/server-shell') %>
+<%
+  const m = machine;
+  const action = m ? `/servers/${server.id}/machines/${m.item}` : `/servers/${server.id}/machines`;
+  const chosenBase = m ? null : bases.find((b) => b.item === Number(shown.base)) || null;
+  const isMag = m ? m.kind === 'magplant' : (chosenBase ? chosenBase.kind === 'magplant' : true);
+  const isVending = m ? m.kind === 'vending' : (chosenBase ? chosenBase.kind === 'vending' : false);
+%>
+<p class="crumb"><a href="/servers/<%= server.id %>/machines"><svg class="ic"><use href="#i-back"/></svg>All machines</a></p>
+<div class="page-head">
+  <div>
+    <h1><%= m ? m.name : 'Create machine' %></h1>
+    <p class="muted"><% if (m) { %>Item #<%= m.item %> · <%= m.kindLabel %><%= m.builtin ? '' : ' · custom' %>.<% } else { %>A new machine item, copied from one of the game's machines, with its own name and capacity. Make a magplant that holds 100,000 or 10 million, or a bigger vending machine.<% } %></p>
+  </div>
+</div>
+
+<% if (m) { %><%- include('partials/items-pending', { back: 'machines' }) %><% } %>
+
+<% if (!ready) { %>
+<section class="card"><div class="empty"><svg class="ic big"><use href="#i-chip"/></svg><p>Start the server once with the latest game build, then you can change machines here.</p></div></section>
+<% } else { %>
+<form method="post" action="<%= action %>" class="role-form" id="machine-form" data-server="<%= server.id %>">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-box"/></svg>Machine</h2></div>
+    <% if (m) { %>
+    <div class="effect-item">
+      <span class="item-ic" data-letter="<%= m.name.slice(0, 1).toUpperCase() %>"><img src="/servers/<%= server.id %>/items/<%= m.item %>/icon.png" alt="" width="32" height="32"></span>
+      <div><strong><%= m.name %></strong><span class="muted small">#<%= m.item %> · <%= m.kindLabel %><%= m.pending ? ' · in the game after a restart' : '' %></span></div>
+      <a class="btn ghost small" href="/servers/<%= server.id %>/items/<%= m.item %>">Open in Item manager</a>
+    </div>
+    <% } else { %>
+    <div class="form-grid">
+      <label>Name <small class="inline-hint">1 to 35 characters</small>
+        <input name="name" value="<%= shown.name %>" maxlength="35" autocomplete="off" required placeholder="e.g. MAGPLANT 100K">
+      </label>
+    </div>
+    <p class="muted small mt">Copy from</p>
+    <div class="machine-bases" role="radiogroup" aria-label="Machine to copy">
+      <% for (const b of bases) { %>
+      <label class="power base-pick <%= b.item === Number(shown.base) ? 'on' : '' %>" data-kind="<%= b.kind %>" data-capacity="<%= b.defaults.capacity %>" data-accepts="<%= b.defaults.accepts %>" data-remote="<%= b.defaults.remote %>">
+        <input type="radio" name="base" value="<%= b.item %>" <%= b.item === Number(shown.base) ? 'checked' : '' %>>
+        <span class="base-head"><img src="/servers/<%= server.id %>/items/<%= b.item %>/icon.png" alt="" width="32" height="32"><strong><%= b.name %></strong></span>
+        <span><%= b.kindLabel %> · holds <%= capacityText(b.defaults.capacity).toLowerCase() %></span>
+      </label>
+      <% } %>
+    </div>
+    <p class="muted small">The new machine works like the one it's copied from, and looks like it until you give it a texture in the Item manager. It gets its own seed too.</p>
+    <% } %>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-sliders"/></svg>Capacity</h2></div>
+    <div class="form-grid">
+      <label>Holds up to <small class="inline-hint" data-vending-hint <%= isVending ? '' : 'hidden' %>>0 = no limit</small>
+        <span class="num-unit"><input type="number" name="capacity" min="<%= isVending ? 0 : 1 %>" max="<%= max %>" step="1" value="<%= shown.capacity %>" inputmode="numeric" required><em>items</em></span>
+      </label>
+      <% if (m) { %>
+      <div class="check-row muted small">The real game's number: <strong>&nbsp;<%= capacityText(m.defaults.capacity) %></strong></div>
+      <% } %>
+    </div>
+    <div class="quick-caps" aria-label="Quick picks">
+      <% for (const n of [1500, 5000, 20000, 50000, 100000, 150000, 1000000, 10000000]) { %>
+      <button type="button" class="ghost small" data-cap="<%= n %>"><%= n >= 1000000 ? `${n / 1000000}M` : n >= 1000 ? `${n / 1000}K` : n %></button>
+      <% } %>
+    </div>
+  </section>
+
+  <section class="card" data-magplant-only <%= isMag ? '' : 'hidden' %>>
+    <div class="card-head"><h2><svg class="ic"><use href="#i-chip"/></svg>Magplant</h2></div>
+    <p class="muted small">What players can put in it.</p>
+    <div class="power-pick">
+      <% for (const a of accepts) { %>
+      <label class="power <%= Number(shown.accepts) === a.value ? 'on' : '' %>">
+        <input type="radio" name="accepts" value="<%= a.value %>" <%= Number(shown.accepts) === a.value ? 'checked' : '' %>>
+        <strong><%= a.label %></strong>
+        <span><%= a.text %></span>
+      </label>
+      <% } %>
+    </div>
+    <label class="power mt <%= shown.remote ? 'on' : '' %>">
+      <input type="checkbox" name="remote" value="1" <%= shown.remote ? 'checked' : '' %>>
+      <strong>Building mode</strong>
+      <span>Punching the magplant turns building mode on and hands out the MAGPLANT 5000 Remote, which builds straight from the magplant's storage. Like the MAGPLANT 5000.</span>
+    </label>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-book"/></svg>Note</h2></div>
+    <div class="form-grid">
+      <label>Note <small class="inline-hint">only you see this</small>
+        <input name="note" value="<%= shown.note %>" maxlength="120" autocomplete="off" placeholder="e.g. Sold in the gem shop for 500k">
+      </label>
+    </div>
+  </section>
+
+  <div class="save-bar">
+    <a class="btn ghost" href="/servers/<%= server.id %>/machines">Cancel</a>
+    <button type="submit"><%= m ? 'Save machine' : 'Create machine' %></button>
+  </div>
+</form>
+
+<% if (m && m.builtin) { %>
+<section class="card">
+  <div class="card-head"><h2><svg class="ic"><use href="#i-restart"/></svg>Reset</h2></div>
+  <p>Back to the real game's numbers: holds <%= capacityText(m.defaults.capacity).toLowerCase() %><%= m.kind === 'magplant' ? `, ${accepts.find((a) => a.value === m.defaults.accepts).label.toLowerCase()}, ${m.defaults.remote ? 'with' : 'without'} building mode` : '' %>.</p>
+  <form method="post" action="/servers/<%= server.id %>/machines/<%= m.item %>/reset">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <button type="submit" class="ghost">Reset <%= m.name %></button>
+  </form>
+</section>
+<% } else if (m) { %>
+<section class="card danger">
+  <div class="card-head"><h2><svg class="ic"><use href="#i-trash"/></svg>Delete machine</h2></div>
+  <p>Deletes the machine and its item (with its seed). Restart the server to take it out of the game. Players who own one keep a blank item.</p>
+  <form method="post" action="/servers/<%= server.id %>/machines/<%= m.item %>/delete">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <button type="submit" class="bad">Delete <%= m.name %></button>
+  </form>
+</section>
+<% } %>
+<% } %>
+<%- include('partials/server-shell-end') %>

@@ -24,6 +24,7 @@ const rttex = require('./rttex');
 const resources = require('./resources');
 const titles = require('./titles');
 const effects = require('./effects');
+const machines = require('./machines');
 
 const DONE_MESSAGES = {
   created: 'Server created and starting. It shows Online once it is ready.',
@@ -59,6 +60,10 @@ const DONE_MESSAGES = {
   effectCreated: 'Item effects added. Anyone wearing or holding it gets them right away.',
   effectSaved: 'Item effects saved. Everyone online gets the change right away.',
   effectDeleted: 'Item effects removed. The item is back to normal.',
+  machineCreated: 'Machine created, with its own item. Restart the server to put it in the game, then give it out with /give or sell it.',
+  machineSaved: 'Capacity saved. It applies right away in every world.',
+  machineReset: 'Back to the real game\'s numbers. It applies right away.',
+  machineDeleted: 'Custom machine deleted, with its item. Restart the server to take it out of the game.',
   itemsApplied: 'Restarting. Item changes are in the game once the server is back online, and players get them when they log in.',
 };
 
@@ -312,6 +317,7 @@ function buildApp() {
       { page: 'worlds', label: 'Worlds', icon: 'globe', path: '/worlds' },
       { page: 'items', label: 'Item manager', icon: 'box', path: '/items' },
       { page: 'effects', label: 'Item effects', icon: 'spark', path: '/effects' },
+      { page: 'machines', label: 'Machine capacities', icon: 'chip', path: '/machines' },
       { page: 'resources', label: 'Resources', icon: 'image', path: '/resources' },
       { label: 'Gem shop', icon: 'grid', soon: true },
     ] },
@@ -786,6 +792,87 @@ function buildApp() {
     res.redirect(`/servers/${req.server.id}/effects?done=effectDeleted${result.live ? '' : '&live=0'}`);
   }));
 
+  /* ---------- machine capacities ---------- */
+
+  app.get('/servers/:id/machines', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
+    const query = {
+      q: String(req.query.q || '').slice(0, 40),
+      sort: Object.hasOwn(machines.SORTS, req.query.sort) ? req.query.sort : 'id',
+      dir: req.query.dir === 'desc' ? 'desc' : 'asc',
+      page: Number(req.query.page) || 1,
+    };
+    const [result, pending] = await Promise.all([machines.list(req.server, query), items.pending(req.server)]);
+    await renderServer(req, res, 'machines', { extra: { result, query, pending, capacityText: machines.capacityText, accepts: machines.ACCEPTS, title: `Machine capacities · ${req.server.name}` } });
+  }));
+
+  const loadMachine = asyncRoute(async (req, res, next) => {
+    const id = /^[0-9]{1,5}$/.test(req.params.item) ? Number(req.params.item) : null;
+    const found = id === null ? null : await machines.get(req.server, id);
+    if (!found) return res.status(404).render('error', { title: 'Not found', message: 'That machine does not exist on this server.' });
+    req.machine = found;
+    next();
+  });
+
+  async function renderMachine(req, res, { found = null, form = null, error = '', status = 200 } = {}) {
+    const [isReady, bases, pending] = await Promise.all([machines.ready(req.server), found ? [] : machines.bases(req.server), items.pending(req.server)]);
+    const first = bases.find((b) => b.item === 5638) || bases[0] || null;
+    let shown = found
+      ? { capacity: found.capacity, accepts: found.accepts, remote: found.remote, note: found.note }
+      : { name: '', base: first ? first.item : 0, capacity: first ? first.defaults.capacity : 5000, accepts: first ? first.defaults.accepts : 0, remote: first ? Boolean(first.defaults.remote) : true, note: '' };
+    if (form) {
+      shown = { ...shown, capacity: String(form.capacity ?? ''), accepts: Number(form.accepts || 0), remote: Boolean(form.remote), note: String(form.note || '') };
+      if (!found) { shown.name = String(form.name || ''); shown.base = Number(form.base) || 0; }
+    }
+    await renderServer(req, res, 'machines', {
+      error, status, template: 'machine',
+      extra: { machine: found, shown, bases, pending, ready: isReady, accepts: machines.ACCEPTS, capacityText: machines.capacityText, max: machines.MAX_CAPACITY,
+        title: `${found ? found.name : 'New machine'} · ${req.server.name}` },
+    });
+  }
+
+  app.get('/servers/:id/machines/new', auth.requireUser, loadServer, asyncRoute((req, res) => renderMachine(req, res)));
+
+  app.post('/servers/:id/machines', auth.requireUser, loadServer, auth.checkCsrf, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      if (!(await machines.ready(req.server))) throw new machines.UserError('Start the server once (with the latest game build) before making machines.');
+      result = await machines.create(req.server, req.body, req.user.username);
+    } catch (err) {
+      if (!(err instanceof machines.UserError)) throw err;
+      return renderMachine(req, res, { form: req.body, error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/machines/${result.item}?done=machineCreated`);
+  }));
+
+  app.get('/servers/:id/machines/:item', auth.requireUser, loadServer, loadMachine, asyncRoute((req, res) => renderMachine(req, res, { found: req.machine })));
+
+  app.post('/servers/:id/machines/:item', auth.requireUser, loadServer, auth.checkCsrf, loadMachine, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      result = await machines.update(req.server, req.machine, req.body, req.user.username);
+    } catch (err) {
+      if (!(err instanceof machines.UserError)) throw err;
+      return renderMachine(req, res, { found: req.machine, form: req.body, error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/machines/${req.machine.item}?done=machineSaved${result.live ? '' : '&live=0'}`);
+  }));
+
+  app.post('/servers/:id/machines/:item/reset', auth.requireUser, loadServer, auth.checkCsrf, loadMachine, asyncRoute(async (req, res) => {
+    const result = await machines.reset(req.server, req.machine, req.user.username);
+    res.redirect(`/servers/${req.server.id}/machines/${req.machine.item}?done=machineReset${result.live ? '' : '&live=0'}`);
+  }));
+
+  app.post('/servers/:id/machines/:item/delete', auth.requireUser, loadServer, auth.checkCsrf, loadMachine, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      result = await machines.remove(req.server, req.machine, req.user.username);
+    } catch (err) {
+      if (!(err instanceof machines.UserError)) throw err;
+      return renderMachine(req, res, { found: req.machine, error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/machines?done=machineDeleted`);
+  }));
+
   app.get('/servers/:id/status.json', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
     const { server, proc, view } = await statusPayload(req.server);
     res.json({
@@ -833,6 +920,7 @@ function buildApp() {
         return renderServer(req, res, 'overview', { error: `Could not ${name} the server: ${err.message}`, status: 502 });
       }
       if (name !== 'stop' && req.body.back === 'items') return res.redirect(`/servers/${req.server.id}/items?done=itemsApplied`); // @note the item manager's "restart to apply"
+      if (name !== 'stop' && req.body.back === 'machines') return res.redirect(`/servers/${req.server.id}/machines?done=itemsApplied`); // @note a new custom machine's "restart to apply"
       res.redirect(`/servers/${req.server.id}?done=${action.done}`);
     }));
   }
