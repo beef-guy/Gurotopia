@@ -203,6 +203,58 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     assert.equal((await bob.get(`/servers/${id}/metrics.json`)).status, 404);
   });
 
+  await t.test('players page lists accounts and moderation changes them', async () => {
+    let r = await alice.get(`/servers/${id}/players`);
+    assert.equal(r.status, 200);
+    assert.match(r.text, /No player data yet/, 'the fake game has no peer table');
+
+    const srv = `srv_${id}`;
+    await admin.query(`CREATE TABLE ${srv}.peer (uid INT AUTO_INCREMENT PRIMARY KEY, growid VARCHAR(18) UNIQUE, password VARCHAR(128),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, inventory MEDIUMBLOB, gems BIGINT DEFAULT 0, wl_storage INT DEFAULT 0, level INT DEFAULT 1,
+      xp INT DEFAULT 0, role INT DEFAULT 0, banned_until BIGINT DEFAULT 0, ban_reason VARCHAR(128) DEFAULT '', muted_until BIGINT DEFAULT 0,
+      playtime BIGINT DEFAULT 0, piggy_bank BIGINT DEFAULT 0)`);
+    await admin.query(`CREATE TABLE ${srv}.mod_log (id INT AUTO_INCREMENT PRIMARY KEY, at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      actor VARCHAR(18), action VARCHAR(16), target VARCHAR(18), detail VARCHAR(255))`);
+    await admin.query(`INSERT INTO ${srv}.peer (growid, gems, level, role, password) VALUES ('Psy7', 5000, 40, 2, 'secret-hash'), ('Noob', 10, 2, 0, 'x'), ('Griefer', 0, 1, 0, 'y')`);
+
+    r = await alice.get(`/servers/${id}/players`);
+    assert.match(r.text, /Psy7/);
+    assert.match(r.text, /Developer/);
+    assert.doesNotMatch(r.text, /secret-hash/, 'passwords never reach the page');
+    r = await alice.get(`/servers/${id}/players?q=gri`);
+    assert.match(r.text, /Griefer/);
+    assert.doesNotMatch(r.text, />Noob</);
+
+    const [[g]] = await admin.query(`SELECT uid FROM ${srv}.peer WHERE growid = 'Griefer'`);
+    const base = `/servers/${id}/players/${g.uid}`;
+    assert.equal((await alice.get(base)).status, 200);
+    assert.equal((await bob.get(base)).status, 404, 'other owners cannot see players');
+    assert.equal((await bob.post(`${base}/ban`, { _csrf: await bob.csrf(), duration: 'forever' })).status, 404);
+
+    r = await alice.post(`${base}/ban`, { _csrf: await alice.csrf(), duration: 'nonsense' });
+    assert.equal(r.status, 400);
+    r = await alice.post(`${base}/ban`, { _csrf: await alice.csrf(), duration: 'forever', reason: 'griefing' });
+    assert.equal(r.status, 302);
+    let [[row]] = await admin.query(`SELECT banned_until, ban_reason FROM ${srv}.peer WHERE uid = ?`, [g.uid]);
+    assert.equal(Number(row.banned_until), -1);
+    assert.equal(row.ban_reason, 'griefing');
+    assert.match((await alice.get(`/servers/${id}/players?filter=banned`)).text, /Griefer/);
+
+    await alice.post(`${base}/mute`, { _csrf: await alice.csrf(), duration: '1h' });
+    await alice.post(`${base}/role`, { _csrf: await alice.csrf(), role: '1' });
+    await alice.post(`${base}/unban`, { _csrf: await alice.csrf() });
+    [[row]] = await admin.query(`SELECT banned_until, muted_until, role FROM ${srv}.peer WHERE uid = ?`, [g.uid]);
+    assert.equal(Number(row.banned_until), 0);
+    assert.ok(Number(row.muted_until) > Date.now() / 1000);
+    assert.equal(row.role, 1);
+    assert.equal((await alice.post(`${base}/role`, { _csrf: await alice.csrf(), role: '7' })).status, 400);
+
+    const [log] = await admin.query(`SELECT actor, action FROM ${srv}.mod_log ORDER BY id`);
+    assert.deepEqual(log.map((l) => l.action), ['ban', 'mute', 'role', 'unban']);
+    assert.equal(log[0].actor, 'web:alice');
+    assert.match((await alice.get(base)).text, /Moderation history[\s\S]*unban/);
+  });
+
   await t.test('the log shows the server output', async () => {
     const log = await waitFor(async () => {
       const { text } = JSON.parse((await alice.get(`/servers/${id}/logs.json`)).text);
