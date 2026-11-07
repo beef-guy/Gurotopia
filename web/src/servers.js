@@ -68,6 +68,21 @@ async function get(id) {
   return rows[0] ? shape(rows[0]) : null;
 }
 
+/* @note numbers for the dashboard tiles, across every owner's servers */
+async function platformStats() {
+  const fresh = `(last_seen IS NOT NULL AND last_seen > UTC_TIMESTAMP() - INTERVAL ${FRESH_SECONDS} SECOND)`;
+  const [[totals]] = await db.getPool().query(
+    `SELECT COUNT(*) AS total, COALESCE(SUM(${fresh}), 0) AS online, COALESCE(SUM(IF(${fresh}, online, 0)), 0) AS players FROM servers`);
+  const [[top]] = await db.getPool().query(
+    `SELECT name, online FROM servers WHERE ${fresh} AND online > 0 ORDER BY online DESC, id LIMIT 1`);
+  return {
+    total: Number(totals.total),
+    online: Number(totals.online),
+    players: Number(totals.players),
+    top: top ? { name: top.name, online: Number(top.online) } : null,
+  };
+}
+
 async function countForOwner(ownerId) {
   const [[row]] = await db.getPool().query('SELECT COUNT(*) AS n FROM servers WHERE owner_id = ?', [ownerId]);
   return Number(row.n);
@@ -140,5 +155,5 @@ async function destroy(server) {
 
 module.exports = {
   UserError, nameProblem, maxPlayersProblem,
-  listForOwner, listAll, get, countForOwner, create, updateMaxPlayers, destroy,
+  listForOwner, listAll, get, countForOwner, platformStats, create, updateMaxPlayers, destroy,
 };

@@ -1,0 +1,41 @@
+<%- include('partials/server-shell') %>
+<div class="page-head">
+  <div>
+    <h1>Configuration</h1>
+    <p class="muted">Changes take effect the next time the server restarts.</p>
+  </div>
+</div>
+<section class="card">
+  <div class="card-head"><h2>Players</h2></div>
+  <form method="post" action="/servers/<%= server.id %>/settings" class="row-form">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <label>Max players
+      <input name="maxPlayers" type="number" min="1" max="<%= config.maxPlayersLimit %>" value="<%= server.maxPlayers %>" required>
+      <small>How many players can be online at once, up to <%= config.maxPlayersLimit %>.</small>
+    </label>
+    <button type="submit">Save</button>
+  </form>
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>Server details</h2></div>
+  <dl class="facts cols">
+    <div><dt>Name</dt><dd><%= server.name %></dd></div>
+    <div><dt>Server ID</dt><dd><%= server.id %></dd></div>
+    <div><dt>Game port</dt><dd><%= server.port %></dd></div>
+    <div><dt>Database</dt><dd><code><%= server.dbName %></code></dd></div>
+  </dl>
+</section>
+
+<section class="card danger">
+  <div class="card-head"><h2><svg class="ic"><use href="#i-trash"/></svg>Delete server</h2></div>
+  <p>This stops the server and deletes its players, worlds and log for good. It can't be undone.</p>
+  <form method="post" action="/servers/<%= server.id %>/delete" class="row-form">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <label>Type <strong><%= server.name %></strong> to confirm
+      <input name="confirm" autocomplete="off" required>
+    </label>
+    <button type="submit" class="bad">Delete forever</button>
+  </form>
+</section>
+<%- include('partials/server-shell-end') %>

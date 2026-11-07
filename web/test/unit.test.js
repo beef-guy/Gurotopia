@@ -7,7 +7,7 @@ const path = require('node:path');
 
 const { LogFile, readTail, gameArgs } = require('../src/supervisor');
 const { nameProblem, maxPlayersProblem } = require('../src/servers');
-const { describe } = require('../src/panel');
+const { describe, fmt } = require('../src/panel');
 
 test('server names', () => {
   assert.equal(nameProblem('SkyBlock'), null);
@@ -108,4 +108,23 @@ test('login page: token carries the server name, checktoken keeps it', async () 
   } finally {
     server.close();
   }
+});
+
+test('number formatting for the dashboard', () => {
+  assert.equal(fmt.bytes(512), '512 B');
+  assert.equal(fmt.bytes(1536), '1.5 KB');
+  assert.equal(fmt.bytes(300 * 1024 * 1024), '300 MB');
+  assert.equal(fmt.bytes(null), '–');
+  assert.equal(fmt.duration(59), '0m');
+  assert.equal(fmt.duration(3 * 3600 + 120), '3h 2m');
+  assert.equal(fmt.duration(2 * 86400 + 5 * 3600), '2d 5h');
+  assert.equal(fmt.percent(7.25), '7.3%');
+});
+
+test('host stats read /proc', async () => {
+  const hostStats = require('../src/hostStats');
+  const s = await hostStats.snapshot();
+  assert.ok(s.memory.total > 0 && s.memory.used > 0);
+  assert.ok(s.cores > 0);
+  assert.ok(s.uptimeSeconds > 0);
 });

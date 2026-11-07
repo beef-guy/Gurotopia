@@ -1,0 +1,70 @@
+<%- include('partials/server-shell') %>
+<div class="page-head">
+  <div>
+    <h1><%= server.name %> <span id="status-badge"><%- include('partials/badge', { view }) %></span></h1>
+    <p id="status-detail" class="muted"><%= view.detail %></p>
+  </div>
+  <div class="controls">
+    <% for (const [action, icon, label, cls] of [['start', 'play', 'Start', ''], ['restart', 'restart', 'Restart', 'ghost'], ['stop', 'stop', 'Stop', 'ghost danger']]) { %>
+    <form method="post" action="/servers/<%= server.id %>/<%= action %>" class="inline">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button type="submit" class="<%= cls %>" data-action="<%= action %>"<%= (action === 'start' && ['online', 'starting', 'busy'].includes(view.key)) || (action !== 'start' && view.key === 'offline') ? ' disabled' : '' %>><svg class="ic"><use href="#i-<%= icon %>"/></svg><span><%= label %></span></button>
+    </form>
+    <% } %>
+  </div>
+</div>
+
+<div class="over-grid">
+  <section class="card">
+    <div class="card-head"><h2>Status</h2></div>
+    <dl class="facts">
+      <div><dt>Uptime</dt><dd id="uptime" data-started="<%= proc && proc.startedAt && proc.state === 'running' ? proc.startedAt : '' %>"><%= proc && proc.startedAt && proc.state === 'running' ? fmt.since(proc.startedAt) : '–' %></dd></div>
+      <div><dt>Players online</dt><dd><span id="online"><%= server.online %></span> / <%= server.maxPlayers %></dd></div>
+      <% if (user.isAdmin && server.ownerId !== user.id) { %><div><dt>Owner</dt><dd><%= server.ownerName || ('#' + server.ownerId) %></dd></div><% } %>
+      <div><dt>Created</dt><dd><%= server.createdAt ? new Date(server.createdAt).toISOString().slice(0, 10) : '–' %></dd></div>
+    </dl>
+  </section>
+
+  <section class="card join">
+    <div class="card-head"><h2>How players join</h2></div>
+    <p class="muted">Connect to the PSNode address, then type the server name on the login screen.</p>
+    <div class="join-row"><span>Address</span><code><%= config.gameAddress || 'not set' %></code></div>
+    <div class="join-row"><span>Server name</span><code><%= server.name %></code></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Resources</h2><span class="muted small">live</span></div>
+    <div class="meters">
+      <div class="meter">
+        <div class="meter-top"><span>Players</span><strong><span data-k="players"><%= server.online %></span> <small>/ <%= server.maxPlayers %></small></strong></div>
+        <progress max="<%= server.maxPlayers %>" value="<%= server.online %>" data-k="playersBar"></progress>
+      </div>
+      <div class="meter">
+        <div class="meter-top"><span>CPU</span><strong data-k="cpu"><%= fmt.percent(proc && proc.cpu) %></strong></div>
+        <progress max="100" value="<%= (proc && proc.cpu) || 0 %>" data-k="cpuBar"></progress>
+      </div>
+      <div class="mini-stats">
+        <div><span>Memory</span><strong data-k="mem"><%= fmt.bytes(proc && proc.mem) %></strong></div>
+        <div><span>Worlds &amp; players</span><strong data-k="dbSize">–</strong></div>
+        <div><span>Files &amp; logs</span><strong data-k="fileSize">–</strong></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="range-row">
+  <h2>History</h2>
+  <div class="segmented" id="range" role="group" aria-label="Time range">
+    <% for (const [m, label] of [[15, '15m'], [30, '30m'], [60, '1h'], [180, '3h'], [360, '6h']]) { %>
+    <button type="button" data-minutes="<%= m %>" class="<%= m === 30 ? 'on' : '' %>"><%= label %></button>
+    <% } %>
+  </div>
+</div>
+<p class="muted small" id="chart-note">Recorded every few seconds while the server runs. History starts over when the panel's supervisor restarts.</p>
+
+<div class="charts">
+  <section class="card chart-card"><div class="card-head"><h2>Players online</h2><strong class="chart-now" data-now="players">–</strong></div><div class="chart" data-metric="players" data-unit="players"></div></section>
+  <section class="card chart-card"><div class="card-head"><h2>CPU usage</h2><strong class="chart-now" data-now="cpu">–</strong></div><div class="chart" data-metric="cpu" data-unit="percent"></div></section>
+  <section class="card chart-card"><div class="card-head"><h2>Memory usage</h2><strong class="chart-now" data-now="mem">–</strong></div><div class="chart" data-metric="mem" data-unit="bytes"></div></section>
+</div>
+<%- include('partials/server-shell-end') %>

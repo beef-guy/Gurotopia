@@ -12,6 +12,7 @@ const db = require('./db');
 const auth = require('./auth');
 const servers = require('./servers');
 const supervisor = require('./supervisorClient');
+const hostStats = require('./hostStats');
 
 const DONE_MESSAGES = {
   created: 'Server created and starting. It shows Online once it is ready.',
@@ -49,6 +50,34 @@ async function processStates(ids) {
   }
 }
 
+/* @note small formatters the views share */
+const fmt = {
+  bytes(n) {
+    if (n === null || n === undefined || Number.isNaN(n)) return '–';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0;
+    let v = Number(n);
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+    return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
+  },
+  duration(seconds) {
+    if (seconds === null || seconds === undefined) return '–';
+    const s = Math.max(0, Math.floor(seconds));
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (d) return `${d}d ${h}h`;
+    if (h) return `${h}h ${m}m`;
+    return `${m}m`;
+  },
+  since(iso) {
+    return iso ? fmt.duration((Date.now() - new Date(iso).getTime()) / 1000) : '–';
+  },
+  percent(n) {
+    return n === null || n === undefined ? '–' : `${Number(n).toFixed(1)}%`;
+  },
+};
+
 function asyncRoute(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 }
@@ -83,6 +112,8 @@ function buildApp() {
     res.locals.done = '';
     res.locals.title = '';
     res.locals.config = config.panel;
+    res.locals.path = req.path;
+    res.locals.fmt = fmt;
     next();
   });
   app.use('/static', express.static(path.join(__dirname, '..', 'public'), { maxAge: '1h' }));
@@ -160,17 +191,28 @@ function buildApp() {
     res.redirect('/');
   }));
 
-  app.get('/servers', auth.requireUser, asyncRoute(async (req, res) => {
+  async function renderDashboard(req, res, { error = '', values = null, status = 200 } = {}) {
     const list = await servers.listForOwner(req.user.id);
     const procs = await processStates(list.map((s) => s.id));
-    for (const s of list) s.view = describe(s, procs.get(s.id));
-    res.render('servers', {
-      title: 'Your servers',
+    for (const s of list) { s.view = describe(s, procs.get(s.id)); s.proc = procs.get(s.id); }
+    const [platform, host] = await Promise.all([servers.platformStats(), hostStats.snapshot()]);
+    res.status(status).render('servers', {
+      title: 'Dashboard',
       list,
-      error: '',
-      values: { maxPlayers: config.panel.defaultMaxPlayers },
+      platform,
+      host,
+      error,
+      values: values || { maxPlayers: config.panel.defaultMaxPlayers },
       canCreate: list.length < config.panel.serversPerUser,
     });
+  }
+
+  app.get('/servers', auth.requireUser, asyncRoute(async (req, res) => renderDashboard(req, res)));
+
+  /* @note the dashboard's live tiles poll this */
+  app.get('/dashboard.json', auth.requireUser, asyncRoute(async (req, res) => {
+    const [platform, host] = await Promise.all([servers.platformStats(), hostStats.snapshot()]);
+    res.json({ platform, host });
   }));
 
   app.post('/servers', auth.requireUser, auth.checkCsrf, asyncRoute(async (req, res) => {
@@ -183,16 +225,7 @@ function buildApp() {
       res.redirect(`/servers/${server.id}?done=${done}`);
     } catch (err) {
       if (!(err instanceof servers.UserError)) throw err;
-      const list = await servers.listForOwner(req.user.id);
-      const procs = await processStates(list.map((s) => s.id));
-      for (const s of list) s.view = describe(s, procs.get(s.id));
-      res.status(400).render('servers', {
-        title: 'Your servers',
-        list,
-        error: err.message,
-        values: { name, maxPlayers },
-        canCreate: list.length < config.panel.serversPerUser,
-      });
+      await renderDashboard(req, res, { error: err.message, values: { name, maxPlayers }, status: 400 });
     }
   }));
 
@@ -214,10 +247,37 @@ function buildApp() {
     return { server: fresh, proc, view: describe(fresh, proc) };
   }
 
-  app.get('/servers/:id', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
+  /* @note the pages in a server's sidebar. the ones with soon: true are on the roadmap and not clickable yet */
+  const SERVER_NAV = [
+    { group: 'General', items: [
+      { page: 'overview', label: 'Overview', icon: 'home', path: '' },
+      { page: 'console', label: 'Console', icon: 'terminal', path: '/console' },
+      { label: 'Team members', icon: 'users', soon: true },
+    ] },
+    { group: 'Game data', items: [
+      { label: 'Players', icon: 'user', soon: true },
+      { label: 'Worlds', icon: 'globe', soon: true },
+      { label: 'Items & shop', icon: 'box', soon: true },
+    ] },
+    { group: 'Development', items: [
+      { label: 'Lua scripts', icon: 'code', soon: true },
+      { label: 'Roles', icon: 'shield', soon: true },
+    ] },
+    { group: 'Settings', items: [
+      { page: 'settings', label: 'Configuration', icon: 'sliders', path: '/settings' },
+    ] },
+  ];
+
+  async function renderServer(req, res, page, { error = '', status = 200 } = {}) {
     const { server, proc, view } = await statusPayload(req.server);
-    res.render('server', { title: server.name, server, proc, view, error: '' });
-  }));
+    res.status(status).render(`server-${page}`, {
+      title: server.name, server, proc, view, error, page, nav: SERVER_NAV,
+    });
+  }
+
+  app.get('/servers/:id', auth.requireUser, loadServer, asyncRoute((req, res) => renderServer(req, res, 'overview')));
+  app.get('/servers/:id/console', auth.requireUser, loadServer, asyncRoute((req, res) => renderServer(req, res, 'console')));
+  app.get('/servers/:id/settings', auth.requireUser, loadServer, asyncRoute((req, res) => renderServer(req, res, 'settings')));
 
   app.get('/servers/:id/status.json', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
     const { server, proc, view } = await statusPayload(req.server);
@@ -227,7 +287,20 @@ function buildApp() {
       maxPlayers: server.maxPlayers,
       startedAt: proc?.startedAt || null,
       lastSeen: server.lastSeen,
+      cpu: proc?.cpu ?? null,
+      mem: proc?.mem ?? null,
     });
+  }));
+
+  const RANGES = new Set([15, 30, 60, 180, 360]);
+  app.get('/servers/:id/metrics.json', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
+    const minutes = RANGES.has(Number(req.query.minutes)) ? Number(req.query.minutes) : 30;
+    try {
+      res.json(await supervisor.metrics(req.server.id, minutes));
+    } catch (err) {
+      if (!(err instanceof supervisor.SupervisorDown)) throw err;
+      res.status(503).json({ samples: [], storage: null, error: err.message });
+    }
   }));
 
   app.get('/servers/:id/logs.json', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
@@ -250,8 +323,7 @@ function buildApp() {
       try {
         await action.run(req.server.id);
       } catch (err) {
-        const { server, proc, view } = await statusPayload(req.server);
-        return res.status(502).render('server', { title: server.name, server, proc, view, error: `Could not ${name} the server: ${err.message}` });
+        return renderServer(req, res, 'overview', { error: `Could not ${name} the server: ${err.message}`, status: 502 });
       }
       res.redirect(`/servers/${req.server.id}?done=${action.done}`);
     }));
@@ -262,22 +334,19 @@ function buildApp() {
       await servers.updateMaxPlayers(req.server.id, req.body.maxPlayers);
     } catch (err) {
       if (!(err instanceof servers.UserError)) throw err;
-      const { server, proc, view } = await statusPayload(req.server);
-      return res.status(400).render('server', { title: server.name, server, proc, view, error: err.message });
+      return renderServer(req, res, 'settings', { error: err.message, status: 400 });
     }
-    res.redirect(`/servers/${req.server.id}?done=saved`);
+    res.redirect(`/servers/${req.server.id}/settings?done=saved`);
   }));
 
   app.post('/servers/:id/delete', auth.requireUser, loadServer, auth.checkCsrf, asyncRoute(async (req, res) => {
     if (String(req.body.confirm || '') !== req.server.name) {
-      const { server, proc, view } = await statusPayload(req.server);
-      return res.status(400).render('server', { title: server.name, server, proc, view, error: 'Type the server name exactly to delete it.' });
+      return renderServer(req, res, 'settings', { error: 'Type the server name exactly to delete it.', status: 400 });
     }
     try {
       await supervisor.remove(req.server.id); // @note stops it and deletes its folder
     } catch (err) {
-      const { server, proc, view } = await statusPayload(req.server);
-      return res.status(502).render('server', { title: server.name, server, proc, view, error: `Could not delete the server: ${err.message}` });
+      return renderServer(req, res, 'settings', { error: `Could not delete the server: ${err.message}`, status: 502 });
     }
     await servers.destroy(req.server);
     res.redirect(req.user.isAdmin && req.server.ownerId !== req.user.id ? '/admin?done=deleted' : '/servers?done=deleted');
@@ -309,6 +378,7 @@ async function main() {
   requireToken();
   await db.connect();
   await auth.cleanupSessions();
+  hostStats.startSampling();
   setInterval(() => auth.cleanupSessions().catch((err) => console.error(err)), 3600 * 1000).unref();
 
   const app = buildApp();
@@ -324,4 +394,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { buildApp, describe };
+module.exports = { buildApp, describe, fmt };

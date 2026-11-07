@@ -1,37 +1,127 @@
 <%- include('partials/head') %>
-<h1>Your servers</h1>
-<% if (list.length === 0) { %>
-  <p class="muted">You don't have a server yet. Create one below.</p>
-<% } else { %>
-  <div class="list">
-  <% for (const s of list) { %>
-    <a class="row" href="/servers/<%= s.id %>">
-      <span class="name"><%= s.name %></span>
-      <%- include('partials/badge', { view: s.view }) %>
-      <span class="muted"><%= s.online %> / <%= s.maxPlayers %> players</span>
-    </a>
-  <% } %>
+<div class="page-head">
+  <div>
+    <h1>Welcome back, <%= user.username %></h1>
+    <p class="muted">Your servers and how the PSNode network is doing right now.</p>
   </div>
-<% } %>
+  <% if (canCreate) { %><a class="btn" href="#create"><svg class="ic"><use href="#i-plus"/></svg>New server</a><% } %>
+</div>
 
-<section class="card">
-  <h2>Create a server</h2>
-  <% if (error) { %><p class="notice bad"><%= error %></p><% } %>
-  <% if (canCreate) { %>
-  <form method="post" action="/servers" class="grid-form">
-    <input type="hidden" name="_csrf" value="<%= csrf %>">
-    <label>Server name
-      <input name="name" value="<%= values.name || '' %>" required minlength="3" maxlength="24" pattern="[A-Za-z0-9]{3,24}" placeholder="e.g. SkyBlock">
-      <small>Players type this on the login screen. Letters and digits only.</small>
-    </label>
-    <label>Max players
-      <input name="maxPlayers" type="number" min="1" max="<%= config.maxPlayersLimit %>" value="<%= values.maxPlayers %>" required>
-      <small>Up to <%= config.maxPlayersLimit %>.</small>
-    </label>
-    <button type="submit">Create server</button>
-  </form>
-  <% } else { %>
-  <p class="muted">You have reached the limit of <%= config.serversPerUser %> servers. Delete one to make another.</p>
-  <% } %>
+<section class="tiles" id="dash" data-live="1">
+  <div class="tile">
+    <span class="tile-label"><svg class="ic"><use href="#i-server"/></svg>Your servers</span>
+    <span class="tile-value"><%= list.length %><small> / <%= config.serversPerUser %></small></span>
+    <span class="tile-foot"><%= list.filter((s) => s.view.key === 'online').length %> online</span>
+  </div>
+  <div class="tile">
+    <span class="tile-label"><svg class="ic"><use href="#i-globe"/></svg>Servers online</span>
+    <span class="tile-value" data-k="online"><%= platform.online %></span>
+    <span class="tile-foot">of <span data-k="total"><%= platform.total %></span> on PSNode</span>
+  </div>
+  <div class="tile">
+    <span class="tile-label"><svg class="ic"><use href="#i-users"/></svg>Players online</span>
+    <span class="tile-value" data-k="players"><%= platform.players %></span>
+    <span class="tile-foot">across every server</span>
+  </div>
+  <div class="tile highlight">
+    <span class="tile-label"><svg class="ic"><use href="#i-trophy"/></svg>Busiest server</span>
+    <span class="tile-value name" data-k="topName"><%= platform.top ? platform.top.name : 'Nobody yet' %></span>
+    <span class="tile-foot" data-k="topFoot"><%= platform.top ? platform.top.online + ' players right now' : 'The first server with players shows up here' %></span>
+  </div>
 </section>
+
+<div class="dash-grid">
+  <section class="card">
+    <div class="card-head">
+      <h2>Your servers</h2>
+      <span class="chip"><%= list.length %> / <%= config.serversPerUser %></span>
+    </div>
+    <% if (list.length === 0) { %>
+      <div class="empty">
+        <svg class="ic big"><use href="#i-server"/></svg>
+        <p>You don't have a server yet.</p>
+        <a class="btn" href="#create">Create your first server</a>
+      </div>
+    <% } else { %>
+      <ul class="srv-list">
+      <% for (const s of list) { %>
+        <li class="srv-row">
+          <span class="srv-icon <%= s.view.key %>"><svg class="ic"><use href="#i-server"/></svg></span>
+          <div class="srv-main">
+            <div class="srv-name"><a href="/servers/<%= s.id %>"><%= s.name %></a> <%- include('partials/badge', { view: s.view }) %></div>
+            <div class="srv-meta">
+              <span><svg class="ic"><use href="#i-users"/></svg><%= s.online %> / <%= s.maxPlayers %></span>
+              <% if (s.proc && s.proc.mem !== null && s.proc.mem !== undefined) { %><span><%= fmt.bytes(s.proc.mem) %> RAM</span><% } %>
+              <% if (s.proc && s.proc.cpu !== null && s.proc.cpu !== undefined) { %><span><%= fmt.percent(s.proc.cpu) %> CPU</span><% } %>
+              <% if (s.proc && s.proc.startedAt && s.view.key === 'online') { %><span>up <%= fmt.since(s.proc.startedAt) %></span><% } %>
+            </div>
+          </div>
+          <div class="srv-actions">
+            <a class="btn ghost small" href="/servers/<%= s.id %>/console" title="Console"><svg class="ic"><use href="#i-terminal"/></svg></a>
+            <a class="btn small" href="/servers/<%= s.id %>">Manage</a>
+          </div>
+        </li>
+      <% } %>
+      </ul>
+    <% } %>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Network load</h2><span class="muted small"><%= host.cores %> cores</span></div>
+    <div class="meters">
+      <div class="meter">
+        <div class="meter-top"><span>CPU</span><strong data-k="cpu"><%= fmt.percent(host.cpu) %></strong></div>
+        <progress max="100" value="<%= host.cpu || 0 %>" data-k="cpuBar"></progress>
+      </div>
+      <div class="meter">
+        <div class="meter-top"><span>Memory</span><strong data-k="mem"><%= fmt.bytes(host.memory.used) %> <small>/ <%= fmt.bytes(host.memory.total) %></small></strong></div>
+        <progress max="<%= host.memory.total %>" value="<%= host.memory.used %>" data-k="memBar"></progress>
+      </div>
+      <% if (host.disk) { %>
+      <div class="meter">
+        <div class="meter-top"><span>Disk</span><strong data-k="disk"><%= fmt.bytes(host.disk.used) %> <small>/ <%= fmt.bytes(host.disk.total) %></small></strong></div>
+        <progress max="<%= host.disk.total %>" value="<%= host.disk.used %>" data-k="diskBar"></progress>
+      </div>
+      <% } %>
+      <div class="mini-stats">
+        <div><span>Uptime</span><strong data-k="uptime"><%= fmt.duration(host.uptimeSeconds) %></strong></div>
+        <div><span>Network in</span><strong data-k="rx"><%= host.rxPerSec === null ? '–' : fmt.bytes(host.rxPerSec) + '/s' %></strong></div>
+        <div><span>Network out</span><strong data-k="tx"><%= host.txPerSec === null ? '–' : fmt.bytes(host.txPerSec) + '/s' %></strong></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="create">
+    <div class="card-head"><h2>Create a server</h2></div>
+    <% if (error) { %><p class="notice bad"><%= error %></p><% } %>
+    <% if (canCreate) { %>
+    <form method="post" action="/servers" class="stack">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <label>Server name
+        <input name="name" value="<%= values.name || '' %>" required minlength="3" maxlength="24" pattern="[A-Za-z0-9]{3,24}" placeholder="e.g. SkyBlock">
+        <small>Players type this on the login screen. Letters and digits only.</small>
+      </label>
+      <label>Max players
+        <input name="maxPlayers" type="number" min="1" max="<%= config.maxPlayersLimit %>" value="<%= values.maxPlayers %>" required>
+        <small>Up to <%= config.maxPlayersLimit %>. You can change it later.</small>
+      </label>
+      <button type="submit"><svg class="ic"><use href="#i-plus"/></svg>Create and start</button>
+    </form>
+    <% } else { %>
+    <p class="muted">You have reached the limit of <%= config.serversPerUser %> servers. Delete one to make another.</p>
+    <% } %>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Quick actions</h2></div>
+    <div class="actions-list">
+      <% if (canCreate) { %><a class="action" href="#create"><svg class="ic"><use href="#i-plus"/></svg><span><strong>New server</strong><small>Pick a name and it starts right away</small></span></a><% } %>
+      <div class="action static"><svg class="ic"><use href="#i-plug"/></svg><span><strong>How players join</strong><small>They connect to <b><%= config.gameAddress || 'the PSNode address' %></b> and type your server name on the login screen</small></span></div>
+      <span class="action soon"><svg class="ic"><use href="#i-book"/></svg><span><strong>Lua documentation</strong><small>Scripting is on the way</small></span><em>Soon</em></span>
+      <% if (config.discordUrl) { %><a class="action" href="<%= config.discordUrl %>" target="_blank" rel="noopener"><svg class="ic"><use href="#i-chat"/></svg><span><strong>Join our Discord</strong><small>Updates, help and server showcases</small></span></a><% } %>
+    </div>
+  </section>
+</div>
+<script src="/static/fmt.js"></script>
+<script src="/static/dashboard.js"></script>
 <%- include('partials/foot') %>
