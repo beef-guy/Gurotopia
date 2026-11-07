@@ -128,3 +128,38 @@ test('host stats read /proc', async () => {
   assert.ok(s.cores > 0);
   assert.ok(s.uptimeSeconds > 0);
 });
+
+test('item icons: a 32x32 cell of an .rttex becomes a PNG', () => {
+  const rttex = require('../src/rttex');
+  const zlib = require('node:zlib');
+  const os = require('node:os');
+  const w = 64; const h = 32;
+  const head = Buffer.alloc(124);
+  head.write('RTTXTR', 0, 'latin1');
+  head.writeInt32LE(h, 8); head.writeInt32LE(w, 12); head.writeInt32LE(0x1401, 16);
+  head[28] = 1; // @note alpha
+  const pixels = Buffer.alloc(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4;
+    pixels[i] = x < 32 ? 255 : 0; pixels[i + 1] = x >= 32 ? 255 : 0; pixels[i + 2] = 0; pixels[i + 3] = 255;
+  }
+  const raw = Buffer.concat([head, pixels]);
+  const packed = Buffer.alloc(32);
+  packed.write('RTPACK', 0, 'latin1');
+  packed.writeUInt32LE(raw.length, 12);
+  packed[16] = 1;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tex-'));
+  fs.writeFileSync(path.join(dir, 'sheet.rttex'), Buffer.concat([packed, zlib.deflateSync(raw)]));
+
+  const decoded = rttex.decode(fs.readFileSync(path.join(dir, 'sheet.rttex')));
+  assert.equal(decoded.w, 64);
+  assert.equal(decoded.rgba[0], 255, 'left half red');
+  assert.equal(decoded.rgba[32 * 4 + 1], 255, 'right half green');
+  const icon = rttex.icon(dir, 'sheet.rttex', 1, 0);
+  assert.ok(icon && icon.subarray(1, 4).toString() === 'PNG');
+  assert.equal(icon.readUInt32BE(16), 32);
+  assert.equal(rttex.icon(dir, 'sheet.rttex', 2, 0), null, 'outside the sheet');
+  assert.equal(rttex.icon(dir, 'missing.rttex', 0, 0), null);
+  assert.equal(rttex.safePath(dir, '../etc/passwd.rttex'), null);
+  assert.equal(rttex.safePath(dir, 'sheet.png'), null);
+});

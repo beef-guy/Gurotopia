@@ -248,6 +248,7 @@ int main(int argc, char *argv[])
         }
 
         decode_items_dat();
+        if (!platform::gateway) panel_items_catalog();
         discord::load_webhook(discord_webhook_file); // @note ./discord_webhook.txt, or --discord-webhook
         parse_store();
         check_for_holiday();

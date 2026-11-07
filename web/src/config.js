@@ -64,6 +64,9 @@ const config = {
     storageEveryMs: int('STORAGE_CHECK_MINUTES', 5) * 60 * 1000,
   },
 
+  // @note Growtopia's game folder (the .rttex textures), for item icons in the item manager
+  texturesDir: path.resolve(str('TEXTURES_DIR', path.join(str('GAME_DIR', '/opt/gurotopia'), 'game'))),
+
   ports: {
     first: int('FIRST_GAME_PORT', 17100), // @note 17091 is the gateway
     last: int('LAST_GAME_PORT', 17999),

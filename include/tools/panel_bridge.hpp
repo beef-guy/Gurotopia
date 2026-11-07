@@ -9,3 +9,4 @@
 extern void panel_bridge_create_tables();
 extern void panel_tick();
 extern void panel_bridge_clear(); // @note on shutdown: nobody is online any more
+extern void panel_items_catalog(); // @note every item, for the website's item manager (web/src/items.js)

@@ -117,7 +117,7 @@ void action::tankIDName(ENetEvent& event, const std::string& header)
     /* v5.61 */
     send_varlist(event.peer, {
         "OnSuperMainStartAcceptLogonHrdxs47254722215a",
-        1423368844u, // @note items.dat
+        items_hash, // @note items.dat: a client whose copy is different asks for this server's (refresh_item_data)
         "ubistatic-a.akamaihd.net",
         "0098/01020126/cache/",
         "cc.cz.madkite.freedom org.aqua.gg idv.aqua.bulldog com.cih.gamecih2 com.cih.gamecih com.cih.game_cih cn.maocai.gamekiller com.gmd.speedtime org.dax.attack com.x0.strai.frep com.x0.strai.free org.cheatengine.cegui org.sbtools.gamehack com.skgames.traffikrider org.sbtoods.gamehaca com.skype.ralder org.cheatengine.cegui.xx.multi1458919170111 com.prohiro.macro me.autotouch.autotouch com.cygery.repetitouch.free com.cygery.repetitouch.pro com.proziro.zacro com.slash.gamebuster",

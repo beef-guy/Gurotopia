@@ -106,6 +106,20 @@ namespace
         mysql_query(db.mysql, std::format("DELETE FROM world WHERE name = '{}'", escape(name)).c_str());
     }
 
+    /* @note the website changed items (item_edits). players get the new items.dat when they log in again */
+    void items_reload()
+    {
+        const int changed = items_apply_edits();
+        panel_items_catalog();
+        print(std::format("panel: items reloaded, {} changed or added", changed));
+        peers("", PeerSearch::EVERYONE, [](ENetPeer *peer)
+        {
+            const ::peer *pPeer = static_cast<::peer*>(peer->data);
+            if (pPeer != nullptr && pPeer->authenticated)
+                on::ConsoleMessage(peer, "`2This server's items were just updated.`` Log out and back in to see the changes.");
+        });
+    }
+
     void run(const std::string &action, const std::string &target, const std::string &value)
     {
         if (action == "player_sync") player_sync(target);
@@ -113,6 +127,7 @@ namespace
         else if (action == "world_empty") world_empty(target, "`4Everyone was sent out of this world by its server's owner.``");
         else if (action == "world_delete") world_delete(target);
         else if (action == "roles_reload") roles::reload(); // @note a role was made, edited or deleted on the website
+        else if (action == "items_reload") items_reload();
         else print(std::format("panel: unknown action {}", action));
     }
 
@@ -174,6 +189,51 @@ void panel_bridge_create_tables()
         "world VARCHAR(24) DEFAULT ''"
     ")");
     mysql_query(db.mysql, "DELETE FROM panel_actions WHERE done_at < NOW() - INTERVAL 7 DAY");
+    /* @note the website's changes to items.dat (web/src/items.js). a NULL value is left as items.dat has it */
+    mysql_query(db.mysql,
+        "CREATE TABLE IF NOT EXISTS item_edits ("
+        "id INT NOT NULL PRIMARY KEY,"
+        "base_id INT NULL," // @note custom items: the item it's a copy of
+        "removed TINYINT NOT NULL DEFAULT 0,"
+        "name VARCHAR(64) NULL,"
+        "texture VARCHAR(64) NULL,"
+        "info TEXT NULL,"
+        "rarity INT NULL, hits INT NULL, hit_reset INT NULL, collision INT NULL, cat INT NULL, tex_x INT NULL, tex_y INT NULL,"
+        "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+    ")");
+}
+
+void panel_items_catalog()
+{
+    if (db.mysql == nullptr) return;
+    mysql_query(db.mysql,
+        "CREATE TABLE IF NOT EXISTS item_catalog ("
+        "id INT NOT NULL PRIMARY KEY,"
+        "name VARCHAR(64) NOT NULL DEFAULT '',"
+        "type INT NOT NULL DEFAULT 0, rarity INT NOT NULL DEFAULT 0, hits INT NOT NULL DEFAULT 0, hit_reset INT NOT NULL DEFAULT 0,"
+        "collision INT NOT NULL DEFAULT 0, cat INT NOT NULL DEFAULT 0, cloth INT NOT NULL DEFAULT 10,"
+        "texture VARCHAR(64) NOT NULL DEFAULT '', tex_x INT NOT NULL DEFAULT 0, tex_y INT NOT NULL DEFAULT 0,"
+        "info TEXT, custom TINYINT NOT NULL DEFAULT 0,"
+        "INDEX (name)"
+    ")");
+    mysql_query(db.mysql, "DELETE FROM item_catalog");
+    const std::size_t original = items_original_count();
+    std::string values{};
+    const auto flush = [&values]()
+    {
+        if (values.empty()) return;
+        mysql_query(db.mysql, ("INSERT INTO item_catalog (id, name, type, rarity, hits, hit_reset, collision, cat, cloth, texture, tex_x, tex_y, info, custom) VALUES " + values).c_str());
+        values.clear();
+    };
+    for (const ::item &item : items)
+    {
+        if (!values.empty()) values += ',';
+        values += std::format("({},'{}',{},{},{},{},{},{},{},'{}',{},{},'{}',{})",
+            item.id, escape(item.raw_name), item.type, item.rarity, item.hits, item.hit_reset, item.collision, item.cat, item.cloth_type,
+            escape(item.texture), item.tex_x, item.tex_y, escape(item.info), item.id >= original ? 1 : 0);
+        if (values.size() > 400000) flush();
+    }
+    flush();
 }
 
 void panel_tick()
