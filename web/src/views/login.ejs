@@ -1,5 +1,6 @@
 <%- include('partials/head') %>
-<section class="card narrow">
+<section class="card narrow auth">
+  <span class="logo big">PS</span>
   <h1>Log in</h1>
   <% if (error) { %><p class="notice bad"><%= error %></p><% } %>
   <form method="post" action="/login" class="stack">

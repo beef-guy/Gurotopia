@@ -127,6 +127,9 @@ function entryFor(id) {
       lastExit: null,
       message: '',
       log: new LogFile(path.join(serverDir(id), 'logs', 'server.log'), S.logMaxBytes),
+      samples: [], // @note { t, cpu, mem, players }, one every S.sampleMs, oldest first
+      lastCpu: null, // @note { ticks, at } from the previous sample, to turn CPU ticks into a percentage
+      storage: null, // @note { files, database, at } in bytes, refreshed every few minutes
     };
     entries.set(id, entry);
   }
@@ -134,7 +137,10 @@ function entryFor(id) {
 }
 
 function publicState(entry) {
+  const last = entry.samples[entry.samples.length - 1];
   return {
+    cpu: entry.child && last ? last.cpu : null,
+    mem: entry.child && last ? last.mem : null,
     id: entry.id,
     state: entry.state,
     pid: entry.pid,
@@ -245,6 +251,7 @@ async function doLaunch(entry) {
   entry.message = '';
   entry.stopping = false;
 
+  entry.lastCpu = null;
   child.stdout.on('data', (chunk) => entry.log.feed('stdout', chunk));
   child.stderr.on('data', (chunk) => entry.log.feed('stderr', chunk));
 
@@ -395,6 +402,112 @@ async function startWanted() {
   return rows.length;
 }
 
+/* ---------- resource samples ---------- */
+
+const CLOCK_TICKS = 100; // @note USER_HZ, 100 on every Linux the VPS will run
+
+/* @note CPU time (user + system) in clock ticks, or null when /proc can't be read (not Linux, or the process is gone) */
+async function cpuTicks(pid) {
+  try {
+    const stat = await fsp.readFile(`/proc/${pid}/stat`, 'utf8');
+    const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' '); // @note the name in () can hold spaces
+    return Number(fields[11]) + Number(fields[12]); // @note utime and stime (fields 14 and 15 of the full line)
+  } catch {
+    return null;
+  }
+}
+
+async function residentBytes(pid) {
+  try {
+    const status = await fsp.readFile(`/proc/${pid}/status`, 'utf8');
+    const match = /^VmRSS:\s+(\d+) kB/m.exec(status);
+    return match ? Number(match[1]) * 1024 : null;
+  } catch {
+    return null;
+  }
+}
+
+/* @note size of a folder without following links, so the shared items.dat and resources/ aren't counted */
+async function folderBytes(dir) {
+  let total = 0;
+  let names;
+  try { names = await fsp.readdir(dir, { withFileTypes: true }); } catch { return 0; }
+  for (const d of names) {
+    const full = path.join(dir, d.name);
+    if (d.isDirectory()) total += await folderBytes(full);
+    else if (d.isFile()) total += (await fsp.lstat(full).catch(() => ({ size: 0 }))).size;
+  }
+  return total;
+}
+
+async function refreshStorage(entry, dbName) {
+  const files = await folderBytes(serverDir(entry.id));
+  let database = 0;
+  if (dbName) {
+    const [[row]] = await db.getPool().query(
+      'SELECT COALESCE(SUM(data_length + index_length), 0) AS bytes FROM information_schema.tables WHERE table_schema = ?', [dbName]);
+    database = Number(row.bytes);
+  }
+  entry.storage = { files, database, at: Date.now() };
+}
+
+let sampling = false;
+async function sampleAll() {
+  if (sampling) return; // @note a slow database must not pile samples up
+  sampling = true;
+  try {
+    const [rows] = await db.getPool().query(
+      `SELECT id, db_name, online,
+              (last_seen IS NOT NULL AND last_seen > UTC_TIMESTAMP() - INTERVAL 120 SECOND) AS fresh
+       FROM servers`);
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const now = Date.now();
+    const keep = Math.ceil(S.sampleHistoryMs / S.sampleMs);
+
+    for (const entry of entries.values()) {
+      const row = byId.get(entry.id);
+      let cpu = null;
+      let mem = null;
+      if (entry.child && entry.pid) {
+        const ticks = await cpuTicks(entry.pid);
+        mem = await residentBytes(entry.pid);
+        if (ticks !== null) {
+          if (entry.lastCpu) {
+            const seconds = (now - entry.lastCpu.at) / 1000;
+            cpu = seconds > 0 ? Math.max(0, ((ticks - entry.lastCpu.ticks) / CLOCK_TICKS / seconds) * 100) : 0;
+            cpu = Math.round(cpu * 10) / 10;
+          }
+          entry.lastCpu = { ticks, at: now };
+        }
+      } else {
+        entry.lastCpu = null;
+      }
+      const players = entry.child && row && row.fresh ? Number(row.online) : (entry.child ? null : 0);
+      entry.samples.push({ t: now, cpu: entry.child ? cpu : null, mem: entry.child ? mem : null, players });
+      if (entry.samples.length > keep) entry.samples.splice(0, entry.samples.length - keep);
+
+      if (row && (!entry.storage || now - entry.storage.at > S.storageEveryMs)) {
+        await refreshStorage(entry, row.db_name).catch((err) => console.error(`server ${entry.id}: storage: ${err.message}`));
+      }
+    }
+  } catch (err) {
+    console.error(`sampling failed: ${err.message}`);
+  } finally {
+    sampling = false;
+  }
+}
+
+function metrics(id, minutes) {
+  const entry = entries.get(id);
+  const since = Date.now() - minutes * 60 * 1000;
+  return {
+    id,
+    intervalSeconds: S.sampleMs / 1000,
+    samples: entry ? entry.samples.filter((s) => s.t >= since) : [],
+    storage: entry?.storage ? { files: entry.storage.files, database: entry.storage.database } : null,
+  };
+}
+
 /* ---------- HTTP API ---------- */
 
 function authorized(req) {
@@ -430,6 +543,10 @@ async function handle(req, res) {
     const bytes = Math.min(Math.max(Number.parseInt(url.searchParams.get('bytes') || '20000', 10) || 20000, 1000), 500_000);
     result = { id, text: await logs(id, bytes) };
   }
+  else if (req.method === 'GET' && action === 'metrics') {
+    const minutes = Math.min(Math.max(Number.parseInt(url.searchParams.get('minutes') || '30', 10) || 30, 1), S.sampleHistoryMs / 60000);
+    result = metrics(id, minutes);
+  }
   else if (req.method === 'POST' && action === 'start') result = await start(id);
   else if (req.method === 'POST' && action === 'stop') result = await stop(id);
   else if (req.method === 'POST' && action === 'restart') result = await restart(id);
@@ -455,6 +572,8 @@ async function main() {
   });
   server.listen(S.port, S.host, () => console.log(`supervisor listening on ${S.host}:${S.port}`));
 
+  setInterval(sampleAll, S.sampleMs).unref();
+
   const started = await startWanted();
   console.log(`started ${started} server(s) that were running before`);
 
@@ -479,4 +598,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { LogFile, readTail, gameArgs };
+module.exports = { LogFile, readTail, gameArgs, folderBytes };

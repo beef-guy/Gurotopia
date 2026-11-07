@@ -1,0 +1,39 @@
+<%- include('head', { shell: 'server' }) %>
+<div class="shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="side-head">
+      <span class="srv-icon <%= view.key %>"><svg class="ic"><use href="#i-server"/></svg></span>
+      <div class="side-title">
+        <strong><%= server.name %></strong>
+        <small>ID <%= server.id %> · port <%= server.port %></small>
+      </div>
+    </div>
+    <nav class="side-nav">
+      <% for (const group of nav) { %>
+        <p class="side-group"><%= group.group %></p>
+        <% for (const item of group.items) { %>
+          <% if (item.soon) { %>
+            <span class="side-link soon" title="Coming soon"><svg class="ic"><use href="#i-<%= item.icon %>"/></svg><span><%= item.label %></span><em>Soon</em></span>
+          <% } else { %>
+            <a class="side-link <%= item.page === page ? 'active' : '' %>" href="/servers/<%= server.id %><%= item.path %>"><svg class="ic"><use href="#i-<%= item.icon %>"/></svg><span><%= item.label %></span></a>
+          <% } %>
+        <% } %>
+      <% } %>
+    </nav>
+  </aside>
+  <div class="shell-main">
+    <header class="topbar in-shell">
+      <a class="icon-btn" href="/servers" title="Back to dashboard" aria-label="Back to dashboard"><svg class="ic"><use href="#i-back"/></svg></a>
+      <a class="brand" href="/servers"><span class="logo">PS</span><span class="brand-name">PSNode</span></a>
+      <nav class="topnav">
+        <% if (user.isAdmin) { %><a href="/admin"><svg class="ic"><use href="#i-shield"/></svg><span>Admin</span></a><% } %>
+        <span class="avatar" title="<%= user.username %>"><%= user.username.slice(0, 1).toUpperCase() %></span>
+        <form method="post" action="/logout" class="inline">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <button class="icon-btn" type="submit" title="Log out" aria-label="Log out"><svg class="ic"><use href="#i-logout"/></svg></button>
+        </form>
+      </nav>
+    </header>
+    <main class="page wide" id="server-page" data-server="<%= server.id %>">
+      <% if (done) { %><p class="notice ok"><%= done %></p><% } %>
+      <% if (error) { %><p class="notice bad"><%= error %></p><% } %>

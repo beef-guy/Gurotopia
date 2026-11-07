@@ -26,6 +26,7 @@ module.exports = {
   status: (id) => call('GET', `/servers/${id}`, 5000),
   all: () => call('GET', '/servers', 5000),
   logs: (id, bytes = 20000) => call('GET', `/servers/${id}/logs?bytes=${bytes}`, 5000),
+  metrics: (id, minutes = 30) => call('GET', `/servers/${id}/metrics?minutes=${minutes}`, 5000),
   start: (id) => call('POST', `/servers/${id}/start`),
   stop: (id) => call('POST', `/servers/${id}/stop`),
   restart: (id) => call('POST', `/servers/${id}/restart`, 90_000),

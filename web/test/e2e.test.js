@@ -88,6 +88,7 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     GAME_DIR: gameDir, SERVERS_DIR: serversDir,
     STOP_TIMEOUT_SECONDS: '10', MAX_CRASHES: '2',
     SERVERS_PER_USER: '2', SIGNUP_CODE: 'letmein',
+    SAMPLE_SECONDS: '1', STORAGE_CHECK_MINUTES: '1',
   };
   const procs = [];
   const output = [];
@@ -175,6 +176,31 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     assert.ok(fs.lstatSync(path.join(serversDir, String(id), 'items.dat')).isSymbolicLink());
     const [dbs] = await admin.query(`SHOW DATABASES LIKE 'srv\\_${id}'`);
     assert.equal(dbs.length, 1, 'first start created the server database');
+  });
+
+  await t.test('dashboard, pages and resource graphs', async () => {
+    const dash = await alice.get('/servers');
+    assert.equal(dash.status, 200);
+    assert.match(dash.text, /SkyBlock/);
+    assert.match(dash.text, /Network load/);
+    const live = JSON.parse((await alice.get('/dashboard.json')).text);
+    assert.ok(live.platform.online >= 1);
+    assert.equal(live.platform.top.name, 'SkyBlock');
+    assert.ok(live.host.memory.total > 0);
+
+    for (const page of ['', '/console', '/settings']) {
+      const r = await alice.get(`/servers/${id}${page}`);
+      assert.equal(r.status, 200, page);
+      assert.match(r.text, /class="side-link active"/);
+    }
+
+    const metrics = await waitFor(async () => {
+      const m = JSON.parse((await alice.get(`/servers/${id}/metrics.json?minutes=15`)).text);
+      return m.samples.some((s) => s.mem > 0 && s.cpu !== null && s.players === 2) ? m : null;
+    }, 'resource samples', 10000);
+    assert.equal(metrics.intervalSeconds, 1);
+    assert.ok(metrics.storage && metrics.storage.files > 0, 'storage was measured');
+    assert.equal((await bob.get(`/servers/${id}/metrics.json`)).status, 404);
   });
 
   await t.test('the log shows the server output', async () => {

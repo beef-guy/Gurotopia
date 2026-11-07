@@ -1,6 +1,12 @@
 <%- include('partials/head') %>
-<h1>Admin</h1>
-<p class="muted"><%= users %> accounts · <%= list.length %> servers</p>
+<div class="page-head">
+  <div>
+    <h1>Admin</h1>
+    <p class="muted"><%= users %> accounts · <%= list.length %> servers</p>
+  </div>
+</div>
+<section class="card flush">
+<div class="table-wrap">
 <table class="table">
   <thead><tr><th>Server</th><th>Owner</th><th>Status</th><th>Players</th><th>Port</th><th>Created</th></tr></thead>
   <tbody>
@@ -14,6 +20,9 @@
       <td><%= s.createdAt ? new Date(s.createdAt).toISOString().slice(0, 10) : '' %></td>
     </tr>
   <% } %>
+  <% if (list.length === 0) { %><tr><td colspan="6" class="muted">No servers yet.</td></tr><% } %>
   </tbody>
 </table>
+</div>
+</section>
 <%- include('partials/foot') %>

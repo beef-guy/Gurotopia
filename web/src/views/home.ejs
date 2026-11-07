@@ -1,15 +1,16 @@
 <%- include('partials/head') %>
 <section class="hero">
-  <h1>Run your own server in a minute</h1>
-  <p>Pick a name, press Start, and your players join by typing that name on the login screen. Everyone connects to the same address, so there is nothing for them to set up per server.</p>
-  <p class="actions">
-    <a class="button" href="/signup">Create an account</a>
-    <a class="button ghost" href="/login">Log in</a>
+  <span class="eyebrow">PSNode hosting</span>
+  <h1>Your own private server,<br><span class="grad">running in a minute.</span></h1>
+  <p>Pick a name and press Start. Players connect to one shared address and type your server name on the login screen, so there's nothing for them to set up.</p>
+  <p class="hero-actions">
+    <a class="btn" href="/signup">Create an account</a>
+    <a class="btn ghost" href="/login">Log in</a>
   </p>
 </section>
-<section class="steps">
-  <div><h3>1. Create</h3><p>Choose a server name and how many players can be online at once.</p></div>
-  <div><h3>2. Start</h3><p>Start, stop and restart it from here, and watch its log live.</p></div>
-  <div><h3>3. Script</h3><p>Lua scripting for custom commands and events is coming next.</p></div>
+<section class="features">
+  <div class="card feature"><svg class="ic big"><use href="#i-plus"/></svg><h3>Create</h3><p>Choose a server name and how many players can be online at once.</p></div>
+  <div class="card feature"><svg class="ic big"><use href="#i-terminal"/></svg><h3>Control</h3><p>Start, stop and restart it, watch the live console and see CPU, memory and player graphs.</p></div>
+  <div class="card feature"><svg class="ic big"><use href="#i-code"/></svg><h3>Script</h3><p>Lua scripting for custom commands and events is on the way.</p></div>
 </section>
 <%- include('partials/foot') %>

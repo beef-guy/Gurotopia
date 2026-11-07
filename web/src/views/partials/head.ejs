@@ -3,25 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title><%= title ? title + ' · ' : '' %>Gurotopia servers</title>
+  <meta name="color-scheme" content="dark">
+  <title><%= title ? title + ' · ' : '' %>PSNode</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
-<header class="top">
-  <a class="brand" href="/">Gurotopia <span>servers</span></a>
-  <nav>
+<body class="<%= typeof bodyClass !== 'undefined' ? bodyClass : '' %>">
+<%- include('icons') %>
+<% if (typeof shell === 'undefined' || shell !== 'server') { %>
+<header class="topbar">
+  <a class="brand" href="<%= user ? '/servers' : '/' %>">
+    <span class="logo">PS</span><span class="brand-name">PSNode</span>
+  </a>
+  <nav class="topnav">
     <% if (user) { %>
-      <a href="/servers">Your servers</a>
-      <% if (user.isAdmin) { %><a href="/admin">Admin</a><% } %>
+      <a href="/servers" class="<%= path === '/servers' ? 'active' : '' %>"><svg class="ic"><use href="#i-grid"/></svg><span>Dashboard</span></a>
+      <% if (user.isAdmin) { %><a href="/admin" class="<%= path === '/admin' ? 'active' : '' %>"><svg class="ic"><use href="#i-shield"/></svg><span>Admin</span></a><% } %>
+      <span class="avatar" title="<%= user.username %>"><%= user.username.slice(0, 1).toUpperCase() %></span>
       <form method="post" action="/logout" class="inline">
         <input type="hidden" name="_csrf" value="<%= csrf %>">
-        <button class="link" type="submit">Log out (<%= user.username %>)</button>
+        <button class="icon-btn" type="submit" title="Log out" aria-label="Log out"><svg class="ic"><use href="#i-logout"/></svg></button>
       </form>
     <% } else { %>
       <a href="/login">Log in</a>
-      <a class="button small" href="/signup">Sign up</a>
+      <a class="btn small" href="/signup">Sign up</a>
     <% } %>
   </nav>
 </header>
-<main>
+<main class="page">
 <% if (done) { %><p class="notice ok"><%= done %></p><% } %>
+<% } %>

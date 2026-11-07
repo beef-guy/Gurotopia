@@ -43,6 +43,7 @@ const config = {
     maxPlayersLimit: int('MAX_PLAYERS_LIMIT', 100),
     defaultMaxPlayers: int('DEFAULT_MAX_PLAYERS', 50),
     sessionDays: int('SESSION_DAYS', 14),
+    discordUrl: str('DISCORD_URL', ''), // @note shown as a quick action on the dashboard when set
     gameAddress: str('GAME_ADDRESS', ''), // @note the shared IP or hostname players point the game at, shown on the dashboard
   },
 
@@ -58,6 +59,9 @@ const config = {
     logMaxBytes: int('LOG_MAX_BYTES', 2 * 1024 * 1024),
     maxCrashes: int('MAX_CRASHES', 5), // @note this many crashes within crashWindowMs gives up until someone presses Start
     crashWindowMs: int('CRASH_WINDOW_MINUTES', 10) * 60 * 1000,
+    sampleMs: int('SAMPLE_SECONDS', 10) * 1000, // @note how often CPU, memory and players are recorded for the graphs
+    sampleHistoryMs: int('SAMPLE_HISTORY_HOURS', 6) * 3600 * 1000, // @note how far back the graphs go (kept in memory only)
+    storageEveryMs: int('STORAGE_CHECK_MINUTES', 5) * 60 * 1000,
   },
 
   ports: {

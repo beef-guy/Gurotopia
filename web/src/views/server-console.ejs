@@ -1,0 +1,28 @@
+<%- include('partials/server-shell') %>
+<div class="page-head">
+  <div>
+    <h1>Console <span id="status-badge"><%- include('partials/badge', { view }) %></span></h1>
+    <p id="status-detail" class="muted"><%= view.detail || 'Live output from the server. It refreshes every few seconds.' %></p>
+  </div>
+  <div class="controls">
+    <% for (const [action, icon, label, cls] of [['start', 'play', 'Start', ''], ['restart', 'restart', 'Restart', 'ghost'], ['stop', 'stop', 'Stop', 'ghost danger']]) { %>
+    <form method="post" action="/servers/<%= server.id %>/<%= action %>" class="inline">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button type="submit" class="<%= cls %>" data-action="<%= action %>"<%= (action === 'start' && ['online', 'starting', 'busy'].includes(view.key)) || (action !== 'start' && view.key === 'offline') ? ' disabled' : '' %>><svg class="ic"><use href="#i-<%= icon %>"/></svg><span><%= label %></span></button>
+    </form>
+    <% } %>
+  </div>
+</div>
+<section class="card console-card">
+  <div class="console-bar">
+    <span class="dots"><i></i><i></i><i></i></span>
+    <span class="muted small">server.log</span>
+    <div class="console-tools">
+      <input type="search" id="log-filter" placeholder="Filter lines" aria-label="Filter lines">
+      <label class="toggle"><input type="checkbox" id="follow" checked> Follow</label>
+    </div>
+  </div>
+  <pre id="log" class="log tall">Loading…</pre>
+  <span id="online" hidden><%= server.online %></span>
+</section>
+<%- include('partials/server-shell-end') %>
