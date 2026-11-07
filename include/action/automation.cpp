@@ -6,6 +6,7 @@
 #include "tools/random.hpp"
 #include "tools/sound.hpp"
 #include "tools/time.hpp"
+#include "database/machines.hpp"
 
 #include "automation.hpp"
 
@@ -25,7 +26,6 @@ namespace
 {
     constexpr long long INTERVAL_MS = 2000; // @note between harvests
     constexpr long long HIT_MS = 300;       // @note between punches on a block, about a player's punch speed
-    constexpr int ENGINE_CAPACITY = 5000;
 
     long long now_ms()
     {
@@ -95,7 +95,7 @@ namespace
     void drop(ENetEvent &event, ::world &world, ::auto_machine &m, type machine, ::slot slot, const ::pos &tile)
     {
         if (slot.count <= 0) return;
-        if (machine == type::AUTO_BREAK && slot.id == m.item && m.count + slot.count <= ENGINE_CAPACITY)
+        if (machine == type::AUTO_BREAK && slot.id == m.item && m.count + slot.count <= machines::capacity(world.blocks[cord(m.pos.x_int(), m.pos.y_int())].fg))
         {
             m.count += slot.count;
             ::gamePacket effect{ // @note the item flies into the machine, like a MAGPLANT
@@ -200,7 +200,7 @@ void auto_machine_wrench(ENetEvent &event, ::world &world, const ::pos &pos)
                         cost(machine), (cost(machine) == 1) ? "" : "s"))
           .add_textbox(m.on ? "`oThe machine is `2ON``. Punch it to turn it off.``" : "`oThe machine is `4OFF``. Punch it to turn it on.``");
     if (machine == type::AUTO_BREAK && m.count > 0)
-        dialog.add_label_with_icon("small", std::format("`oHolding `w{} {}``", m.count, id_to_item(m.item).raw_name), m.item)
+        dialog.add_label_with_icon("small", std::format("`oHolding `w{} {}`` (up to {})", m.count, id_to_item(m.item).raw_name, machines::capacity(fg)), m.item)
               .add_button("take_items", "`wRetrieve items``");
     dialog.add_spacer("small")
           .add_item_picker("target", "`wChoose target``", std::format("Choose a {} for the machine", what))
@@ -310,7 +310,7 @@ void automation_tick()
             if (!m.on || now < m.next || !valid_tile(world, m.pos)) continue;
             const type machine = static_cast<type>(id_to_item(world.blocks[cord(m.pos.x_int(), m.pos.y_int())].fg).type);
             if (!is_machine(machine)) { m.on = false; continue; }
-            if (m.gems < cost(machine) || m.target == 0 || (machine == type::AUTO_BREAK && m.count >= ENGINE_CAPACITY))
+            if (m.gems < cost(machine) || m.target == 0 || (machine == type::AUTO_BREAK && m.count >= machines::capacity(world.blocks[cord(m.pos.x_int(), m.pos.y_int())].fg)))
             {
                 m.on = false; // @note out of gems, or full: it stops by itself
                 world_tile_update(world, m.pos);

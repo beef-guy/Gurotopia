@@ -3,7 +3,7 @@
   <span><strong><%= pending %> item <%= pending === 1 ? 'change is' : 'changes are' %> saved but not in the game yet.</strong> <%= server.reporting ? 'Restart the server to put them in. Everyone online is kicked and can log straight back in.' : 'They go in when the server starts.' %></span>
   <form method="post" action="/servers/<%= server.id %>/<%= server.reporting ? 'restart' : 'start' %>" class="inline">
     <input type="hidden" name="_csrf" value="<%= csrf %>">
-    <input type="hidden" name="back" value="items">
+    <input type="hidden" name="back" value="<%= typeof back === 'string' ? back : 'items' %>">
     <button type="submit"><svg class="ic"><use href="#i-<%= server.reporting ? 'restart' : 'play' %>"/></svg><%= server.reporting ? 'Restart to apply' : 'Start server' %></button>
   </form>
 </div>

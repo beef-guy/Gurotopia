@@ -2,6 +2,7 @@
 #include "friends.hpp"
 #include "tools/random.hpp"
 #include "tools/time.hpp"
+#include "machines.hpp"
 #include "onVariant/ConsoleMessage.hpp"
 
 #include "world.hpp"
@@ -1512,7 +1513,7 @@ void add_drop(ENetEvent &event, ::slot im, ::pos pos, ::world &world) // @todo
 
 int magplant_limit(short machine)
 {
-    return (machine == 6946/*Gaia's Beacon*/ || machine == 6948/*Unstable Tesseract*/) ? 1500 : 5000; // @note source: github.com/cppdecl/Nomikai Src/World/Tile.cc
+    return machines::capacity(machine); // @note the website's Machine Capacities (5000, 1500 for Gaia's Beacon and Unstable Tesseract by default)
 }
 
 void add_break_drop(ENetEvent &event, ::slot im, ::pos pos, ::world &world)

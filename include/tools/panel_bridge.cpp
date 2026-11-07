@@ -6,6 +6,7 @@
 #include "database/roles.hpp"
 #include "database/titles.hpp"
 #include "database/item_effects.hpp"
+#include "database/machines.hpp"
 #include "database/playmods.hpp"
 #include "commands/punch.hpp"
 #include "tools/terminal.hpp"
@@ -133,6 +134,7 @@ namespace
         else if (action == "roles_reload") roles::reload(); // @note a role was made, edited or deleted on the website
         else if (action == "items_reload") items_reload();
         else if (action == "effects_reload") item_effects::reload(); // @note an item effect was made, edited or deleted on the website
+        else if (action == "machines_reload") machines::reload(); // @note a machine's capacity was changed on the website
         else if (action == "titles_reload") titles::reload(); // @note a title was made, edited or deleted on the website
         else if (action == "titles_sync") // @note the website gave or took a player's title
         {

@@ -1,0 +1,96 @@
+<%- include('partials/server-shell') %>
+<%
+  const link = (changes) => {
+    const p = new URLSearchParams();
+    const merged = { ...query, ...changes };
+    if (merged.q) p.set('q', merged.q);
+    if (merged.sort && merged.sort !== 'id') p.set('sort', merged.sort);
+    if (merged.dir === 'desc') p.set('dir', 'desc');
+    if (Number(merged.page) > 1) p.set('page', merged.page);
+    const qs = p.toString();
+    return `/servers/${server.id}/machines${qs ? '?' + qs : ''}`;
+  };
+  const sortLink = (key) => link({ sort: key, dir: query.sort === key && query.dir !== 'desc' ? 'desc' : 'asc', page: 1 });
+  const arrow = (key) => query.sort === key ? (query.dir === 'desc' ? '↓' : '↑') : '↕';
+  const takes = (m) => m.kind !== 'magplant' ? '–' : accepts.find((a) => a.value === m.accepts).label;
+%>
+<div class="page-head">
+  <div>
+    <h1>Machine capacities</h1>
+    <p class="muted">How many items each machine holds: magplants, vending machines and the Techno-Organic Engine. Set any number, and make your own magplants with a bigger capacity.</p>
+  </div>
+  <% if (result.ready) { %><a class="btn" href="/servers/<%= server.id %>/machines/new"><svg class="ic"><use href="#i-plus"/></svg>Create machine</a><% } %>
+</div>
+
+<%- include('partials/items-pending', { back: 'machines' }) %>
+
+<% if (!result.ready) { %>
+<section class="card">
+  <div class="empty">
+    <svg class="ic big"><use href="#i-chip"/></svg>
+    <p>Start the server once with the latest game build, then its machines show up here.</p>
+  </div>
+</section>
+<% } else { %>
+<section class="card flush">
+  <form class="toolbar" method="get" action="/servers/<%= server.id %>/machines">
+    <input type="search" name="q" value="<%= query.q %>" placeholder="Search machines by name or #id" aria-label="Search machines" maxlength="40">
+    <% if (query.sort !== 'id') { %><input type="hidden" name="sort" value="<%= query.sort %>"><% } %>
+    <% if (query.dir === 'desc') { %><input type="hidden" name="dir" value="desc"><% } %>
+    <button type="submit" class="ghost small">Search</button>
+    <% if (query.q) { %><a class="btn ghost small" href="/servers/<%= server.id %>/machines">Clear</a><% } %>
+  </form>
+  <% if (!result.machines.length) { %>
+    <div class="empty">
+      <svg class="ic big"><use href="#i-chip"/></svg>
+      <p><%= query.q ? 'No machines match that search.' : 'No machines yet.' %></p>
+    </div>
+  <% } else { %>
+  <div class="table-wrap">
+  <table class="table items machines">
+    <thead><tr>
+      <th><a class="sort-link" href="<%= sortLink('id') %>">ID <span aria-hidden="true"><%= arrow('id') %></span></a></th>
+      <th><a class="sort-link" href="<%= sortLink('name') %>">Machine <span aria-hidden="true"><%= arrow('name') %></span></a></th>
+      <th class="hide-sm">Type</th>
+      <th class="right"><a class="sort-link" href="<%= sortLink('capacity') %>">Capacity <span aria-hidden="true"><%= arrow('capacity') %></span></a></th>
+      <th class="hide-sm">Takes</th>
+      <th class="center hide-sm">Building mode</th>
+      <th class="hide-sm"></th>
+    </tr></thead>
+    <tbody>
+    <% for (const m of result.machines) { const changed = m.capacity !== m.defaults.capacity || m.accepts !== m.defaults.accepts || Number(m.remote) !== m.defaults.remote; %>
+      <tr>
+        <td class="mono">#<%= m.item %></td>
+        <td><a class="item-link" href="/servers/<%= server.id %>/machines/<%= m.item %>">
+          <span class="item-ic" data-letter="<%= m.name.slice(0, 1).toUpperCase() %>"><img src="/servers/<%= server.id %>/items/<%= m.item %>/icon.png" alt="" loading="lazy" width="32" height="32"></span>
+          <span class="item-name"><%= m.name %></span></a>
+          <% if (!m.builtin) { %><span class="tag custom">Custom</span><% } %>
+          <% if (m.pending) { %><span class="tag warn">Restart to add</span><% } %>
+          <% if (m.builtin && changed) { %><span class="tag edited">Changed</span><% } %>
+        </td>
+        <td class="muted hide-sm"><%= m.kindLabel %></td>
+        <td class="right cap <%= m.capacity > 0 ? '' : 'none' %>"><%= capacityText(m.capacity) %></td>
+        <td class="muted hide-sm"><%= takes(m) %></td>
+        <td class="center hide-sm"><%= m.kind !== 'magplant' ? '–' : (m.remote ? 'Yes' : 'No') %></td>
+        <td class="right hide-sm"><a class="btn ghost small" href="/servers/<%= server.id %>/machines/<%= m.item %>">Edit</a></td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table>
+  </div>
+  <% } %>
+  <div class="pager">
+    <span class="muted small"><%= result.total.toLocaleString('en-US') %> <%= result.total === 1 ? 'machine' : 'machines' %></span>
+    <% if (result.pages > 1) { %>
+    <span class="pager-links">
+      <% if (result.page > 1) { %><a class="btn ghost small" href="<%= link({ page: result.page - 1 }) %>">Previous</a><% } %>
+      <span class="muted small">Page <%= result.page %> of <%= result.pages %></span>
+      <% if (result.page < result.pages) { %><a class="btn ghost small" href="<%= link({ page: result.page + 1 }) %>">Next</a><% } %>
+    </span>
+    <% } %>
+  </div>
+</section>
+<p class="muted small">Capacity changes apply right away in every world. Machines that already hold more than a new, lower capacity keep their items, but take no more until they drop below it. To change how a custom machine looks, open it in the <a href="/servers/<%= server.id %>/items">Item manager</a> and pick a texture.</p>
+<% if (!server.reporting) { %><p class="muted small">The server is not running. Changes are saved and apply when it starts.</p><% } %>
+<% } %>
+<%- include('partials/server-shell-end') %>
