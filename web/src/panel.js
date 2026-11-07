@@ -4,6 +4,8 @@
  * It reads and writes the platform database and asks the supervisor to run processes.
  * It never runs game code itself.
  */
+const fs = require('node:fs');
+const crypto = require('node:crypto');
 const path = require('node:path');
 const express = require('express');
 
@@ -90,7 +92,16 @@ function clientIp(req) {
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
+/* @note changes whenever a file in public/ changes, so browsers never keep an old stylesheet or script after an update */
+function assetVersion() {
+  const dir = path.join(__dirname, '..', 'public');
+  const hash = crypto.createHash('sha1');
+  for (const name of fs.readdirSync(dir).sort()) hash.update(name).update(fs.readFileSync(path.join(dir, name)));
+  return hash.digest('hex').slice(0, 10);
+}
+
 function buildApp() {
+  const version = assetVersion();
   const app = express();
   app.set('view engine', 'ejs');
   app.set('views', path.join(__dirname, 'views'));
@@ -113,6 +124,7 @@ function buildApp() {
     res.locals.title = '';
     res.locals.config = config.panel;
     res.locals.path = req.path;
+    res.locals.v = version;
     res.locals.fmt = fmt;
     next();
   });
