@@ -1,0 +1,108 @@
+<%- include('partials/server-shell') %>
+<%
+  const link = (changes) => {
+    const p = new URLSearchParams();
+    const merged = { ...query, ...changes };
+    for (const [k, val] of Object.entries(merged)) {
+      if (val && !(k === 'sort' && val === 'id') && !(k === 'filter' && val === 'all') && !(k === 'page' && Number(val) === 1)) p.set(k, val);
+    }
+    const qs = p.toString();
+    return `/servers/${server.id}/items${qs ? '?' + qs : ''}`;
+  };
+%>
+<div class="page-head">
+  <div>
+    <h1>Item manager</h1>
+    <p class="muted">Every item in <%= server.name %>'s items.dat. Rename, recolour or rebalance any of them, or make new items from existing ones. Players see changes after they log in again.</p>
+  </div>
+  <% if (stats.ready) { %><a class="btn" href="/servers/<%= server.id %>/items/new"><svg class="ic"><use href="#i-plus"/></svg>New item</a><% } %>
+</div>
+
+<% if (!stats.ready) { %>
+<section class="card">
+  <div class="empty">
+    <svg class="ic big"><use href="#i-box"/></svg>
+    <p>Start the server once with the latest game build and its items show up here.</p>
+  </div>
+</section>
+<% } else { %>
+<section class="tiles">
+  <a class="tile tile-link <%= query.filter === 'all' ? 'on' : '' %>" href="<%= link({ filter: 'all', page: 1 }) %>">
+    <span class="tile-label"><svg class="ic"><use href="#i-box"/></svg>Items</span>
+    <span class="tile-value"><%= stats.total.toLocaleString('en-US') %></span>
+    <span class="tile-foot">plus <%= stats.seeds.toLocaleString('en-US') %> seeds</span>
+  </a>
+  <a class="tile tile-link <%= query.filter === 'custom' ? 'on' : '' %>" href="<%= link({ filter: 'custom', page: 1 }) %>">
+    <span class="tile-label"><svg class="ic"><use href="#i-plus"/></svg>Custom</span>
+    <span class="tile-value"><%= stats.custom %></span>
+    <span class="tile-foot">made on this server</span>
+  </a>
+  <a class="tile tile-link <%= query.filter === 'edited' ? 'on' : '' %>" href="<%= link({ filter: 'edited', page: 1 }) %>">
+    <span class="tile-label"><svg class="ic"><use href="#i-sliders"/></svg>Edited</span>
+    <span class="tile-value"><%= stats.edited %></span>
+    <span class="tile-foot">game items you changed</span>
+  </a>
+  <a class="tile tile-link <%= query.filter === 'clothing' ? 'on' : '' %>" href="<%= link({ filter: 'clothing', page: 1 }) %>">
+    <span class="tile-label"><svg class="ic"><use href="#i-user"/></svg>Clothing</span>
+    <span class="tile-value"><%= stats.clothing.toLocaleString('en-US') %></span>
+    <span class="tile-foot">wearables and auras</span>
+  </a>
+</section>
+
+<section class="card flush">
+  <form class="toolbar" method="get" action="/servers/<%= server.id %>/items">
+    <% if (query.filter !== 'all') { %><input type="hidden" name="filter" value="<%= query.filter %>"><% } %>
+    <input type="search" name="q" value="<%= query.q %>" placeholder="Search by name or #id" aria-label="Search by name or id" maxlength="40">
+    <label class="select-label">Sort
+      <select name="sort">
+        <% for (const [key, label] of [['id', 'ID'], ['newest', 'Newest first'], ['name', 'Name'], ['rarity', 'Rarity']]) { %>
+        <option value="<%= key %>" <%= query.sort === key ? 'selected' : '' %>><%= label %></option>
+        <% } %>
+      </select>
+    </label>
+    <button type="submit" class="ghost small">Apply</button>
+    <% if (query.q || query.filter !== 'all') { %><a class="btn ghost small" href="/servers/<%= server.id %>/items">Clear</a><% } %>
+  </form>
+  <nav class="seg" aria-label="Item kinds">
+    <% for (const [key, f] of Object.entries(filters)) { %>
+    <a class="<%= query.filter === key ? 'on' : '' %>" href="<%= link({ filter: key, page: 1 }) %>"><%= f.label %></a>
+    <% } %>
+  </nav>
+  <% if (!result.items.length) { %>
+    <div class="empty"><p><%= query.q ? 'No items match that search.' : 'Nothing here yet.' %></p></div>
+  <% } else { %>
+  <div class="table-wrap">
+  <table class="table items">
+    <thead><tr><th>Item</th><th>ID</th><th>Kind</th><th>Rarity</th><th></th></tr></thead>
+    <tbody>
+    <% for (const it of result.items) { %>
+      <tr>
+        <td><a class="item-link" href="/servers/<%= server.id %>/items/<%= it.id %>">
+          <span class="item-ic <%= it.seed ? 'seed' : '' %>" data-letter="<%= (it.name || '?').slice(0, 1).toUpperCase() %>"><% if (!it.seed) { %><img src="/servers/<%= server.id %>/items/<%= it.id %>/icon.png" alt="" loading="lazy" width="32" height="32"><% } %></span>
+          <span class="item-name"><%= it.name %></span></a>
+          <% if (it.custom) { %><span class="tag custom">Custom</span><% } else if (it.edited) { %><span class="tag edited">Edited</span><% } %>
+        </td>
+        <td class="mono">#<%= it.id %></td>
+        <td><span class="kind"><%= it.typeName %></span></td>
+        <td><%= it.rarity >= 999 || it.rarity === 0 ? '–' : it.rarity %></td>
+        <td class="right"><a class="btn ghost small" href="/servers/<%= server.id %>/items/<%= it.id %>">Edit</a></td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table>
+  </div>
+  <% } %>
+  <div class="pager">
+    <span class="muted small"><%= result.total.toLocaleString('en-US') %> <%= result.total === 1 ? 'item' : 'items' %></span>
+    <% if (result.pages > 1) { %>
+    <span class="pager-links">
+      <% if (result.page > 1) { %><a class="btn ghost small" href="<%= link({ page: result.page - 1 }) %>">Previous</a><% } %>
+      <span class="muted small">Page <%= result.page %> of <%= result.pages %></span>
+      <% if (result.page < result.pages) { %><a class="btn ghost small" href="<%= link({ page: result.page + 1 }) %>">Next</a><% } %>
+    </span>
+    <% } %>
+  </div>
+</section>
+<% if (!server.reporting) { %><p class="muted small">The server is not running. Changes are saved and apply when it starts.</p><% } %>
+<% } %>
+<%- include('partials/server-shell-end') %>

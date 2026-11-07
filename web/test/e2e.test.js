@@ -355,6 +355,59 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     assert.deepEqual(log.map((l) => l.action).slice(-5), ['role_create', 'role_move', 'role_edit', 'role', 'role_delete']);
   });
 
+  await t.test('item manager edits items and makes new ones through the game', async () => {
+    const srv = `srv_${id}`;
+    let r = await alice.get(`/servers/${id}/items`);
+    assert.equal(r.status, 200);
+    assert.match(r.text, /Legendary Wings/);
+    assert.match((await alice.get(`/servers/${id}/items?q=wings`)).text, /Legendary Wings[\s\S]*2 items</);
+    assert.match((await alice.get(`/servers/${id}/items?q=%234`)).text, /World Lock/, 'search by #id');
+    assert.match((await alice.get(`/servers/${id}/items?filter=clothing`)).text, /Legendary Wings/);
+    assert.doesNotMatch((await alice.get(`/servers/${id}/items?filter=clothing`)).text, />Dirt</);
+
+    r = await alice.get(`/servers/${id}/items/2`);
+    assert.equal(r.status, 200);
+    assert.match(r.text, /This is Dirt\./);
+    r = await alice.post(`/servers/${id}/items/2`, { _csrf: await alice.csrf(), name: 'Golden Dirt', info: 'Shiny.', rarity: '42', hits: '9', hitReset: '12',
+      collision: '1', untradeable: '1', texture: 'tiles_page2.rttex', texX: '3', texY: '4' });
+    assert.equal(r.status, 302);
+    let [[edit]] = await admin.query(`SELECT * FROM ${srv}.item_edits WHERE id = 2`);
+    assert.equal(edit.name, 'Golden Dirt');
+    assert.equal(edit.cat, 0x80, 'untradeable flag set, nothing else');
+    assert.equal(edit.rarity, 42);
+    const [[cat]] = await admin.query(`SELECT name, rarity FROM ${srv}.item_catalog WHERE id = 2`);
+    assert.equal(cat.name, 'Golden Dirt', 'the game rebuilt items.dat and its list');
+    assert.match((await alice.get(`/servers/${id}/items?filter=edited`)).text, /Golden Dirt/);
+    assert.equal((await alice.post(`/servers/${id}/items/2`, { _csrf: await alice.csrf(), name: 'Bad|Name', info: '', rarity: '1', hits: '1', hitReset: '1', collision: '1', texture: 'a.rttex', texX: '0', texY: '0' })).status, 400);
+    assert.equal((await alice.post(`/servers/${id}/items/2`, { _csrf: await alice.csrf(), name: 'Ok', info: '', rarity: '1', hits: '1', hitReset: '1', collision: '1', texture: '../x.rttex', texX: '0', texY: '0' })).status, 400);
+
+    const found = JSON.parse((await alice.get(`/servers/${id}/items/search.json?q=wings`)).text);
+    assert.equal(found.items[0].id, 6);
+    r = await alice.post(`/servers/${id}/items`, { _csrf: await alice.csrf(), base: '7', name: 'Emerald Wings' });
+    assert.equal(r.status, 302);
+    const newId = Number(r.location.match(/items\/(\d+)/)[1]);
+    assert.equal(newId, 8, 'first even id after the game\'s items');
+    const [made] = await admin.query(`SELECT id, base_id, name FROM ${srv}.item_edits WHERE base_id IS NOT NULL ORDER BY id`);
+    assert.deepEqual(made.map((m) => [m.id, m.base_id, m.name]), [[8, 6, 'Emerald Wings'], [9, 7, 'Emerald Wings Seed']], 'a seed picked the block, and the seed came too');
+    assert.match((await alice.get(`/servers/${id}/items?filter=custom`)).text, /Emerald Wings/);
+    assert.equal((await alice.post(`/servers/${id}/items`, { _csrf: await alice.csrf(), base: '6', name: 'emerald wings' })).status, 400, 'names are unique');
+    assert.equal((await alice.post(`/servers/${id}/items`, { _csrf: await alice.csrf(), base: '8', name: 'Copy Of Copy' })).status, 400, 'only from the game\'s own items');
+
+    r = await alice.post(`/servers/${id}/items/2/reset`, { _csrf: await alice.csrf() });
+    assert.equal(r.status, 302);
+    assert.equal((await admin.query(`SELECT * FROM ${srv}.item_edits WHERE id = 2`))[0].length, 0, 'reset removes the edit');
+    r = await alice.post(`/servers/${id}/items/8/reset`, { _csrf: await alice.csrf() });
+    assert.equal(r.status, 302);
+    const [gone] = await admin.query(`SELECT removed FROM ${srv}.item_edits WHERE id IN (8, 9)`);
+    assert.ok(gone.every((g) => g.removed === 1), 'deleting a custom item removes its seed too');
+    assert.equal((await alice.get(`/servers/${id}/items/8`)).status, 404);
+
+    const [sent] = await admin.query(`SELECT done_at FROM ${srv}.panel_actions WHERE action = 'items_reload'`);
+    assert.equal(sent.length, 4);
+    assert.ok(sent.every((a) => a.done_at));
+    assert.equal((await alice.get(`/servers/${id}/items/2/icon.png`)).status, 404, 'no textures on this machine: the page shows a letter instead');
+  });
+
   await t.test('the log shows the server output', async () => {
     const log = await waitFor(async () => {
       const { text } = JSON.parse((await alice.get(`/servers/${id}/logs.json`)).text);

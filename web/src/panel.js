@@ -19,6 +19,8 @@ const players = require('./players');
 const worlds = require('./worlds');
 const live = require('./live');
 const roles = require('./roles');
+const items = require('./items');
+const rttex = require('./rttex');
 
 const DONE_MESSAGES = {
   created: 'Server created and starting. It shows Online once it is ready.',
@@ -40,6 +42,10 @@ const DONE_MESSAGES = {
   roleSaved: 'Role saved. It applies right away, name colours too.',
   roleMoved: 'Order saved.',
   roleDeleted: 'Role deleted. Everyone who had it is a Player now.',
+  itemSaved: 'Saved. Players see the change after they log in again.',
+  itemCreated: 'Item created, with its seed. Change anything below, then players see it after they log in again.',
+  itemReset: 'Back to how items.dat has it. Players see it after they log in again.',
+  itemDeleted: 'Custom item deleted, with its seed.',
 };
 
 function describe(server, proc) {
@@ -288,7 +294,8 @@ function buildApp() {
     { group: 'Game data', items: [
       { page: 'players', label: 'Players', icon: 'user', path: '/players' },
       { page: 'worlds', label: 'Worlds', icon: 'globe', path: '/worlds' },
-      { label: 'Items & shop', icon: 'box', soon: true },
+      { page: 'items', label: 'Item manager', icon: 'box', path: '/items' },
+      { label: 'Gem shop', icon: 'grid', soon: true },
     ] },
     { group: 'Development', items: [
       { label: 'Lua scripts', icon: 'code', soon: true },
@@ -392,6 +399,97 @@ function buildApp() {
       return renderWorld(req, res, { error: err.message, status: 400 });
     }
     res.redirect(done === 'worldDeleted' ? `/servers/${req.server.id}/worlds?done=${done}` : `/servers/${req.server.id}/worlds/${req.world.name}?done=${done}`);
+  }));
+
+  /* ---------- items ---------- */
+
+  app.get('/servers/:id/items', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
+    const query = {
+      q: String(req.query.q || ''),
+      sort: Object.hasOwn(items.SORTS, req.query.sort) ? req.query.sort : 'id',
+      filter: Object.hasOwn(items.FILTERS, req.query.filter) ? req.query.filter : 'all',
+      page: req.query.page,
+    };
+    const [stats, result] = await Promise.all([items.summary(req.server), items.list(req.server, query)]);
+    await renderServer(req, res, 'items', { extra: { stats, result, query, filters: items.FILTERS, title: `Items · ${req.server.name}` } });
+  }));
+
+  app.get('/servers/:id/items/search.json', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
+    const result = await items.list(req.server, { q: String(req.query.q || ''), page: 1 });
+    res.json({ items: result.items.filter((i) => !i.custom).slice(0, 12).map((i) => ({ id: i.id, name: i.name, type: i.typeName })) });
+  }));
+
+  function sendIcon(res, png) {
+    if (!png) return res.status(404).end();
+    res.set('Cache-Control', 'private, max-age=300');
+    res.type('png').send(png);
+  }
+
+  /* @note any cell of any texture, for the editor's live preview */
+  app.get('/servers/:id/items/texture.png', auth.requireUser, loadServer, (req, res) => {
+    const x = Number(req.query.x);
+    const y = Number(req.query.y);
+    if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x > 255 || y > 255) return res.status(400).end();
+    sendIcon(res, rttex.icon(config.texturesDir, String(req.query.file || ''), x, y));
+  });
+
+  const loadItem = asyncRoute(async (req, res, next) => {
+    const id = /^[0-9]{1,5}$/.test(req.params.itemId) ? Number(req.params.itemId) : null;
+    const item = id === null ? null : await items.get(req.server, id);
+    if (!item) return res.status(404).render('error', { title: 'Not found', message: 'That item does not exist on this server.' });
+    req.item = item;
+    next();
+  });
+
+  app.get('/servers/:id/items/:itemId/icon.png', auth.requireUser, loadServer, loadItem, (req, res) => {
+    sendIcon(res, rttex.icon(config.texturesDir, req.item.texture, req.item.texX, req.item.texY));
+  });
+
+  async function renderItemForm(req, res, { item = null, form = null, error = '', status = 200 } = {}) {
+    const fresh = item ? (await items.get(req.server, item.id)) || item : null;
+    const base = !fresh && /^[0-9]{1,5}$/.test(String((form && form.base) || req.query.base || '')) ? await items.get(req.server, Number((form && form.base) || req.query.base)) : null;
+    await renderServer(req, res, 'items', {
+      error, status, template: 'item',
+      extra: {
+        item: fresh, form: form || {}, base, ready: await items.ready(req.server),
+        collisions: items.COLLISIONS, flags: items.FLAGS, title: `${fresh ? fresh.name : 'New item'} · ${req.server.name}`,
+      },
+    });
+  }
+
+  app.get('/servers/:id/items/new', auth.requireUser, loadServer, asyncRoute((req, res) => renderItemForm(req, res)));
+
+  app.post('/servers/:id/items', auth.requireUser, loadServer, auth.checkCsrf, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      if (!(await items.ready(req.server))) throw new items.UserError('Start the server once (with the latest game build) so its items show up here.');
+      result = await items.create(req.server, req.body, req.user.username);
+    } catch (err) {
+      if (!(err instanceof items.UserError)) throw err;
+      return renderItemForm(req, res, { form: req.body, error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/items/${result.id}?done=itemCreated${result.live ? '' : '&live=0'}`);
+  }));
+
+  app.get('/servers/:id/items/:itemId', auth.requireUser, loadServer, loadItem, asyncRoute((req, res) => renderItemForm(req, res, { item: req.item })));
+
+  app.post('/servers/:id/items/:itemId', auth.requireUser, loadServer, auth.checkCsrf, loadItem, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      result = await items.update(req.server, req.item, req.body, req.user.username);
+    } catch (err) {
+      if (!(err instanceof items.UserError)) throw err;
+      return renderItemForm(req, res, { item: req.item, form: req.body, error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/items/${req.item.id}?done=itemSaved${result.live ? '' : '&live=0'}`);
+  }));
+
+  app.post('/servers/:id/items/:itemId/reset', auth.requireUser, loadServer, auth.checkCsrf, loadItem, asyncRoute(async (req, res) => {
+    const result = await items.reset(req.server, req.item, req.user.username);
+    const done = req.item.custom ? 'itemDeleted' : 'itemReset';
+    res.redirect(req.item.custom
+      ? `/servers/${req.server.id}/items?filter=custom&done=${done}${result.live ? '' : '&live=0'}`
+      : `/servers/${req.server.id}/items/${req.item.id}?done=${done}${result.live ? '' : '&live=0'}`);
   }));
 
   /* ---------- roles ---------- */

@@ -1,0 +1,165 @@
+<%- include('partials/server-shell') %>
+<%
+  const v = (key, fallback) => (form[key] !== undefined ? form[key] : fallback);
+  const raritySet = (r) => r > 0 && r < 999;
+%>
+<p class="crumb"><a href="/servers/<%= server.id %>/items"><svg class="ic"><use href="#i-back"/></svg>All items</a></p>
+
+<% if (!ready) { %>
+<section class="card"><div class="empty"><svg class="ic big"><use href="#i-box"/></svg><p>Start the server once with the latest game build and its items show up here.</p></div></section>
+<% } else if (!item) { %>
+<!-- ---------- new item ---------- -->
+<div class="page-head">
+  <div>
+    <h1>New item</h1>
+    <p class="muted">A new item starts as a copy of one of the game's items, so it already looks and works like it. Its seed is made too. Change anything you like after.</p>
+  </div>
+</div>
+<form method="post" action="/servers/<%= server.id %>/items" class="card new-item" id="new-item" data-server="<%= server.id %>">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <div class="card-head"><h2><svg class="ic"><use href="#i-copy"/></svg>Copy from</h2></div>
+  <div class="base-pick">
+    <label>Search the game's items
+      <input type="search" id="base-search" placeholder="e.g. Legendary Wings or #1784" autocomplete="off" value="<%= base ? base.name : '' %>">
+      <small>Pick one from the list. A seed counts as its block.</small>
+    </label>
+    <input type="hidden" name="base" id="base-id" value="<%= base ? base.id : v('base', '') %>">
+    <ul class="base-results" id="base-results" role="listbox" aria-label="Matching items"></ul>
+    <div class="base-chosen" id="base-chosen" <%= base ? '' : 'hidden' %>>
+      <span class="item-ic big" data-letter="<%= base ? base.name.slice(0, 1) : '' %>"><img id="base-img" src="<%= base ? `/servers/${server.id}/items/${base.id}/icon.png` : '' %>" alt="" width="32" height="32" <%= base ? '' : 'hidden' %>></span>
+      <div><strong id="base-name"><%= base ? base.name : '' %></strong><span class="muted small" id="base-meta"><%= base ? `#${base.id} · ${base.typeName}` : '' %></span></div>
+    </div>
+  </div>
+  <label>Name of the new item
+    <input name="name" value="<%= v('name', '') %>" maxlength="35" required placeholder="e.g. Emerald Wings">
+    <small>Its seed is called the same, with "Seed" after it.</small>
+  </label>
+  <div class="save-row"><button type="submit">Create item</button></div>
+</form>
+<% } else { %>
+<!-- ---------- edit item ---------- -->
+<div class="page-head">
+  <div class="player-head">
+    <span class="item-ic huge <%= item.seed ? 'seed' : '' %>" data-letter="<%= (item.name || '?').slice(0, 1).toUpperCase() %>"><% if (!item.seed) { %><img src="/servers/<%= server.id %>/items/<%= item.id %>/icon.png" alt="" width="32" height="32"><% } %></span>
+    <div>
+      <h1><%= item.name %>
+        <% if (item.custom) { %><span class="tag custom">Custom</span><% } else if (item.edited) { %><span class="tag edited">Edited</span><% } %>
+      </h1>
+      <p class="muted">#<%= item.id %> · <%= item.typeName %><% if (item.baseId !== null) { %> · copy of <a href="/servers/<%= server.id %>/items/<%= item.baseId %>">#<%= item.baseId %></a><% } %><% if (item.pending) { %> · added when the server next starts<% } %></p>
+    </div>
+  </div>
+</div>
+
+<div class="item-layout">
+<form method="post" action="/servers/<%= server.id %>/items/<%= item.id %>" id="item-form" data-server="<%= server.id %>">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-book"/></svg>Name and description</h2></div>
+    <label>Name
+      <input name="name" id="f-name" value="<%= v('name', item.name) %>" maxlength="40" required>
+    </label>
+    <label class="mt">Description
+      <textarea name="info" id="f-info" rows="3" maxlength="400" placeholder="What players read when they look at it."><%= v('info', item.info) %></textarea>
+      <small>Shown in the item's info. Up to 400 characters.</small>
+    </label>
+    <div class="form-grid mt">
+      <label>Rarity
+        <input type="number" name="rarity" id="f-rarity" min="0" max="999" value="<%= v('rarity', item.rarity) %>">
+        <small>1 to 998. 999 or 0 means no rarity.</small>
+      </label>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-grid"/></svg>In the world</h2></div>
+    <div class="form-grid">
+      <label>Hits to break
+        <input type="number" name="hits" min="0" max="42" value="<%= v('hits', item.hits) %>">
+        <small>Punches with a bare fist.</small>
+      </label>
+      <label>Heal time (seconds)
+        <input type="number" name="hitReset" min="0" max="86400" value="<%= v('hitReset', item.hitReset) %>">
+        <small>How long until damage wears off.</small>
+      </label>
+    </div>
+    <label class="mt">Collision
+      <select name="collision">
+        <% const coll = Number(v('collision', item.collision)); %>
+        <% if (!collisions.some((c) => c.value === coll)) { %><option value="<%= coll %>" selected>Game setting (<%= coll %>)</option><% } %>
+        <% for (const c of collisions) { %><option value="<%= c.value %>" <%= c.value === coll ? 'selected' : '' %>><%= c.label %></option><% } %>
+      </select>
+    </label>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-lock"/></svg>Rules</h2></div>
+    <div class="flag-list">
+      <% for (const f of flags) { const on = form._csrf ? Boolean(form[f.key]) : item[f.key]; %>
+      <label class="flag">
+        <input type="checkbox" name="<%= f.key %>" value="1" <%= on ? 'checked' : '' %>>
+        <span><strong><%= f.label %></strong><small><%= f.text %></small></span>
+      </label>
+      <% } %>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-box"/></svg>Look</h2></div>
+    <p class="muted small">Which picture it uses: a texture file from the game folder, and the 32×32 cell in it (counted from 0). Uploading your own textures comes later.</p>
+    <div class="tex-grid">
+      <label>Texture file
+        <input name="texture" id="f-texture" value="<%= v('texture', item.texture) %>" maxlength="64" spellcheck="false">
+      </label>
+      <label>Column
+        <input type="number" name="texX" id="f-x" min="0" max="255" value="<%= v('texX', item.texX) %>">
+      </label>
+      <label>Row
+        <input type="number" name="texY" id="f-y" min="0" max="255" value="<%= v('texY', item.texY) %>">
+      </label>
+      <span class="item-ic huge preview" id="tex-preview" data-letter="?"><img id="tex-img" src="/servers/<%= server.id %>/items/texture.png?file=<%= encodeURIComponent(v('texture', item.texture)) %>&x=<%= v('texX', item.texX) %>&y=<%= v('texY', item.texY) %>" alt="Texture preview" width="32" height="32"></span>
+    </div>
+  </section>
+
+  <div class="save-bar">
+    <a class="btn ghost" href="/servers/<%= server.id %>/items">Cancel</a>
+    <button type="submit">Save item</button>
+  </div>
+</form>
+
+<aside class="item-side">
+  <section class="card info-card" aria-label="How players see it">
+    <p class="eyebrow">In game</p>
+    <div class="info-head">
+      <span class="item-ic big <%= item.seed ? 'seed' : '' %>" data-letter="<%= (item.name || '?').slice(0, 1).toUpperCase() %>"><% if (!item.seed) { %><img src="/servers/<%= server.id %>/items/<%= item.id %>/icon.png" alt="" width="32" height="32"><% } %></span>
+      <div>
+        <strong id="p-name"><%= v('name', item.name) %></strong>
+        <span class="muted small" id="p-rarity" <%= raritySet(Number(v('rarity', item.rarity))) ? '' : 'hidden' %>>Rarity: <span id="p-rarity-n"><%= v('rarity', item.rarity) %></span></span>
+      </div>
+    </div>
+    <p id="p-info" class="info-text"><%= v('info', item.info) || 'No description.' %></p>
+  </section>
+  <section class="card <%= item.custom ? 'danger' : '' %>">
+    <% if (item.custom) { %>
+      <div class="card-head"><h2><svg class="ic"><use href="#i-trash"/></svg>Delete item</h2></div>
+      <p class="small">Removes it and its seed. Anyone who has it keeps an empty slot. It can't be undone.</p>
+      <form method="post" action="/servers/<%= server.id %>/items/<%= item.id %>/reset">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button type="submit" class="bad">Delete <%= item.name %></button>
+      </form>
+    <% } else { %>
+      <div class="card-head"><h2><svg class="ic"><use href="#i-restart"/></svg>Original</h2></div>
+      <p class="small muted"><%= item.edited ? 'Undo every change and use what items.dat says again.' : 'Not changed. This is how items.dat has it.' %></p>
+      <% if (item.edited) { %>
+      <form method="post" action="/servers/<%= server.id %>/items/<%= item.id %>/reset">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button type="submit" class="ghost">Reset to original</button>
+      </form>
+      <% } %>
+      <a class="btn ghost small mt-btn" href="/servers/<%= server.id %>/items/new?base=<%= item.id %>"><svg class="ic"><use href="#i-copy"/></svg>Make a new item from this</a>
+    <% } %>
+  </section>
+</aside>
+</div>
+<% } %>
+<%- include('partials/server-shell-end') %>

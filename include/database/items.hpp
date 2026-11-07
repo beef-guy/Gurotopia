@@ -203,5 +203,13 @@ extern const ::item &id_to_item(u_short id) noexcept; // @note std::out_of_range
 
 
 extern std::vector<u_char> im_data;
+extern u_int items_hash; // @note of items.dat as this server sends it (with the website's changes)
 
 extern void decode_items_dat();
+/*
+ * @brief puts the website's item changes (item_edits table) on top of items.dat again.
+ * @note players see them after they log in again, since the client only loads items.dat at login
+ * @return how many items were changed or added
+ */
+extern int items_apply_edits();
+extern std::size_t items_original_count(); // @note items in items.dat itself, before custom items
