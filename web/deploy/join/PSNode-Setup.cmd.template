@@ -9,7 +9,7 @@ exit /b
 #  1. adds 4 lines to your hosts file so Growtopia asks PSNode ({{IP}}) which server to join
 #  2. trusts the PSNode Game CA. It is locked to growtopia1.com and growtopia2.com only,
 #     so it can't vouch for any other website (banks, email, ...).
-# Choose 2 to undo both and go back to the official game.
+# Run it again and type R to undo both and go back to the official game.
 
 $ErrorActionPreference = 'Stop'
 $ip      = '{{IP}}'
