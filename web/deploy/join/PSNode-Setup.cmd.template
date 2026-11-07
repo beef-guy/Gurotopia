@@ -1,0 +1,90 @@
+<# : PSNode setup. Double-click this file to play on PSNode (or to switch back).
+@echo off
+setlocal
+set "PSNODE_SELF=%~f0"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iex ([IO.File]::ReadAllText($env:PSNODE_SELF))"
+exit /b
+#>
+# What this does, so you can check it before running:
+#  1. adds 4 lines to your hosts file so Growtopia asks PSNode ({{IP}}) which server to join
+#  2. trusts the PSNode Game CA. It is locked to growtopia1.com and growtopia2.com only,
+#     so it can't vouch for any other website (banks, email, ...).
+# Choose 2 to undo both and go back to the official game.
+
+$ErrorActionPreference = 'Stop'
+$ip      = '{{IP}}'
+$caName  = 'CN=PSNode Game CA'
+$names   = 'growtopia1.com', 'growtopia2.com', 'www.growtopia1.com', 'www.growtopia2.com'
+$hosts   = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
+$caPem   = @'
+{{CA_PEM}}
+'@
+
+$admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $admin) {
+    Write-Host 'PSNode setup needs administrator rights to change the hosts file. Click Yes on the next window.'
+    Start-Process -FilePath $env:PSNODE_SELF -Verb RunAs
+    exit
+}
+
+function Remove-GrowtopiaLines {
+    $keep = @()
+    if (Test-Path $hosts) {
+        foreach ($line in [IO.File]::ReadAllLines($hosts)) {
+            $hit = $false
+            foreach ($n in $names) { if ($line -match "(^|\s)$([regex]::Escape($n))(\s|$)") { $hit = $true } }
+            if (-not $hit) { $keep += $line }
+        }
+    }
+    return ,$keep
+}
+
+function Save-Hosts($lines) {
+    if (-not (Test-Path "$hosts.psnode-backup") -and (Test-Path $hosts)) { Copy-Item $hosts "$hosts.psnode-backup" }
+    if (Test-Path $hosts) { (Get-Item $hosts).IsReadOnly = $false }
+    [IO.File]::WriteAllLines($hosts, [string[]]$lines, (New-Object Text.ASCIIEncoding))
+    ipconfig /flushdns | Out-Null
+}
+
+function Remove-PSNodeCA {
+    Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -eq $caName } | Remove-Item
+}
+
+Write-Host ''
+Write-Host '  PSNode setup'
+Write-Host '  ------------'
+Write-Host '  1 = Play on PSNode'
+Write-Host '  2 = Go back to the official Growtopia'
+Write-Host ''
+$choice = Read-Host '  Type 1 or 2 and press Enter'
+
+try {
+    if ($choice -eq '1') {
+        $lines = Remove-GrowtopiaLines
+        foreach ($n in $names) { $lines += "$ip $n" }
+        Save-Hosts $lines
+
+        Remove-PSNodeCA
+        $tmp = Join-Path $env:TEMP 'psnode-game-ca.crt'
+        [IO.File]::WriteAllText($tmp, $caPem)
+        Import-Certificate -FilePath $tmp -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
+        Remove-Item $tmp
+
+        Write-Host ''
+        Write-Host '  Done! Close Growtopia completely, open it again, and type a server name on the login page.' -ForegroundColor Green
+    }
+    elseif ($choice -eq '2') {
+        Save-Hosts (Remove-GrowtopiaLines)
+        Remove-PSNodeCA
+        Write-Host ''
+        Write-Host '  Done. Growtopia goes to the official servers again (restart it).' -ForegroundColor Green
+    }
+    else { Write-Host '  Nothing changed.' }
+}
+catch {
+    Write-Host ''
+    Write-Host "  Something went wrong: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host '  Your antivirus may have blocked the hosts file change. Send this message to the server owner.'
+}
+Write-Host ''
+Read-Host '  Press Enter to close'
