@@ -18,6 +18,10 @@
   a.btn { display: inline-block; background: var(--accent); color: #08240f; font-weight: 700; text-decoration: none; padding: 12px 20px; border-radius: 10px; margin: 6px 0 2px; }
   code { background: #0b1120; border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
   .muted { color: var(--muted); font-size: 14px; }
+  .attention { background: #2a1f0b; border: 2px solid #f5b83d; border-radius: 14px; padding: 20px; margin: 20px 0; }
+  .attention h2 { margin: 0 0 8px; font-size: 20px; color: #f5b83d; }
+  .attention p { margin: 8px 0; }
+  .attention ul { margin: 8px 0; padding-left: 22px; }
 </style>
 </head>
 <body>
@@ -26,11 +30,23 @@
   <h1>Play on PSNode</h1>
   <p class="lead">One-time setup for Windows. Takes about a minute.</p>
 
+  <div class="attention">
+    <h2>ATTENTION: read this before you play</h2>
+    <p>To play on PSNode you have to run a setup file on your PC, once. Growtopia only logs in to servers your PC trusts, so without this you can't connect. Almost every private Growtopia server works this way, usually without telling you. We'd rather tell you.</p>
+    <p><b>The setup makes exactly 2 changes:</b></p>
+    <ul>
+      <li>It adds 4 lines to your Windows hosts file, so Growtopia connects to PSNode instead of the official servers.</li>
+      <li>It adds the "PSNode Game CA" certificate to your trusted certificates. It is locked to growtopia1.com and growtopia2.com, so it can't be used for any other website (banks, email and so on).</li>
+    </ul>
+    <p>It installs nothing else, and you can undo both changes whenever you want. It needs administrator rights because Windows protects those two things.</p>
+    <p><b>While it's set up, Growtopia goes to PSNode, not the official game.</b> Only run the file if you downloaded it from this page.</p>
+  </div>
+
   <div class="card">
     <ol>
       <li><a class="btn" href="PSNode-Setup.cmd" download>Download PSNode setup</a></li>
       <li>Double-click <code>PSNode-Setup.cmd</code>. If Windows says it protected your PC, click <b>More info</b> and then <b>Run anyway</b>. Click <b>Yes</b> when it asks for administrator rights.</li>
-      <li>Type <code>1</code> and press Enter.</li>
+      <li>Press <b>Enter</b> to set up PSNode.</li>
       <li>Close Growtopia completely and open it again.</li>
       <li>On the login page, type the <b>server name</b> your friend gave you, then log in or create an account.</li>
     </ol>
@@ -38,9 +54,9 @@
 
   <div class="card">
     <b>Going back to the official game</b>
-    <p class="muted">Run the same file again and type <code>2</code>. It removes everything it added.</p>
-    <b>What the setup changes</b>
-    <p class="muted">It adds 4 lines to your hosts file so Growtopia asks PSNode which server to join, and it trusts the "PSNode Game CA" certificate. That certificate only works for growtopia1.com and growtopia2.com, so it can't be used for any other website. You can open the file in Notepad to read it before running it.</p>
+    <p class="muted">Run the same file again, type <code>R</code> and press Enter. It removes both changes.</p>
+    <b>Want to check it yourself?</b>
+    <p class="muted">Right-click the file and open it with Notepad to read it before running it. The first lines explain what it does.</p>
   </div>
 </main>
 </body>
