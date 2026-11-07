@@ -68,3 +68,40 @@ test('status labels', () => {
   assert.equal(describe({ reporting: false }, { state: 'crashed', message: 'x' }).label, 'Crashed');
   assert.equal(describe({ reporting: false }, null).label, 'Unknown');
 });
+
+test('login page: token carries the server name, checktoken keeps it', async () => {
+  const { createApp } = require('../src/login');
+  const server = createApp().listen(0, '127.0.0.1');
+  await new Promise((r) => server.once('listening', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = (p, fields) => fetch(base + p, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(fields).toString(),
+  }).then((r) => r.text());
+  const decode = (t) => Buffer.from(JSON.parse(t).token, 'base64').toString();
+  try {
+    const login = await post('/player/growid/login/validate', { _token: 'YWJj', mode: 'login', server: 'Sky1', growId: 'Bob', password: 'pass12', password_confirmation: '' });
+    assert.equal(decode(login), '_token=YWJj&growId=Bob&password=pass12&reg=0&server=Sky1');
+
+    const reg = await post('/player/growid/login/validate', { _token: 'YWJj', mode: 'register', server: 'Sky1', growId: 'Bob', password: 'pass12', password_confirmation: 'pass12' });
+    assert.match(decode(reg), /&reg=1&server=Sky1$/);
+
+    const mismatch = await post('/player/growid/login/validate', { _token: 'YWJj', mode: 'register', server: 'Sky1', growId: 'Bob', password: 'pass12', password_confirmation: 'other1' });
+    assert.match(mismatch, /class="error"/);
+
+    const noServer = await post('/player/growid/login/validate', { _token: 'YWJj', mode: 'login', server: '', growId: 'Bob', password: 'pass12' });
+    assert.match(noServer, /class="error"/);
+
+    const evil = await post('/player/growid/login/validate', { _token: 'YWJj', mode: 'login', server: 'Sky1', growId: 'Bob', password: 'x&reg=1' });
+    assert.match(evil, /class="error"/); // @note & would let a player inject token fields
+
+    const xss = await post('/player/growid/login/validate', { _token: 'YWJj', mode: 'login', server: '"><script>', growId: 'Bob', password: 'pass12' });
+    assert.ok(!xss.includes('<script>alert') && !xss.includes('"><script>'));
+
+    const check = await post('/player/growid/checktoken', { refreshToken: JSON.parse(login).token, clientData: 'xyz' });
+    assert.equal(decode(check), `_token=${Buffer.from('xyz').toString('base64')}&growId=Bob&password=pass12&reg=0&server=Sky1`);
+  } finally {
+    server.close();
+  }
+});

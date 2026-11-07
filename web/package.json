@@ -9,6 +9,7 @@
   "scripts": {
     "panel": "node --env-file=.env src/panel.js",
     "supervisor": "node --env-file=.env src/supervisor.js",
+    "login": "node src/login.js",
     "admin": "node --env-file=.env src/cli.js",
     "test": "node --test test/unit.test.js test/e2e.test.js"
   },
