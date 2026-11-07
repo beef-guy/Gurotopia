@@ -4,6 +4,7 @@
 #include "world.hpp"
 #include "onVariant/SetClothing.hpp"
 #include "onVariant/CountryState.hpp"
+#include "database/titles.hpp"
 #include "onVariant/ConsoleMessage.hpp"
 #include "commands/punch.hpp"
 #include "tools/string.hpp"
@@ -332,6 +333,7 @@ void peer::add_xp(ENetEvent &event, u_short value)
     ring_progress(event.peer, RT_XP, value);
     u_int &lvl = this->level.front();
     u_int &xp = this->level.back() += value; // @note factor the new xp amount
+    const int old_level = static_cast<int>(lvl);
 
     for (; lvl < 125; )
     {
@@ -346,7 +348,6 @@ void peer::add_xp(ENetEvent &event, u_short value)
             modify_item_inventory(event, ::slot{1400, 1}); // @note Mini Growtopian
             /* @todo based on account age give peer other items... */
         }
-        if (lvl == 125) on::CountryState(event);
         send_varlist(event.peer, { "OnPlayerLeveledUp", (unsigned)lvl });
         send_varlist(event.peer, { "OnParticleEffect", 46u, CL_Vec2f{this->pos.x + 16.0f, this->pos.y + 16.0f}, 0.0f, 0.0f });
 
@@ -354,6 +355,7 @@ void peer::add_xp(ENetEvent &event, u_short value)
         send_varlist(event.peer, { "OnTalkBubble", this->netid, message, 0u });
         on::ConsoleMessage(event.peer, message);
     }
+    if (static_cast<int>(lvl) != old_level) titles::leveled_up(event.peer, old_level, static_cast<int>(lvl)); // @note Max Level at 125, and the website's level titles
 }
 
 void peer::update_effects()

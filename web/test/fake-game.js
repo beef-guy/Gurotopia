@@ -33,6 +33,16 @@ const login = Object.fromEntries(fs.readFileSync('mysql_login.txt', 'utf8').spli
   await own.query(`INSERT IGNORE INTO roles VALUES (0, 'Player', 0, '', '', 0, '/me,/msg,/sb,/who'),
     (1, 'Moderator', 500, '#', '@', 1, '/ban,/kick,/me,/msg,/mute,/sb,/who'), (2, 'Developer', 1000, '6', '@', 2, '/ban,/give,/kick,/me,/msg,/mute,/sb,/who')`);
   await own.query('CREATE TABLE IF NOT EXISTS panel_commands (name VARCHAR(32) NOT NULL PRIMARY KEY, min_role INT NOT NULL DEFAULT 0)');
+  // @note what include/database/titles.cpp makes on start (three of its built-in titles)
+  await own.query(`CREATE TABLE IF NOT EXISTS titles (id INT NOT NULL PRIMARY KEY, name VARCHAR(32) NOT NULL, description VARCHAR(160) NOT NULL DEFAULT '',
+    prefix VARCHAR(24) NOT NULL DEFAULT '', suffix VARCHAR(24) NOT NULL DEFAULT '', color VARCHAR(1) NOT NULL DEFAULT '', badge VARCHAR(16) NOT NULL DEFAULT '',
+    texture VARCHAR(96) NOT NULL DEFAULT '', tex_x INT NOT NULL DEFAULT 0, tex_y INT NOT NULL DEFAULT 0, icon_item INT NOT NULL DEFAULT 0,
+    grant_type VARCHAR(8) NOT NULL DEFAULT 'manual', grant_value INT NOT NULL DEFAULT 0, enabled TINYINT NOT NULL DEFAULT 1, sort INT NOT NULL DEFAULT 100, builtin TINYINT NOT NULL DEFAULT 0)`);
+  await own.query(`CREATE TABLE IF NOT EXISTS peer_titles (uid INT NOT NULL, title INT NOT NULL, granted TINYINT NOT NULL DEFAULT 0,
+    equipped TINYINT NOT NULL DEFAULT 1, PRIMARY KEY (uid, title))`);
+  await own.query(`INSERT IGNORE INTO titles (id, name, prefix, suffix, color, badge, grant_type, grant_value, sort, builtin) VALUES
+    (1, 'Doctor', 'Dr.', '', '4', 'doctor', 'manual', 0, 10, 1), (2, 'Legendary', '', ' of Legend', '9', '', 'manual', 0, 900, 1),
+    (3, 'Max Level', '', '', '', 'maxLevel', 'level', 125, 20, 1)`);
   // @note what include/database/items.cpp and panel_bridge.cpp make on start: a tiny items.dat
   await own.query(`CREATE TABLE IF NOT EXISTS item_edits (id INT NOT NULL PRIMARY KEY, base_id INT NULL, removed TINYINT NOT NULL DEFAULT 0,
     name VARCHAR(64) NULL, texture VARCHAR(64) NULL, info TEXT NULL, rarity INT NULL, hits INT NULL, hit_reset INT NULL, collision INT NULL,

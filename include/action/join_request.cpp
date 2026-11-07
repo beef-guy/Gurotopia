@@ -7,6 +7,7 @@
 #include "onVariant/BillboardChange.hpp"
 #include "onVariant/SetClothing.hpp"
 #include "onVariant/CountryState.hpp"
+#include "database/titles.hpp"
 #include "onVariant/ConsoleMessage.hpp"
 #include "onVariant/TradeStatus.hpp"
 #include "tools/time.hpp"
@@ -110,8 +111,8 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
             
             if (pOthers->user_id != pPeer->user_id)
             {
-                on::Spawn(*event.peer, pOthers->netid, pOthers->user_id, pOthers->pos, pOthers->display_growid, pOthers->country, pOthers->role, pOthers->role >= DEVELOPER, false);
-                on::Spawn(*peer, pPeer->netid, pPeer->user_id, start, pPeer->display_growid, pPeer->country, pPeer->role, pPeer->role >= DEVELOPER, false);
+                on::Spawn(*event.peer, pOthers->netid, pOthers->user_id, pOthers->pos, pOthers->display_growid, titles::country_state(*pOthers), pOthers->role, pOthers->role >= DEVELOPER, false, titles::icon(*pOthers));
+                on::Spawn(*peer, pPeer->netid, pPeer->user_id, start, pPeer->display_growid, titles::country_state(*pPeer), pPeer->role, pPeer->role >= DEVELOPER, false, titles::icon(*pPeer));
                 on::SetClothing(peer);
                 on::ConsoleMessage(peer, std::format("`5<{} entered, `w{}`` others here>``", pPeer->display_growid, world.visitors));
                 send_varlist(peer, {
@@ -122,7 +123,7 @@ void action::join_request(ENetEvent& event, const std::string &header, const std
                 });
             }
         });
-        on::Spawn(*event.peer, pPeer->netid, pPeer->user_id, start, pPeer->display_growid, pPeer->country, pPeer->role, pPeer->role >= DEVELOPER, true);
+        on::Spawn(*event.peer, pPeer->netid, pPeer->user_id, start, pPeer->display_growid, titles::country_state(*pPeer), pPeer->role, pPeer->role >= DEVELOPER, true, titles::icon(*pPeer)); // @note title badges and icon too
 
         if (pPeer->billboard.id != 0) on::BillboardChange(event); // @note don't waste memory if billboard is empty.
 

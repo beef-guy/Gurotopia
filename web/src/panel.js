@@ -22,6 +22,7 @@ const roles = require('./roles');
 const items = require('./items');
 const rttex = require('./rttex');
 const resources = require('./resources');
+const titles = require('./titles');
 
 const DONE_MESSAGES = {
   created: 'Server created and starting. It shows Online once it is ready.',
@@ -50,6 +51,10 @@ const DONE_MESSAGES = {
   textureDeleted: 'Texture deleted. Items that still use it show a blank square.',
   itemReset: 'Back to how items.dat has it. Restart the server to put it in the game.',
   itemDeleted: 'Custom item deleted, with its seed. Restart the server to take it out of the game.',
+  titleCreated: 'Title created. It\'s in the game now: give it to players on their page, or with /granttitle.',
+  titleSaved: 'Title saved. Everyone online sees the change right away.',
+  titleDeleted: 'Title deleted and taken from everyone who had it.',
+  titlesGiven: 'Titles saved. If they\'re online, they see the change right away.',
   itemsApplied: 'Restarting. Item changes are in the game once the server is back online, and players get them when they log in.',
 };
 
@@ -308,6 +313,7 @@ function buildApp() {
     { group: 'Development', items: [
       { label: 'Lua scripts', icon: 'code', soon: true },
       { page: 'roles', label: 'Roles', icon: 'shield', path: '/roles' },
+      { page: 'titles', label: 'Title manager', icon: 'trophy', path: '/titles' },
     ] },
     { group: 'Settings', items: [
       { page: 'settings', label: 'Configuration', icon: 'sliders', path: '/settings' },
@@ -349,10 +355,10 @@ function buildApp() {
 
   async function renderPlayer(req, res, { error = '', status = 200 } = {}) {
     const player = await players.get(req.server, req.player.uid);
-    const [more, onlineNow, roleList] = await Promise.all([players.details(req.server, player), live.online(req.server), roles.list(req.server)]);
+    const [more, onlineNow, roleList, titleList] = await Promise.all([players.details(req.server, player), live.online(req.server), roles.list(req.server), titles.forPlayer(req.server, player)]);
     await renderServer(req, res, 'players', {
       error, status, template: 'player',
-      extra: { player, more, roles: roleList.roles, roleMap: new Map(roleList.roles.map((r) => [r.id, r])), presence: onlineNow.get(player.growid.toLowerCase()) || null, title: `${player.growid} · ${req.server.name}` },
+      extra: { player, more, titleList, roles: roleList.roles, roleMap: new Map(roleList.roles.map((r) => [r.id, r])), presence: onlineNow.get(player.growid.toLowerCase()) || null, title: `${player.growid} · ${req.server.name}` },
     });
   }
 
@@ -367,6 +373,17 @@ function buildApp() {
       return renderPlayer(req, res, { error: err.message, status: 400 });
     }
     res.redirect(`/servers/${req.server.id}/players/${req.player.uid}?done=${result.done}${result.live ? '' : '&live=0'}`);
+  }));
+
+  app.post('/servers/:id/players/:uid/titles', auth.requireUser, loadServer, auth.checkCsrf, loadPlayer, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      result = await titles.setForPlayer(req.server, req.player, req.body, req.user.username);
+    } catch (err) {
+      if (!(err instanceof titles.UserError)) throw err;
+      return renderPlayer(req, res, { error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/players/${req.player.uid}?done=titlesGiven${result.live ? '' : '&live=0'}#titles`);
   }));
 
   /* ---------- worlds ---------- */
@@ -619,6 +636,82 @@ function buildApp() {
     }
     const done = req.params.action === 'delete' ? 'roleDeleted' : 'roleMoved';
     res.redirect(`/servers/${req.server.id}/roles?done=${done}${result.live ? '' : '&live=0'}`);
+  }));
+
+  /* ---------- titles ---------- */
+
+  app.get('/servers/:id/titles', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
+    const [result, roleMap] = await Promise.all([titles.list(req.server), roles.byId(req.server)]);
+    await renderServer(req, res, 'titles', { extra: { result, roleMap, howToGet: titles.howToGet, badges: titles.BADGES, title: `Titles · ${req.server.name}` } });
+  }));
+
+  const loadTitle = asyncRoute(async (req, res, next) => {
+    const id = /^[0-9]{1,6}$/.test(req.params.tid) ? Number(req.params.tid) : null;
+    const found = id === null ? null : await titles.get(req.server, id);
+    if (!found) return res.status(404).render('error', { title: 'Not found', message: 'That title does not exist on this server.' });
+    req.titleDef = found;
+    next();
+  });
+
+  async function renderTitle(req, res, { found = null, form = null, error = '', status = 200 } = {}) {
+    const [result, roleList, textures] = await Promise.all([titles.list(req.server), roles.list(req.server), resources.list(config.cdn.dir, req.server)]);
+    const fresh = found ? (result.titles.find((t) => t.id === found.id) || found) : null;
+    const base = fresh || { name: '', description: '', prefix: '', suffix: '', color: '', badge: '', texture: '', textureFile: '', texX: 0, texY: 0, iconItem: 0, grant: 'manual', grantValue: 0, enabled: true, sort: 100, builtin: false, holders: 0 };
+    let shown = base;
+    if (form) {
+      shown = {
+        ...base, ...form,
+        textureFile: titles.textureFile(form.texture), texX: Number(form.texX) || 0, texY: Number(form.texY) || 0, iconItem: Number(form.iconItem) || 0,
+        grantValue: form.grant === 'role' ? Number(form.grantRole) : Number(form.grantLevel) || 0, enabled: Boolean(form.enabled), sort: Number(form.sort) || base.sort,
+        iconMode: form.icon,
+      };
+    }
+    const iconItem = shown.iconItem ? await items.get(req.server, shown.iconItem) : null;
+    await renderServer(req, res, 'titles', {
+      error, status, template: 'title',
+      extra: {
+        titleDef: fresh, shown, ready: result.ready, iconItem, textures, roles: roleList.roles,
+        colors: roles.COLORS, badges: titles.BADGES, grants: titles.GRANTS, title: `${fresh ? fresh.name : 'New title'} · ${req.server.name}`,
+      },
+    });
+  }
+
+  app.get('/servers/:id/titles/new', auth.requireUser, loadServer, asyncRoute((req, res) => renderTitle(req, res)));
+
+  app.post('/servers/:id/titles', auth.requireUser, loadServer, auth.checkCsrf, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      if (!(await titles.list(req.server)).ready) throw new titles.UserError('Start the server once (with the latest game build) before making titles.');
+      result = await titles.create(req.server, req.body, req.user.username);
+    } catch (err) {
+      if (!(err instanceof titles.UserError)) throw err;
+      return renderTitle(req, res, { form: req.body, error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/titles/${result.id}?done=titleCreated${result.live ? '' : '&live=0'}`);
+  }));
+
+  app.get('/servers/:id/titles/:tid', auth.requireUser, loadServer, loadTitle, asyncRoute((req, res) => renderTitle(req, res, { found: req.titleDef })));
+
+  app.post('/servers/:id/titles/:tid', auth.requireUser, loadServer, auth.checkCsrf, loadTitle, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      result = await titles.update(req.server, req.titleDef, req.body, req.user.username);
+    } catch (err) {
+      if (!(err instanceof titles.UserError)) throw err;
+      return renderTitle(req, res, { found: req.titleDef, form: req.body, error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/titles/${req.titleDef.id}?done=titleSaved${result.live ? '' : '&live=0'}`);
+  }));
+
+  app.post('/servers/:id/titles/:tid/delete', auth.requireUser, loadServer, auth.checkCsrf, loadTitle, asyncRoute(async (req, res) => {
+    let result;
+    try {
+      result = await titles.remove(req.server, req.titleDef, req.user.username);
+    } catch (err) {
+      if (!(err instanceof titles.UserError)) throw err;
+      return renderTitle(req, res, { found: req.titleDef, error: err.message, status: 400 });
+    }
+    res.redirect(`/servers/${req.server.id}/titles?done=titleDeleted${result.live ? '' : '&live=0'}`);
   }));
 
   app.get('/servers/:id/status.json', auth.requireUser, loadServer, asyncRoute(async (req, res) => {

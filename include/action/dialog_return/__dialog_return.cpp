@@ -28,12 +28,14 @@
 #include "action/special_items.hpp"
 #include "action/cooking.hpp"
 #include "action/carnival.hpp"
+#include "database/titles.hpp"
 
 #include "__dialog_return.hpp"
 
 std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)>> dialog_return_pool
 {
     {"popup", std::bind(&popup, std::placeholders::_1, std::placeholders::_2)},
+    {"title_edit", std::bind(&titles::menu_return, std::placeholders::_1, std::placeholders::_2)}, // @note wrench > Title
 
     {"drop_item", std::bind(&drop_item, std::placeholders::_1, std::placeholders::_2)},
     {"trash_item", std::bind(&trash_item, std::placeholders::_1, std::placeholders::_2)},

@@ -1,0 +1,167 @@
+<%- include('partials/server-shell') %>
+<%
+  const t = shown;
+  const action = titleDef ? `/servers/${server.id}/titles/${titleDef.id}` : `/servers/${server.id}/titles`;
+  const colorKey = (colors.find((c) => c.code === t.color) || colors[0]).key;
+  const iconMode = t.iconMode || (t.iconItem ? 'item' : t.texture || t.textureFile ? 'texture' : 'none');
+  const own = textures.find((x) => x.file === t.textureFile);
+  const plain = (s) => String(s || '').replace(/`./g, '');
+  const iconUrl = `/servers/${server.id}/items/texture.png?file=${encodeURIComponent(t.textureFile || '')}&x=${t.texX}&y=${t.texY}`;
+%>
+<p class="crumb"><a href="/servers/<%= server.id %>/titles"><svg class="ic"><use href="#i-back"/></svg>All titles</a></p>
+<div class="page-head">
+  <div>
+    <h1><%= titleDef ? titleDef.name : 'New title' %></h1>
+    <p class="muted"><% if (titleDef) { %><%= titleDef.builtin ? 'One of the real game\'s titles. You can change it or switch it off.' : 'A title of your own.' %> Given to <%= titleDef.holders %> <%= titleDef.holders === 1 ? 'player' : 'players' %>.<% } else { %>Pick its text, colour, badge and icon, and how players get it.<% } %></p>
+  </div>
+</div>
+
+<% if (!ready) { %>
+<section class="card"><div class="empty"><svg class="ic big"><use href="#i-trophy"/></svg><p>Start the server once with the latest game build, then you can edit titles here.</p></div></section>
+<% } else { %>
+<form method="post" action="<%= action %>" class="role-form" id="title-form" data-server="<%= server.id %>">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-user"/></svg>Name and look</h2></div>
+    <div class="title-preview" aria-live="polite">
+      <span class="muted small">How it looks in game</span>
+      <div class="title-stage">
+        <span class="item-ic title-icon" id="p-icon" data-letter="" <%= iconMode === 'none' ? 'hidden' : '' %>><img id="p-icon-img" src="<%= iconMode === 'none' ? '' : iconUrl %>" alt="" width="32" height="32"></span>
+        <span class="name-preview gt-<%= colorKey %>" id="p-name"><span data-p="prefix"><%= plain(t.prefix) %></span>Psy7<span data-p="suffix"><%= plain(t.suffix) %></span></span>
+        <span class="chip" id="p-badge" <%= t.badge ? '' : 'hidden' %>><%= (badges.find((b) => b.value === t.badge) || { label: '' }).label %></span>
+      </div>
+    </div>
+    <div class="form-grid">
+      <label>Title name <small class="inline-hint">what players see in their Titles menu</small>
+        <input name="name" value="<%= t.name %>" maxlength="32" required autocomplete="off" placeholder="e.g. Champion">
+      </label>
+      <label>Description <small class="inline-hint">shown under it in the menu</small>
+        <input name="description" value="<%= t.description %>" maxlength="160" autocomplete="off" placeholder="e.g. Won the summer build contest.">
+      </label>
+      <label>Text before the name
+        <input name="prefix" id="f-prefix" value="<%= t.prefix %>" maxlength="24" autocomplete="off" spellcheck="false" placeholder="e.g. Dr.">
+        <small>Add a space at the end if you want one. Colour codes like `4 work.</small>
+      </label>
+      <label>Text after the name
+        <input name="suffix" id="f-suffix" value="<%= t.suffix %>" maxlength="24" autocomplete="off" spellcheck="false" placeholder="e.g.  the Great">
+        <small>Start with a space. " of Legend" also shows the Legend flag.</small>
+      </label>
+    </div>
+    <fieldset class="swatches">
+      <legend>Name colour <small class="inline-hint">a staff role's colour still wins</small></legend>
+      <% for (const c of colors) { %>
+      <label class="swatch-pick" title="<%= c.label %>">
+        <input type="radio" name="color" value="<%= c.code %>" data-key="<%= c.key %>" <%= c.code === t.color ? 'checked' : '' %>>
+        <span class="swatch gt-<%= c.key %>"></span><span class="swatch-name"><%= c.code ? c.label : 'Keep their colour' %></span>
+      </label>
+      <% } %>
+    </fieldset>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-shield"/></svg>Badge</h2></div>
+    <p class="muted small">The real client draws these next to the name. Some take the place of the player's flag.</p>
+    <div class="badge-pick">
+      <% for (const b of badges) { %>
+      <label class="power <%= b.value === t.badge ? 'on' : '' %>">
+        <input type="radio" name="badge" value="<%= b.value %>" data-label="<%= b.label %>" <%= b.value === t.badge ? 'checked' : '' %>>
+        <strong><%= b.label %></strong>
+        <% if (b.text) { %><span><%= b.text %></span><% } %>
+      </label>
+      <% } %>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-image"/></svg>Icon</h2><a class="btn ghost small" href="/servers/<%= server.id %>/resources"><svg class="ic"><use href="#i-upload"/></svg>Upload pictures</a></div>
+    <p class="muted small">A small picture next to the name. A player can show one title icon at a time.</p>
+    <div class="seg icon-seg" role="radiogroup">
+      <% for (const [v, l] of [['none', 'No icon'], ['item', 'An item\'s picture'], ['texture', 'Your upload or a game file']]) { %>
+      <label class="seg-pick"><input type="radio" name="icon" value="<%= v %>" <%= iconMode === v ? 'checked' : '' %>><span><%= l %></span></label>
+      <% } %>
+    </div>
+
+    <div class="icon-pane" data-pane="item" <%= iconMode === 'item' ? '' : 'hidden' %>>
+      <input type="hidden" name="iconItem" id="f-icon-item" value="<%= t.iconItem || '' %>">
+      <label>Find an item
+        <input type="search" id="item-search" autocomplete="off" placeholder="Type an item name, like Golden Angel Wings" value="<%= iconItem ? iconItem.name : '' %>">
+      </label>
+      <ul class="base-results" id="item-results" role="listbox" aria-label="Matching items"></ul>
+      <p class="muted small" id="item-chosen"><%= iconItem ? `Using #${iconItem.id} ${iconItem.name}.` : 'Pick an item from the list.' %></p>
+    </div>
+
+    <div class="icon-pane" data-pane="texture" <%= iconMode === 'texture' ? '' : 'hidden' %>>
+      <div class="tex-grid">
+        <label>Texture
+          <select id="tex-source">
+            <% if (textures.length) { %>
+            <optgroup label="Your uploads">
+              <% for (const x of textures) { %><option value="<%= x.file %>" data-w="<%= x.w %>" data-h="<%= x.h %>" <%= own && own.file === x.file ? 'selected' : '' %>><%= x.file.replace(/^ps[0-9]+_/, '').replace(/_[0-9a-f]{8}\.rttex$/, '') %> (<%= x.cols * x.rows %> <%= x.cols * x.rows === 1 ? 'cell' : 'cells' %>)</option><% } %>
+            </optgroup>
+            <% } %>
+            <option value="" <%= own ? '' : 'selected' %>>A game texture file…</option>
+          </select>
+          <small><%= textures.length ? 'Pick one of your uploads, or type a file from the game.' : 'Upload a 32×32 PNG on the Resources page, or type a file from the game.' %></small>
+        </label>
+        <label id="game-tex" <%= own ? 'hidden' : '' %>>Game texture file
+          <input name="texture" id="f-texture" value="<%= t.textureFile %>" maxlength="80" spellcheck="false" autocomplete="off" placeholder="tiles_page16.rttex">
+        </label>
+        <label>Column
+          <input type="number" name="texX" id="f-x" min="0" max="63" value="<%= t.texX %>">
+        </label>
+        <label>Row
+          <input type="number" name="texY" id="f-y" min="0" max="63" value="<%= t.texY %>">
+        </label>
+      </div>
+      <div class="sheet-pick" id="sheet-pick" <%= own ? '' : 'hidden' %>>
+        <p class="muted small">Click the picture you want.</p>
+        <div class="sheet-wrap"><div class="sheet"><img id="pick-img" alt="Your texture" <% if (own) { %>src="/servers/<%= server.id %>/resources/<%= encodeURIComponent(own.file) %>/sheet.png" data-w="<%= own.w %>" data-h="<%= own.h %>"<% } %>><span class="sheet-cell" id="pick-cell" hidden></span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-users"/></svg>Who has it</h2></div>
+    <div class="power-pick grants">
+      <% for (const g of grants) { %>
+      <label class="power <%= g.value === t.grant ? 'on' : '' %>">
+        <input type="radio" name="grant" value="<%= g.value %>" <%= g.value === t.grant ? 'checked' : '' %>>
+        <strong><%= g.label %></strong>
+        <span><%= g.text %></span>
+      </label>
+      <% } %>
+    </div>
+    <div class="form-grid mt">
+      <label data-grant="level" <%= t.grant === 'level' ? '' : 'hidden' %>>Level
+        <input type="number" name="grantLevel" min="1" max="125" value="<%= t.grant === 'level' ? t.grantValue : 50 %>">
+      </label>
+      <label data-grant="role" <%= t.grant === 'role' ? '' : 'hidden' %>>Role
+        <select name="grantRole"><% for (const r of roles) { %><option value="<%= r.id %>" <%= t.grant === 'role' && r.id === t.grantValue ? 'selected' : '' %>><%= r.name %></option><% } %></select>
+      </label>
+      <label>Order <small class="inline-hint">lower comes first in the menu and in the name</small>
+        <input type="number" name="sort" min="0" max="999" value="<%= t.sort %>">
+      </label>
+      <label class="check-row"><input type="checkbox" name="enabled" value="1" <%= t.enabled ? 'checked' : '' %>> Title is on <small class="inline-hint">switched off, nobody has it until you turn it back on</small></label>
+    </div>
+    <p class="muted small">You can also give it to anyone on their page under <a href="/servers/<%= server.id %>/players">Players</a>, or in game with <code>/granttitle name <%= t.name || 'title' %></code>.</p>
+  </section>
+
+  <div class="save-bar">
+    <a class="btn ghost" href="/servers/<%= server.id %>/titles">Cancel</a>
+    <button type="submit"><%= titleDef ? 'Save title' : 'Create title' %></button>
+  </div>
+</form>
+
+<% if (titleDef && !titleDef.builtin) { %>
+<section class="card danger">
+  <div class="card-head"><h2><svg class="ic"><use href="#i-trash"/></svg>Delete title</h2></div>
+  <p><%= titleDef.holders ? `It's taken from the ${titleDef.holders} ${titleDef.holders === 1 ? 'player' : 'players'} who have it.` : 'Nobody was given this title.' %> It can't be undone.</p>
+  <form method="post" action="/servers/<%= server.id %>/titles/<%= titleDef.id %>/delete">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <button type="submit" class="bad">Delete <%= titleDef.name %></button>
+  </form>
+</section>
+<% } %>
+<% } %>
+<%- include('partials/server-shell-end') %>
