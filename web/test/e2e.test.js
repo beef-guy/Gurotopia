@@ -356,6 +356,56 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
     assert.deepEqual(log.map((l) => l.action).slice(-5), ['role_create', 'role_move', 'role_edit', 'role', 'role_delete']);
   });
 
+  await t.test('item effects give items buffs and tell the game', async () => {
+    const srv = `srv_${id}`;
+    let r = await alice.get(`/servers/${id}/effects`);
+    assert.equal(r.status, 200);
+    assert.match(r.text, /No items have effects yet/);
+    r = await alice.get(`/servers/${id}/effects/new`);
+    assert.equal(r.status, 200);
+    assert.match(r.text, /One-hit breaking/);
+
+    r = await alice.post(`/servers/${id}/effects`, { _csrf: await alice.csrf(), item: '6', gems: '450', xp: '', oneHit: '1', punchRange: '2', buildRange: '0', drops: '50', harvest: '0', note: 'Prize', enabled: '1' });
+    assert.equal(r.status, 302, r.text.slice(0, 400));
+    assert.match(r.location, /effects\/6\?done=effectCreated/);
+    let [[row]] = await admin.query(`SELECT * FROM ${srv}.item_effects WHERE item = 6`);
+    assert.deepEqual([row.gems, row.xp, row.one_hit, row.punch_range, row.drops, row.enabled, row.note], [450, 0, 1, 2, 50, 1, 'Prize']);
+
+    r = await alice.get(`/servers/${id}/effects`);
+    assert.match(r.text, /Legendary Wings[\s\S]*\+450%[\s\S]*Yes[\s\S]*\+2/, 'the list shows the effects');
+    r = await alice.get(`/servers/${id}/effects?q=dirt`);
+    assert.match(r.text, /No item effects match/);
+    r = await alice.get(`/servers/${id}/effects?q=6`);
+    assert.match(r.text, /Legendary Wings/);
+
+    const bad = async (form, why) => assert.equal((await alice.post(`/servers/${id}/effects`, { _csrf: await alice.csrf(), enabled: '1', ...form })).status, 400, why);
+    await bad({ item: '6', gems: '10' }, 'one row per item');
+    await bad({ item: '3', gems: '10' }, 'seeds can\'t be picked');
+    await bad({ item: '999', gems: '10' }, 'the item must exist');
+    await bad({ item: '2', gems: '0' }, 'at least one effect');
+    await bad({ item: '2', gems: '-5' }, 'no negative numbers');
+    await bad({ item: '2', punchRange: '11' }, 'reach is capped');
+    await bad({ item: '2', gems: '1.5' }, 'whole numbers');
+    await bad({ item: '2', gems: '5', note: 'a|b' }, 'no | in notes');
+
+    r = await alice.post(`/servers/${id}/effects/6`, { _csrf: await alice.csrf(), gems: '200', xp: '100', punchRange: '0', buildRange: '3', drops: '0', harvest: '25', note: '' });
+    assert.equal(r.status, 302);
+    [[row]] = await admin.query(`SELECT * FROM ${srv}.item_effects WHERE item = 6`);
+    assert.deepEqual([row.gems, row.xp, row.one_hit, row.build_range, row.harvest, row.enabled], [200, 100, 0, 3, 25, 0], 'unticked boxes switch off');
+    r = await alice.get(`/servers/${id}/effects/6`);
+    assert.match(r.text, /Save effects/);
+    assert.equal((await alice.get(`/servers/${id}/effects/7`)).status, 404);
+
+    r = await alice.post(`/servers/${id}/effects/6/delete`, { _csrf: await alice.csrf() });
+    assert.equal(r.status, 302);
+    const [gone] = await admin.query(`SELECT item FROM ${srv}.item_effects`);
+    assert.equal(gone.length, 0);
+
+    const [sent] = await admin.query(`SELECT action, done_at FROM ${srv}.panel_actions WHERE action = 'effects_reload' ORDER BY id`);
+    assert.equal(sent.length, 3);
+    assert.ok(sent.every((a) => a.done_at), 'the game carried them out');
+  });
+
   await t.test('title manager makes titles with icons, and players can be given them', async () => {
     const srv = `srv_${id}`;
     let r = await alice.get(`/servers/${id}/titles`);

@@ -1,11 +1,14 @@
 #include "pch.hpp"
 
 #include "database/playmods.hpp"
+#include "database/item_effects.hpp"
 #include "action/radiation.hpp"
 #include "action/special_items.hpp"
 #include "action/ghosts.hpp"
 
 #include "SetClothing.hpp"
+
+#include <algorithm>
 
 void on::SetClothing(ENetPeer *peer, bool sound, bool everyone)
 {
@@ -37,7 +40,13 @@ void on::SetClothing(ENetPeer *peer, bool sound, bool everyone)
         auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
         if (world != worlds.end()) xenonite = world->xenonite; // @note a Xenonite Crystal forces or blocks powers for everyone here
     }
-    const ::cloth_effects fx = get_cloth_effects(pPeer->clothing, xenonite);
+    ::cloth_effects fx = get_cloth_effects(pPeer->clothing, xenonite);
+    {
+        /* @note the website's item effects add reach on top of Long Punch / Long Build */
+        const ::effect_totals extra = item_effects::totals(*pPeer);
+        fx.punch_range = static_cast<u_char>(std::min(fx.punch_range + extra.punch_range, item_effects::MAX_RANGE));
+        fx.build_range = static_cast<u_char>(std::min(fx.build_range + extra.build_range, item_effects::MAX_RANGE));
+    }
     pPeer->punch_range = fx.punch_range;
     pPeer->build_range = fx.build_range;
     pPeer->mods = fx.mods;

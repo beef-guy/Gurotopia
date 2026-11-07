@@ -5,6 +5,7 @@
 #include "onVariant/SetClothing.hpp"
 #include "onVariant/CountryState.hpp"
 #include "database/titles.hpp"
+#include "database/item_effects.hpp"
 #include "onVariant/ConsoleMessage.hpp"
 #include "commands/punch.hpp"
 #include "tools/string.hpp"
@@ -330,6 +331,7 @@ bool peer::can_hold(short id, int count)
 void peer::add_xp(ENetEvent &event, u_short value) 
 {
     if (std::ranges::find(this->clothing, 1996.0f/*Ring of Wisdom*/) != this->clothing.end() && RandomRange(0, 10) == 0) value *= 2; // @note wiki: 10% chance of double XP
+    value = static_cast<u_short>(std::min<long long>(item_effects::boost(value, item_effects::totals(*this).xp), 65535)); // @note the website's item effects: +% XP
     ring_progress(event.peer, RT_XP, value);
     u_int &lvl = this->level.front();
     u_int &xp = this->level.back() += value; // @note factor the new xp amount
