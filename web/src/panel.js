@@ -25,6 +25,9 @@ const resources = require('./resources');
 const titles = require('./titles');
 const effects = require('./effects');
 const machines = require('./machines');
+const scripts = require('./scripts');
+const scriptTemplates = require('./scriptTemplates');
+const scriptDocs = require('./scriptDocs');
 
 const DONE_MESSAGES = {
   created: 'Server created and starting. It shows Online once it is ready.',
@@ -64,6 +67,12 @@ const DONE_MESSAGES = {
   machineSaved: 'Capacity saved. It applies right away in every world.',
   machineReset: 'Back to the real game\'s numbers. It applies right away.',
   machineDeleted: 'Custom machine deleted, with its item. Restart the server to take it out of the game.',
+  scriptCreated: 'Script created. It runs as soon as you save it.',
+  scriptEnabled: 'Script switched on.',
+  scriptDisabled: 'Script switched off. It stops right away.',
+  scriptDeleted: 'Script deleted. It stopped right away.',
+  scriptDuplicated: 'Copy made. It is switched off so it doesn\'t run twice: switch it on when it\'s ready.',
+  logsCleared: 'Script log cleared.',
   itemsApplied: 'Restarting. Item changes are in the game once the server is back online, and players get them when they log in.',
 };
 
@@ -137,7 +146,9 @@ function clientIp(req) {
 function assetVersion() {
   const dir = path.join(__dirname, '..', 'public');
   const hash = crypto.createHash('sha1');
-  for (const name of fs.readdirSync(dir).sort()) hash.update(name).update(fs.readFileSync(path.join(dir, name)));
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    if (entry.isFile()) hash.update(entry.name).update(fs.readFileSync(path.join(dir, entry.name))); // @note vendor/ files carry their version in the folder's README
+  }
   return hash.digest('hex').slice(0, 10);
 }
 
@@ -171,8 +182,8 @@ function buildApp() {
   });
   app.use('/static', express.static(path.join(__dirname, '..', 'public'), { maxAge: '1h' }));
   const smallForms = express.urlencoded({ extended: false, limit: '10kb' });
-  const uploadForms = express.urlencoded({ extended: false, limit: '3mb' }); // @note a texture arrives as base64 (2 MB file)
-  app.use((req, res, next) => (req.method === 'POST' && /^\/servers\/[0-9]+\/resources$/.test(req.path) ? uploadForms : smallForms)(req, res, next));
+  const uploadForms = express.urlencoded({ extended: false, limit: '3mb' }); // @note a texture arrives as base64 (2 MB file), a script up to 256 KB plus its blocks
+  app.use((req, res, next) => (req.method === 'POST' && /^\/servers\/[0-9]+\/(resources|scripts\/[0-9]+)$/.test(req.path) ? uploadForms : smallForms)(req, res, next));
   app.use(auth.loadSession);
   app.use((req, res, next) => {
     res.locals.done = DONE_MESSAGES[req.query.done] || '';
@@ -322,7 +333,7 @@ function buildApp() {
       { label: 'Gem shop', icon: 'grid', soon: true },
     ] },
     { group: 'Development', items: [
-      { label: 'Lua scripts', icon: 'code', soon: true },
+      { page: 'scripts', label: 'Lua scripts', icon: 'code', path: '/scripts' },
       { page: 'roles', label: 'Roles', icon: 'shield', path: '/roles' },
       { page: 'titles', label: 'Title manager', icon: 'trophy', path: '/titles' },
     ] },
@@ -647,6 +658,78 @@ function buildApp() {
     }
     const done = req.params.action === 'delete' ? 'roleDeleted' : 'roleMoved';
     res.redirect(`/servers/${req.server.id}/roles?done=${done}${result.live ? '' : '&live=0'}`);
+  }));
+
+  /* ---------- Lua scripts ---------- */
+
+  app.get('/servers/:id/scripts', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
+    const list = await scripts.list(req.server);
+    await renderServer(req, res, 'scripts', { extra: { scripts: list, templates: scriptTemplates.TEMPLATES, max: scripts.MAX_SCRIPTS, form: {}, title: `Lua scripts · ${req.server.name}` } });
+  }));
+
+  app.post('/servers/:id/scripts', auth.requireUser, loadServer, auth.checkCsrf, asyncRoute(async (req, res) => {
+    const mode = req.body.mode === 'code' ? 'code' : 'blocks';
+    let result;
+    try {
+      result = await scripts.create(req.server, {
+        name: req.body.name, mode, source: mode === 'code' ? scriptTemplates.get(String(req.body.template || 'blank')).source : '',
+      }, req.user.username);
+    } catch (err) {
+      if (!(err instanceof scripts.UserError)) throw err;
+      const list = await scripts.list(req.server);
+      return renderServer(req, res, 'scripts', { error: err.message, status: 400, extra: { scripts: list, templates: scriptTemplates.TEMPLATES, max: scripts.MAX_SCRIPTS, form: req.body, title: `Lua scripts · ${req.server.name}` } });
+    }
+    res.redirect(`/servers/${req.server.id}/scripts/${result.id}?done=scriptCreated`);
+  }));
+
+  app.get('/servers/:id/scripts/logs.json', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
+    const rows = await scripts.logs(req.server, { after: req.query.after, script: typeof req.query.script === 'string' ? req.query.script.slice(0, 48) : '' });
+    res.json({ logs: rows, online: Boolean(req.server.reporting) });
+  }));
+
+  app.post('/servers/:id/scripts/logs/clear', auth.requireUser, loadServer, auth.checkCsrf, asyncRoute(async (req, res) => {
+    await scripts.clearLogs(req.server);
+    res.redirect(`/servers/${req.server.id}/scripts?done=logsCleared`);
+  }));
+
+  const loadScript = asyncRoute(async (req, res, next) => {
+    const id = /^[1-9][0-9]{0,9}$/.test(req.params.sid) ? Number(req.params.sid) : null;
+    const script = id ? await scripts.get(req.server, id) : null;
+    if (!script) return res.status(404).render('error', { title: 'Not found', message: 'That script does not exist on this server.' });
+    req.script = script;
+    next();
+  });
+
+  app.get('/servers/:id/scripts/:sid', auth.requireUser, loadServer, loadScript, asyncRoute(async (req, res) => {
+    // @note the block editor and the code editor style their own parts (inline styles), nothing else is loosened
+    res.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; media-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'");
+    await renderServer(req, res, 'scripts', { template: 'script', extra: { script: req.script, docs: scriptDocs, title: `${req.script.name} · Lua scripts · ${req.server.name}` } });
+  }));
+
+  app.post('/servers/:id/scripts/:sid', auth.requireUser, loadServer, auth.checkCsrf, loadScript, asyncRoute(async (req, res) => {
+    const wantsJson = (req.get('accept') || '').includes('application/json');
+    try {
+      const result = await scripts.update(req.server, req.script, req.body, req.user.username);
+      if (wantsJson) return res.json({ ok: true, ...result });
+      res.redirect(`/servers/${req.server.id}/scripts/${req.script.id}`);
+    } catch (err) {
+      if (!(err instanceof scripts.UserError)) throw err;
+      if (wantsJson) return res.status(400).json({ ok: false, error: err.message });
+      res.status(400).render('error', { title: 'Not saved', message: err.message });
+    }
+  }));
+
+  app.post('/servers/:id/scripts/:sid/:action(enable|disable|delete|duplicate)', auth.requireUser, loadServer, auth.checkCsrf, loadScript, asyncRoute(async (req, res) => {
+    const { action } = req.params;
+    if (action === 'duplicate') {
+      const copy = await scripts.duplicate(req.server, req.script, req.user.username);
+      return res.redirect(`/servers/${req.server.id}/scripts/${copy.id}?done=scriptDuplicated`);
+    }
+    if (action === 'delete') await scripts.remove(req.server, req.script);
+    else await scripts.setEnabled(req.server, req.script, action === 'enable', req.user.username);
+    const done = { enable: 'scriptEnabled', disable: 'scriptDisabled', delete: 'scriptDeleted' }[action];
+    const back = req.body.back === 'editor' && action !== 'delete' ? `/scripts/${req.script.id}` : '/scripts';
+    res.redirect(`/servers/${req.server.id}${back}?done=${done}`);
   }));
 
   /* ---------- titles ---------- */

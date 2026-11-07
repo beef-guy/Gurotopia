@@ -1,0 +1,106 @@
+<%- include('partials/server-shell') %>
+<div class="page-head">
+  <div>
+    <h1>Lua scripts</h1>
+    <p class="muted">Make your own features: commands, rewards, shops, minigames. Snap blocks together, or write Lua yourself. Saved scripts run right away, no restart.</p>
+  </div>
+</div>
+
+<% if (!server.reporting) { %>
+<p class="notice info">The server is offline. Your scripts start when it does.</p>
+<% } %>
+
+<section class="card">
+  <div class="card-head"><h2><svg class="ic"><use href="#i-plus"/></svg>New script</h2><span class="muted small"><%= scripts.length %> of <%= max %></span></div>
+  <form method="post" action="/servers/<%= server.id %>/scripts" class="stack" id="new-script">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="mode-pick">
+      <label class="mode-card">
+        <input type="radio" name="mode" value="blocks" <%= form.mode !== 'code' ? 'checked' : '' %>>
+        <span class="mode-body">
+          <svg class="ic big"><use href="#i-puzzle"/></svg>
+          <strong>Blocks</strong>
+          <small>Drag and drop. No coding needed: pick "when a player types /daily", then "give 500 gems".</small>
+        </span>
+      </label>
+      <label class="mode-card">
+        <input type="radio" name="mode" value="code" <%= form.mode === 'code' ? 'checked' : '' %>>
+        <span class="mode-body">
+          <svg class="ic big"><use href="#i-code"/></svg>
+          <strong>Lua code</strong>
+          <small>Write it yourself, with a list of everything you can use beside the editor.</small>
+        </span>
+      </label>
+    </div>
+    <div class="form-grid">
+      <label>Name
+        <input name="name" required maxlength="48" placeholder="Daily reward" value="<%= form.name || '' %>">
+      </label>
+      <label id="template-pick">Start from
+        <select name="template">
+          <% for (const t of templates) { %>
+          <option value="<%= t.key %>" <%= form.template === t.key ? 'selected' : '' %>><%= t.label %> · <%= t.text %></option>
+          <% } %>
+        </select>
+        <small>Only for Lua code. A block script starts with a small example you can change.</small>
+      </label>
+    </div>
+    <div><button type="submit"<%= scripts.length >= max ? ' disabled' : '' %>><svg class="ic"><use href="#i-plus"/></svg>Create script</button></div>
+  </form>
+</section>
+
+<section class="card flush">
+  <% if (!scripts.length) { %>
+    <div class="empty">
+      <svg class="ic big"><use href="#i-code"/></svg>
+      <p>No scripts yet. Make one above.</p>
+    </div>
+  <% } else { %>
+  <div class="table-wrap">
+  <table class="table scripts">
+    <thead><tr><th>Script</th><th class="hide-sm">Made with</th><th>Running</th><th class="hide-sm">Changed</th><th></th></tr></thead>
+    <tbody>
+    <% for (const s of scripts) { %>
+      <tr class="<%= s.enabled ? '' : 'off' %>">
+        <td><a class="item-link" href="/servers/<%= server.id %>/scripts/<%= s.id %>"><strong><%= s.name %></strong></a><br><span class="muted small"><%= s.lines %> <%= s.lines === 1 ? 'line' : 'lines' %> of Lua</span></td>
+        <td class="hide-sm"><span class="chip"><svg class="ic"><use href="#i-<%= s.mode === 'blocks' ? 'puzzle' : 'code' %>"/></svg><%= s.mode === 'blocks' ? 'Blocks' : 'Code' %></span></td>
+        <td>
+          <form method="post" action="/servers/<%= server.id %>/scripts/<%= s.id %>/<%= s.enabled ? 'disable' : 'enable' %>" class="inline">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <button type="submit" class="switch <%= s.enabled ? 'on' : '' %>" title="<%= s.enabled ? 'Switch off' : 'Switch on' %>" aria-label="<%= s.enabled ? 'Switch off' : 'Switch on' %> <%= s.name %>"><span></span></button>
+          </form>
+        </td>
+        <td class="hide-sm muted small"><%= fmt.since(s.updatedAt) %> ago<%= s.updatedBy ? ` by ${s.updatedBy}` : '' %></td>
+        <td class="right">
+          <a class="btn ghost small" href="/servers/<%= server.id %>/scripts/<%= s.id %>">Edit</a>
+          <form method="post" action="/servers/<%= server.id %>/scripts/<%= s.id %>/duplicate" class="inline">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <button type="submit" class="icon-btn" title="Make a copy" aria-label="Copy <%= s.name %>"><svg class="ic"><use href="#i-copy"/></svg></button>
+          </form>
+          <form method="post" action="/servers/<%= server.id %>/scripts/<%= s.id %>/delete" class="inline" data-confirm="Delete the script <%= s.name %>? This can't be undone.">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <button type="submit" class="icon-btn danger-text" title="Delete" aria-label="Delete <%= s.name %>"><svg class="ic"><use href="#i-trash"/></svg></button>
+          </form>
+        </td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table>
+  </div>
+  <% } %>
+</section>
+
+<section class="card console-card">
+  <div class="console-bar">
+    <span class="dots"><i></i><i></i><i></i></span>
+    <span class="muted small">Script log: what scripts print, and their errors</span>
+    <div class="console-tools">
+      <form method="post" action="/servers/<%= server.id %>/scripts/logs/clear" class="inline">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button type="submit" class="ghost small">Clear</button>
+      </form>
+    </div>
+  </div>
+  <pre id="script-log" class="log script-log" data-server="<%= server.id %>">Loading…</pre>
+</section>
+<%- include('partials/server-shell-end') %>

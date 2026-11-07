@@ -17,3 +17,5 @@ mysql_login.txt
 # /renderworld
 discord_webhook.txt
 renders/
+lua_test.out
+mysql_login_test.txt

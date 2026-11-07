@@ -15,8 +15,16 @@ all: $(binary)
 sources := main.cpp $(shell find include -type f -name '*.cpp' 2>/dev/null)
 objects := $(sources:%.cpp=build/%.o)
 
-$(binary): $(objects)
-	g++ $(objects) -o $@ $(libraries)
+# @note Lua 5.4 for server scripts (include/scripting). built as C++ so a script error unwinds C++ code properly
+lua_sources := $(wildcard include/lua/*.c)
+lua_objects := $(lua_sources:%.c=build/%.o)
+
+$(binary): $(objects) $(lua_objects)
+	g++ $(objects) $(lua_objects) -o $@ $(libraries)
+
+build/include/lua/%.o: include/lua/%.c
+	@mkdir -p $(dir $@)
+	g++ -x c++ -std=c++20 -O2 -MMD -MP -c $< -o $@
 
 pch_hpp := include/pch.hpp
 pch_gch := build/include/pch.hpp.gch
@@ -29,8 +37,12 @@ build/%.o: %.cpp $(pch_gch)
 	@mkdir -p $(dir $@)
 	g++ $(flags) $(includes) -include $(pch_hpp) -c $< -o $@
 
--include $(objects:.o=.d)
+-include $(objects:.o=.d) $(lua_objects:.o=.d)
 
-.PHONY : all clean
+# @note tests for the Lua sandbox, against a local MariaDB: make lua-test && ./lua_test.out mysql_login_test.txt
+lua-test: $(filter-out build/main.o,$(objects)) $(lua_objects) build/tests/lua_sandbox_test.o
+	g++ $^ -o lua_test.out $(libraries)
+
+.PHONY : all clean lua-test
 clean :
-	-rm -rf build $(binary)
+	-rm -rf build $(binary) lua_test.out

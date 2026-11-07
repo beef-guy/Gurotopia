@@ -8,5 +8,20 @@
 <% if (page === 'roles') { %><script src="/static/roles.js?v=<%= v %>"></script><% } %>
 <% if (page === 'effects') { %><script src="/static/effects.js?v=<%= v %>"></script><% } %>
 <% if (page === 'machines') { %><script src="/static/machines.js?v=<%= v %>"></script><% } %>
+<% if (page === 'scripts') { %><script src="/static/scripts.js?v=<%= v %>"></script><% } %>
+<% if (page === 'scripts' && typeof script !== 'undefined' && script.mode === 'blocks') { %>
+<script src="/static/vendor/blockly/blockly_compressed.js?v=<%= v %>"></script>
+<script src="/static/vendor/blockly/blocks_compressed.js?v=<%= v %>"></script>
+<script src="/static/vendor/blockly/lua_compressed.js?v=<%= v %>"></script>
+<script src="/static/vendor/blockly/en.js?v=<%= v %>"></script>
+<script src="/static/script-blocks.js?v=<%= v %>"></script>
+<% } else if (page === 'scripts' && typeof script !== 'undefined') { %>
+<script src="/static/vendor/codemirror/codemirror.js?v=<%= v %>"></script>
+<script src="/static/vendor/codemirror/lua.js?v=<%= v %>"></script>
+<script src="/static/vendor/codemirror/matchbrackets.js?v=<%= v %>"></script>
+<script src="/static/vendor/codemirror/closebrackets.js?v=<%= v %>"></script>
+<script src="/static/vendor/luaparse/luaparse.js?v=<%= v %>"></script>
+<script src="/static/script-code.js?v=<%= v %>"></script>
+<% } %>
 <% if (page === 'titles') { %><script src="/static/items.js?v=<%= v %>"></script><script src="/static/titles.js?v=<%= v %>"></script><% } %>
 <%- include('foot', { shell: 'server' }) %>

@@ -8,6 +8,7 @@
 #include "tools/random.hpp"
 
 #include "action/profile.hpp"
+#include "scripting/lua.hpp"
 
 #include "input.hpp"
 
@@ -61,7 +62,10 @@ void action::input(ENetEvent& event, const std::string& header)
 
         const bool talking = (command == "/sb" || command == "/msg" || command == "/me");
         if (auto it = cmd_pool.find(command); it == cmd_pool.end() || !can_use(*pPeer, command, it->second))
+        {
+            if (it == cmd_pool.end() && lua::command(event.peer, command, text)) return; // @note a command from the server's Lua scripts
             send_gameMessage(event.peer, {.message = "action|log\nmsg|`4Unknown command.`` Enter `$/?`` for a list of valid commands."});
+        }
         else if (talking && muted(event, *pPeer)) return;
         else
             it->second.run(event, std::move(text));
@@ -69,6 +73,7 @@ void action::input(ENetEvent& event, const std::string& header)
     else 
     {
         if (muted(event, *pPeer)) return;
+        if (lua::chat(event.peer, text)) return; // @note a script hid this message (its chat event returned true)
         if ((pPeer->state & S_DUCT_TAPE) && pPeer->duct_tape_until != 0 && std::time(nullptr) >= pPeer->duct_tape_until)
         {
             pPeer->state &= ~S_DUCT_TAPE; // @note duct tape falls off after a while
