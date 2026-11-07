@@ -1,0 +1,23 @@
+# The page the game client opens to log in (login.psnode.cloud). Install to /etc/systemd/system/, then:
+#   systemctl daemon-reload && systemctl enable --now gurotopia-login
+# It needs no database and no secrets: the gateway checks passwords.
+[Unit]
+Description=Gurotopia game login page
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=gurotopia
+Group=gurotopia
+WorkingDirectory=/opt/gurotopia-web
+Environment=LOGIN_HOST=127.0.0.1 LOGIN_PORT=3002 LOGIN_BRAND=PSNode
+ExecStart=/usr/bin/node src/login.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

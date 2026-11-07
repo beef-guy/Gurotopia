@@ -30,6 +30,10 @@ players ──► gateway UDP 17091 ──(server name)──► that server's U
 - A new server is started straight after it is created, because its first start creates its `peer` and `world` tables.
 - Deleting a server stops it, removes its folder and drops its `srv_<id>` database. The owner has to type the server name to confirm.
 
+## The game's login page
+
+`src/login.js` is the page the game client opens to log in. It has a **Server name** box, so players pick which server the gateway sends them to. It puts the server name, GrowID and password into the login token and never checks passwords itself: the gateway does that in the chosen server's database. So it needs no database and no secrets. It runs on 127.0.0.1:3002 as `gurotopia-login`, and nginx serves it as `login.psnode.cloud`. Set `loginurl|login.psnode.cloud` in the gateway's `/opt/gurotopia/server_data.php`. Try it locally with `npm run login`.
+
 ## Running it on your PC
 
 You need Node.js 20 or newer and MariaDB.
@@ -104,9 +108,9 @@ Run these as root, or with `sudo`. The files are set up for `panel.psnode.cloud`
    ```
    cp /opt/gurotopia-web/deploy/*.service /etc/systemd/system/
    systemctl daemon-reload
-   systemctl enable --now gurotopia-gateway gurotopia-supervisor gurotopia-panel
+   systemctl enable --now gurotopia-gateway gurotopia-supervisor gurotopia-panel gurotopia-login
    ```
-7. **HTTPS.** Point `panel.psnode.cloud` at the VPS, run `certbot certonly --webroot -w /var/www/html -d panel.psnode.cloud` and `certbot certonly --webroot -w /var/www/html -d psnode.cloud -d www.psnode.cloud` (nginx needs a temporary port-80 site serving `/var/www/html` for this first run, since the full config refers to certificates that don't exist yet), copy `deploy/nginx.conf` to `/etc/nginx/sites-available/gurotopia`, link it into `sites-enabled`, remove the `default` site, and run `nginx -t && systemctl reload nginx`. nginx answers on 443 for both the website and the game's login request, and sends each to the right place.
+7. **HTTPS.** Point `panel.psnode.cloud` at the VPS, run `certbot certonly --webroot -w /var/www/html -d panel.psnode.cloud` and `certbot certonly --webroot -w /var/www/html -d psnode.cloud -d www.psnode.cloud` and `certbot certonly --webroot -w /var/www/html -d login.psnode.cloud` (nginx needs a temporary port-80 site serving `/var/www/html` for this first run, since the full config refers to certificates that don't exist yet), copy `deploy/nginx.conf` to `/etc/nginx/sites-available/gurotopia`, link it into `sites-enabled`, remove the `default` site, and run `nginx -t && systemctl reload nginx`. nginx answers on 443 for both the website and the game's login request, and sends each to the right place.
 8. **Firewall**
    ```
    ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{brand}} login</title>
+<style>
+  :root { --bg: rgba(14, 20, 33, 0.94); --line: #2b3a55; --text: #e8eefc; --muted: #9fb0d0; --accent: #3ddc84; --accent-text: #08240f; --error: #ff6b6b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: transparent; font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; color: var(--text); }
+  body { display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .card { width: 100%; max-width: 380px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 22px 22px 18px; box-shadow: 0 12px 40px rgba(0,0,0,.45); }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .logo { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, #3ddc84, #2a8cff); display: grid; place-items: center; font-weight: 800; color: #08131f; font-size: 15px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: .3px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 2px 0 16px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; text-transform: uppercase; letter-spacing: .6px; }
+  input[type=text], input[type=password] { width: 100%; padding: 11px 12px; border-radius: 9px; border: 1px solid var(--line); background: #0b1120; color: var(--text); font-size: 16px; outline: none; }
+  input:focus { border-color: var(--accent); }
+  .server input { border-color: #2a8cff; }
+  button { width: 100%; margin-top: 16px; padding: 12px; border: 0; border-radius: 9px; background: var(--accent); color: var(--accent-text); font-size: 16px; font-weight: 700; cursor: pointer; }
+  button[disabled] { opacity: .6; cursor: default; }
+  .switch { text-align: center; margin-top: 12px; font-size: 14px; }
+  .switch a { color: #7fb6ff; text-decoration: none; }
+  .error { background: rgba(255,107,107,.12); border: 1px solid var(--error); color: #ffd3d3; border-radius: 9px; padding: 9px 11px; font-size: 14px; margin: 0 0 6px; }
+  .only-register { display: none; }
+  form.register .only-register { display: block; }
+  form.register .only-login { display: none; }
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="brand"><div class="logo">PS</div><h1>{{brand}}</h1></div>
+  <p class="sub" id="subtitle">Log in to a server</p>
+  {{error}}
+  <form method="POST" action="/player/growid/login/validate" id="form" class="{{mode}}" autocomplete="off" accept-charset="UTF-8">
+    <input type="hidden" name="_token" value="{{token}}">
+    <input type="hidden" name="mode" id="mode" value="{{mode}}">
+
+    <div class="server">
+      <label for="server">Server name</label>
+      <input type="text" id="server" name="server" value="{{server}}" required maxlength="24" pattern="[A-Za-z0-9]{3,24}" placeholder="e.g. psy7" autocapitalize="off" spellcheck="false">
+    </div>
+
+    <label for="growId">GrowID</label>
+    <input type="text" id="growId" name="growId" value="{{growId}}" required maxlength="18" pattern="[A-Za-z0-9]{3,18}" autocapitalize="off" spellcheck="false">
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" required maxlength="32" pattern="[A-Za-z0-9@._!\-]{4,32}">
+
+    <div class="only-register">
+      <label for="password2">Password again</label>
+      <input type="password" id="password2" name="password_confirmation" maxlength="32">
+    </div>
+
+    <button type="submit" id="submit"><span class="only-login">Log in</span><span class="only-register">Create account</span></button>
+    <p class="switch only-login">New on this server? <a href="#" id="toRegister">Create an account</a></p>
+    <p class="switch only-register"><a href="#" id="toLogin">Back to log in</a></p>
+  </form>
+</main>
+<script>
+(function () {
+  var form = document.getElementById('form');
+  var mode = document.getElementById('mode');
+  var server = document.getElementById('server');
+  var p2 = document.getElementById('password2');
+  var submit = document.getElementById('submit');
+  function setMode(m) {
+    form.className = m; mode.value = m;
+    document.getElementById('subtitle').textContent = m === 'register' ? 'Create an account on a server' : 'Log in to a server';
+    p2.required = m === 'register';
+    if (m !== 'register') p2.value = '';
+  }
+  setMode(mode.value);
+  document.getElementById('toRegister').onclick = function (e) { e.preventDefault(); setMode('register'); };
+  document.getElementById('toLogin').onclick = function (e) { e.preventDefault(); setMode('login'); };
+  try { if (!server.value) server.value = localStorage.getItem('psnode_server') || ''; } catch (e) {}
+  ['server', 'growId'].forEach(function (id) {
+    document.getElementById(id).addEventListener('input', function () { this.value = this.value.replace(/[^A-Za-z0-9]/g, ''); });
+  });
+  form.addEventListener('submit', function (e) {
+    if (submit.disabled) { e.preventDefault(); return; }
+    if (mode.value === 'register' && p2.value !== document.getElementById('password').value) {
+      e.preventDefault(); alert('The two passwords are different.'); return;
+    }
+    try { localStorage.setItem('psnode_server', server.value); } catch (e2) {}
+    submit.disabled = true;
+  });
+  (server.value ? document.getElementById('growId') : server).focus();
+})();
+</script>
+</body>
+</html>
