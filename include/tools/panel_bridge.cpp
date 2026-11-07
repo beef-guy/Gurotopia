@@ -206,34 +206,51 @@ void panel_bridge_create_tables()
 void panel_items_catalog()
 {
     if (db.mysql == nullptr) return;
+    /* @note only the website reads it, so it's simply made again (an older server made it with shorter columns) */
+    mysql_query(db.mysql, "DROP TABLE IF EXISTS item_catalog");
     mysql_query(db.mysql,
-        "CREATE TABLE IF NOT EXISTS item_catalog ("
+        "CREATE TABLE item_catalog ("
         "id INT NOT NULL PRIMARY KEY,"
-        "name VARCHAR(64) NOT NULL DEFAULT '',"
+        "name VARCHAR(255) NOT NULL DEFAULT '',"
         "type INT NOT NULL DEFAULT 0, rarity INT NOT NULL DEFAULT 0, hits INT NOT NULL DEFAULT 0, hit_reset INT NOT NULL DEFAULT 0,"
         "collision INT NOT NULL DEFAULT 0, cat INT NOT NULL DEFAULT 0, cloth INT NOT NULL DEFAULT 10,"
-        "texture VARCHAR(64) NOT NULL DEFAULT '', tex_x INT NOT NULL DEFAULT 0, tex_y INT NOT NULL DEFAULT 0,"
+        "texture VARCHAR(255) NOT NULL DEFAULT '', tex_x INT NOT NULL DEFAULT 0, tex_y INT NOT NULL DEFAULT 0,"
         "info TEXT, custom TINYINT NOT NULL DEFAULT 0,"
         "INDEX (name)"
-    ")");
-    mysql_query(db.mysql, "DELETE FROM item_catalog");
-    const std::size_t original = items_original_count();
-    std::string values{};
-    const auto flush = [&values]()
+    ") DEFAULT CHARSET=utf8mb4");
+
+    /* @note items.dat text is single bytes, not UTF-8: keep plain ASCII, the rest becomes ? so MariaDB takes every row */
+    const auto plain = [](const std::string &text, std::size_t max)
     {
-        if (values.empty()) return;
-        mysql_query(db.mysql, ("INSERT INTO item_catalog (id, name, type, rarity, hits, hit_reset, collision, cat, cloth, texture, tex_x, tex_y, info, custom) VALUES " + values).c_str());
-        values.clear();
+        std::string out = text.substr(0, max);
+        for (char &c : out) if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7e) c = '?';
+        return escape(out);
     };
-    for (const ::item &item : items)
+    const std::size_t original = items_original_count();
+    const auto row = [&](const ::item &item)
     {
-        if (!values.empty()) values += ',';
-        values += std::format("({},'{}',{},{},{},{},{},{},{},'{}',{},{},'{}',{})",
-            item.id, escape(item.raw_name), item.type, item.rarity, item.hits, item.hit_reset, item.collision, item.cat, item.cloth_type,
-            escape(item.texture), item.tex_x, item.tex_y, escape(item.info), item.id >= original ? 1 : 0);
-        if (values.size() > 400000) flush();
+        return std::format("({},'{}',{},{},{},{},{},{},{},'{}',{},{},'{}',{})",
+            item.id, plain(item.raw_name, 255), item.type, item.rarity, item.hits, item.hit_reset, item.collision, item.cat, item.cloth_type,
+            plain(item.texture, 255), item.tex_x, item.tex_y, plain(item.info, 4000), item.id >= original ? 1 : 0);
+    };
+    const std::string insert = "INSERT INTO item_catalog (id, name, type, rarity, hits, hit_reset, collision, cat, cloth, texture, tex_x, tex_y, info, custom) VALUES ";
+
+    std::size_t written = 0, failed = 0;
+    for (std::size_t from = 0; from < items.size(); from += 500)
+    {
+        const std::size_t to = std::min(items.size(), from + 500);
+        std::string values{};
+        for (std::size_t i = from; i < to; ++i) values += (values.empty() ? "" : ",") + row(items[i]);
+        if (mysql_query(db.mysql, (insert + values).c_str()) == 0) { written += to - from; continue; }
+        /* @note one bad row shouldn't cost the other 499: try them one at a time and say which failed */
+        print(std::format("item list: rows {}-{} failed together ({}), trying one by one", from, to - 1, mysql_error(db.mysql)));
+        for (std::size_t i = from; i < to; ++i)
+        {
+            if (mysql_query(db.mysql, (insert + row(items[i])).c_str()) == 0) ++written;
+            else { ++failed; print(std::format("item list: item {} left out: {}", items[i].id, mysql_error(db.mysql))); }
+        }
     }
-    flush();
+    if (failed) print(std::format("item list: {} of {} items written for the website", written, items.size()));
 }
 
 void panel_tick()
