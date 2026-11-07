@@ -1,0 +1,53 @@
+<%- include('partials/server-shell') %>
+<p class="crumb"><a href="/servers/<%= server.id %>/worlds"><svg class="ic"><use href="#i-back"/></svg>All worlds</a></p>
+<div class="page-head">
+  <div class="player-head">
+    <span class="pfp big"><svg class="ic"><use href="#i-globe"/></svg></span>
+    <div>
+      <h1><%= world.name %> <% if (world.inside.length) { %><span class="badge online"><span class="dot"></span><%= world.inside.length %> inside</span><% } %></h1>
+      <p class="muted"><% if (world.ownerId) { %>Owned by <% if (world.ownerName) { %><a href="/servers/<%= server.id %>/players/<%= world.ownerId %>"><%= world.ownerName %></a><% } else { %>account #<%= world.ownerId %><% } %><% } else { %>Not locked<% } %></p>
+    </div>
+  </div>
+</div>
+
+<section class="tiles">
+  <div class="tile"><span class="tile-label">Players inside</span><span class="tile-value"><%= world.inside.length %></span><span class="tile-foot"><%= server.reporting ? 'right now' : 'the server is not running' %></span></div>
+  <div class="tile"><span class="tile-label">Access</span><span class="tile-value"><%= world.access.length %></span><span class="tile-foot">players who can build</span></div>
+  <div class="tile"><span class="tile-label">Entry level</span><span class="tile-value"><%= world.minLevel %></span><span class="tile-foot">lowest level that can enter</span></div>
+  <div class="tile"><span class="tile-label">Saved size</span><span class="tile-value"><%= fmt.bytes(world.size) %></span><span class="tile-foot">blocks, drops and machines</span></div>
+</section>
+
+<div class="over-grid two">
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-users"/></svg>In this world now</h2>
+      <% if (world.inside.length) { %>
+      <form method="post" action="/servers/<%= server.id %>/worlds/<%= world.name %>/empty" class="inline">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button type="submit" class="ghost small">Send everyone out</button>
+      </form>
+      <% } %>
+    </div>
+    <% if (world.inside.length) { %>
+      <div class="chips"><% for (const g of world.inside) { %><span class="chip world"><span class="live-dot"></span><%= g %></span><% } %></div>
+    <% } else { %><p class="muted"><%= server.reporting ? 'Nobody is here right now.' : 'The server is not running.' %></p><% } %>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2><svg class="ic"><use href="#i-lock"/></svg>Access list</h2><span class="chip"><%= world.access.length %></span></div>
+    <% if (world.accessNames.length) { %>
+      <div class="chips"><% for (const a of world.accessNames) { %><a class="chip world" href="/servers/<%= server.id %>/players/<%= a.uid %>"><%= a.growid || ('#' + a.uid) %></a><% } %></div>
+    <% } else { %><p class="muted">Only the owner can build here.</p><% } %>
+  </section>
+</div>
+
+<section class="card danger">
+  <div class="card-head"><h2><svg class="ic"><use href="#i-trash"/></svg>Delete world</h2></div>
+  <p>Sends everyone inside back to the world menu and deletes <strong><%= world.name %></strong> with every block, lock and item in it. It can't be undone.</p>
+  <form method="post" action="/servers/<%= server.id %>/worlds/<%= world.name %>/delete" class="row-form">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <label>Type <strong><%= world.name %></strong> to confirm
+      <input name="confirm" autocomplete="off" required>
+    </label>
+    <button type="submit" class="bad">Delete forever</button>
+  </form>
+</section>
+<%- include('partials/server-shell-end') %>

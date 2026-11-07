@@ -21,11 +21,30 @@ const login = Object.fromEntries(fs.readFileSync('mysql_login.txt', 'utf8').spli
   await conn.query(`CREATE DATABASE IF NOT EXISTS \`${args.database}\``);
   await conn.query(`USE \`${args['platform-db']}\``);
   await conn.query("UPDATE servers SET status='running', online=2, last_seen=UTC_TIMESTAMP() WHERE name=?", [args.name]);
+  // @note stands in for include/tools/panel_bridge.cpp: carries out the website's actions and says who is online
+  const own = await mysql.createConnection({ host: login.host, user: login.user, password: login.password, database: args.database });
+  await own.query(`CREATE TABLE IF NOT EXISTS panel_actions (id INT AUTO_INCREMENT PRIMARY KEY, action VARCHAR(16) NOT NULL,
+    target VARCHAR(24) NOT NULL, value VARCHAR(255) DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, done_at DATETIME NULL)`);
+  await own.query("CREATE TABLE IF NOT EXISTS panel_live (growid VARCHAR(18) NOT NULL PRIMARY KEY, world VARCHAR(24) DEFAULT '')");
+  await own.query("REPLACE INTO panel_live VALUES ('Griefer', 'TRADE'), ('Noob', '')");
+  setInterval(async () => {
+    try {
+      const [rows] = await own.query('SELECT id, action, target, value FROM panel_actions WHERE done_at IS NULL ORDER BY id');
+      for (const r of rows) {
+        if (r.action === 'world_delete') await own.query('DELETE FROM world WHERE name = ?', [r.target]);
+        if (r.action === 'world_empty') await own.query('UPDATE panel_live SET world = \'\' WHERE world = ?', [r.target]);
+        if (r.action === 'kick') await own.query('DELETE FROM panel_live WHERE growid = ?', [r.target]);
+        await own.query('UPDATE panel_actions SET done_at = NOW() WHERE id = ?', [r.id]);
+        console.log(`panel action ${r.action} ${r.target}${r.value ? ` ${r.value}` : ''}`);
+      }
+    } catch (err) { console.error(`panel bridge: ${err.message}`); }
+  }, 200);
   console.log('ready');
   process.on('SIGINT', async () => {
     console.log('saving everything');
     await conn.query("UPDATE servers SET status='stopped', online=0 WHERE name=?", [args.name]);
     await conn.end();
+    await own.query('DELETE FROM panel_live').catch(() => {});
     process.exit(0);
   });
   setInterval(() => {}, 1000);

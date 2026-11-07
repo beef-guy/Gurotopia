@@ -16,6 +16,8 @@ const servers = require('./servers');
 const supervisor = require('./supervisorClient');
 const hostStats = require('./hostStats');
 const players = require('./players');
+const worlds = require('./worlds');
+const live = require('./live');
 
 const DONE_MESSAGES = {
   created: 'Server created and starting. It shows Online once it is ready.',
@@ -25,11 +27,14 @@ const DONE_MESSAGES = {
   restarted: 'Restarted.',
   saved: 'Saved. Restart the server for the change to take effect.',
   deleted: 'Server deleted.',
-  banned: 'Banned. It takes effect the next time they log in.',
+  banned: 'Banned. If they were online, they were kicked off right away.',
   unbanned: 'Unbanned. They can log in again.',
-  muted: 'Muted. It takes effect the next time they log in.',
-  unmuted: 'Unmuted. It takes effect the next time they log in.',
-  roleSet: 'Role changed. It takes effect the next time they log in.',
+  muted: 'Muted. It applies right away.',
+  unmuted: 'Unmuted. They can talk again.',
+  roleSet: 'Role changed. It applies right away.',
+  kicked: 'Kicked.',
+  worldEmptied: 'Everyone was sent out of the world.',
+  worldDeleted: 'World deleted.',
 };
 
 function describe(server, proc) {
@@ -139,6 +144,9 @@ function buildApp() {
   app.use(auth.loadSession);
   app.use((req, res, next) => {
     res.locals.done = DONE_MESSAGES[req.query.done] || '';
+    if (res.locals.done && req.query.live === '0') {
+      res.locals.done += ' This server runs an older game build, so an online player only sees it after logging in again. Restart the server to update it.';
+    }
     next();
   });
 
@@ -274,7 +282,7 @@ function buildApp() {
     ] },
     { group: 'Game data', items: [
       { page: 'players', label: 'Players', icon: 'user', path: '/players' },
-      { label: 'Worlds', icon: 'globe', soon: true },
+      { page: 'worlds', label: 'Worlds', icon: 'globe', path: '/worlds' },
       { label: 'Items & shop', icon: 'box', soon: true },
     ] },
     { group: 'Development', items: [
@@ -306,8 +314,8 @@ function buildApp() {
       filter: ['all', 'staff', 'banned', 'muted'].includes(req.query.filter) ? req.query.filter : 'all',
       page: req.query.page,
     };
-    const [stats, result] = await Promise.all([players.summary(req.server), players.list(req.server, query)]);
-    await renderServer(req, res, 'players', { extra: { stats, result, query, title: `Players · ${req.server.name}` } });
+    const [stats, result, onlineNow] = await Promise.all([players.summary(req.server), players.list(req.server, query), live.online(req.server)]);
+    await renderServer(req, res, 'players', { extra: { stats, result, query, onlineNow, title: `Players · ${req.server.name}` } });
   }));
 
   /* @note loads req.player from this server's own database */
@@ -321,24 +329,64 @@ function buildApp() {
 
   async function renderPlayer(req, res, { error = '', status = 200 } = {}) {
     const player = await players.get(req.server, req.player.uid);
-    const more = await players.details(req.server, player);
+    const [more, onlineNow] = await Promise.all([players.details(req.server, player), live.online(req.server)]);
     await renderServer(req, res, 'players', {
       error, status, template: 'player',
-      extra: { player, more, roles: players.ROLES, title: `${player.growid} · ${req.server.name}` },
+      extra: { player, more, roles: players.ROLES, presence: onlineNow.get(player.growid.toLowerCase()) || null, title: `${player.growid} · ${req.server.name}` },
     });
   }
 
   app.get('/servers/:id/players/:uid', auth.requireUser, loadServer, loadPlayer, asyncRoute((req, res) => renderPlayer(req, res)));
 
-  app.post('/servers/:id/players/:uid/:action(ban|unban|mute|unmute|role)', auth.requireUser, loadServer, auth.checkCsrf, loadPlayer, asyncRoute(async (req, res) => {
-    let done;
+  app.post('/servers/:id/players/:uid/:action(ban|unban|mute|unmute|role|kick)', auth.requireUser, loadServer, auth.checkCsrf, loadPlayer, asyncRoute(async (req, res) => {
+    let result;
     try {
-      done = await players.moderate(req.server, req.player, req.user.username, req.params.action, req.body);
+      result = await players.moderate(req.server, req.player, req.user.username, req.params.action, req.body);
     } catch (err) {
       if (!(err instanceof players.UserError)) throw err;
       return renderPlayer(req, res, { error: err.message, status: 400 });
     }
-    res.redirect(`/servers/${req.server.id}/players/${req.player.uid}?done=${done}`);
+    res.redirect(`/servers/${req.server.id}/players/${req.player.uid}?done=${result.done}${result.live ? '' : '&live=0'}`);
+  }));
+
+  /* ---------- worlds ---------- */
+
+  app.get('/servers/:id/worlds', auth.requireUser, loadServer, asyncRoute(async (req, res) => {
+    const query = {
+      q: String(req.query.q || ''),
+      sort: Object.hasOwn(worlds.SORTS, req.query.sort) ? req.query.sort : 'name',
+      filter: ['all', 'active', 'locked'].includes(req.query.filter) ? req.query.filter : 'all',
+      page: req.query.page,
+    };
+    const result = await worlds.list(req.server, query);
+    await renderServer(req, res, 'worlds', { extra: { result, query, title: `Worlds · ${req.server.name}` } });
+  }));
+
+  const loadWorld = asyncRoute(async (req, res, next) => {
+    const world = await worlds.get(req.server, String(req.params.name || ''));
+    if (!world) return res.status(404).render('error', { title: 'Not found', message: 'That world does not exist on this server.' });
+    req.world = world;
+    next();
+  });
+
+  async function renderWorld(req, res, { error = '', status = 200 } = {}) {
+    const world = await worlds.get(req.server, req.world.name) || req.world;
+    await renderServer(req, res, 'worlds', { error, status, template: 'world', extra: { world, title: `${world.name} · ${req.server.name}` } });
+  }
+
+  app.get('/servers/:id/worlds/:name', auth.requireUser, loadServer, loadWorld, asyncRoute((req, res) => renderWorld(req, res)));
+
+  app.post('/servers/:id/worlds/:name/:action(empty|delete)', auth.requireUser, loadServer, auth.checkCsrf, loadWorld, asyncRoute(async (req, res) => {
+    let done;
+    try {
+      done = req.params.action === 'empty'
+        ? await worlds.emptyWorld(req.server, req.world, req.user.username)
+        : await worlds.deleteWorld(req.server, req.world, req.user.username, req.body.confirm);
+    } catch (err) {
+      if (!(err instanceof worlds.UserError)) throw err;
+      return renderWorld(req, res, { error: err.message, status: 400 });
+    }
+    res.redirect(done === 'worldDeleted' ? `/servers/${req.server.id}/worlds?done=${done}` : `/servers/${req.server.id}/worlds/${req.world.name}?done=${done}`);
   }));
 
   app.get('/servers/:id/status.json', auth.requireUser, loadServer, asyncRoute(async (req, res) => {

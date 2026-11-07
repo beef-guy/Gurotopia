@@ -1,0 +1,90 @@
+<%- include('partials/server-shell') %>
+<%
+  const link = (changes) => {
+    const p = new URLSearchParams();
+    const merged = { ...query, ...changes };
+    for (const [k, val] of Object.entries(merged)) {
+      if (val && !(k === 'sort' && val === 'name') && !(k === 'filter' && val === 'all') && !(k === 'page' && Number(val) === 1)) p.set(k, val);
+    }
+    const qs = p.toString();
+    return `/servers/${server.id}/worlds${qs ? '?' + qs : ''}`;
+  };
+%>
+<div class="page-head">
+  <div>
+    <h1>Worlds</h1>
+    <p class="muted">Every saved world on <%= server.name %>, and who is in them right now.</p>
+  </div>
+</div>
+
+<% if (!result.ready) { %>
+<section class="card">
+  <div class="empty">
+    <svg class="ic big"><use href="#i-globe"/></svg>
+    <p>No world data yet. Start the server once and the worlds appear here.</p>
+  </div>
+</section>
+<% } else { %>
+<section class="tiles">
+  <a class="tile tile-link <%= query.filter === 'all' ? 'on' : '' %>" href="<%= link({ filter: 'all', page: 1 }) %>">
+    <span class="tile-label"><svg class="ic"><use href="#i-globe"/></svg>Worlds</span>
+    <span class="tile-value"><%= result.stats.total %></span>
+    <span class="tile-foot">saved on this server</span>
+  </a>
+  <a class="tile tile-link <%= query.filter === 'active' ? 'on' : '' %>" href="<%= link({ filter: 'active', page: 1 }) %>">
+    <span class="tile-label"><svg class="ic"><use href="#i-play"/></svg>Active now</span>
+    <span class="tile-value"><%= result.stats.active %></span>
+    <span class="tile-foot">worlds with players in them</span>
+  </a>
+  <div class="tile">
+    <span class="tile-label"><svg class="ic"><use href="#i-users"/></svg>Players in worlds</span>
+    <span class="tile-value"><%= result.stats.playersInWorlds %></span>
+    <span class="tile-foot"><%= server.reporting ? 'live, updated every few seconds' : 'the server is not running' %></span>
+  </div>
+  <a class="tile tile-link <%= query.filter === 'locked' ? 'on' : '' %>" href="<%= link({ filter: 'locked', page: 1 }) %>">
+    <span class="tile-label"><svg class="ic"><use href="#i-lock"/></svg>Locked</span>
+    <span class="tile-value"><%= result.stats.locked %></span>
+    <span class="tile-foot">have an owner</span>
+  </a>
+</section>
+
+<section class="card flush">
+  <form class="toolbar" method="get" action="/servers/<%= server.id %>/worlds">
+    <% if (query.filter !== 'all') { %><input type="hidden" name="filter" value="<%= query.filter %>"><% } %>
+    <input type="search" name="q" value="<%= query.q %>" placeholder="Search worlds" aria-label="Search worlds" maxlength="24">
+    <label class="select-label">Sort
+      <select name="sort">
+        <% for (const [key, label] of [['name', 'Name'], ['size', 'Size'], ['owner', 'Owner'], ['level', 'Entry level']]) { %>
+        <option value="<%= key %>" <%= query.sort === key ? 'selected' : '' %>><%= label %></option>
+        <% } %>
+      </select>
+    </label>
+    <button type="submit" class="ghost small">Apply</button>
+    <% if (query.q || query.filter !== 'all') { %><a class="btn ghost small" href="/servers/<%= server.id %>/worlds">Clear</a><% } %>
+  </form>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>World</th><th>Owner</th><th>Players now</th><th>Access</th><th>Entry level</th><th>Size</th></tr></thead>
+    <tbody>
+    <% for (const w of result.worlds) { %>
+      <tr>
+        <td><a class="player-link" href="/servers/<%= server.id %>/worlds/<%= w.name %>"><span class="pfp world-ic"><svg class="ic"><use href="#i-globe"/></svg></span><%= w.name %></a></td>
+        <td><% if (!w.ownerId) { %><span class="muted">Unlocked</span><% } else if (w.ownerName) { %><a href="/servers/<%= server.id %>/players/<%= w.ownerId %>"><%= w.ownerName %></a><% } else { %><span class="muted">#<%= w.ownerId %></span><% } %></td>
+        <td><% if (w.inside.length) { %><span class="live-dot"></span><%= w.inside.length %><% } else { %><span class="muted">0</span><% } %></td>
+        <td><%= w.access.length %></td>
+        <td><%= w.minLevel %></td>
+        <td><%= fmt.bytes(w.size) %></td>
+      </tr>
+    <% } %>
+    <% if (result.worlds.length === 0) { %><tr><td colspan="6" class="muted">No worlds match.</td></tr><% } %>
+    </tbody>
+  </table>
+  </div>
+  <nav class="pager">
+    <% if (result.page > 1) { %><a class="btn ghost small" href="<%= link({ page: result.page - 1 }) %>">Previous</a><% } %>
+    <span class="muted small"><% if (result.pages > 1) { %>Page <%= result.page %> of <%= result.pages %> · <% } %><%= result.total %> world<%= result.total === 1 ? '' : 's' %></span>
+    <% if (result.page < result.pages) { %><a class="btn ghost small" href="<%= link({ page: result.page + 1 }) %>">Next</a><% } %>
+  </nav>
+</section>
+<% } %>
+<%- include('partials/server-shell-end') %>

@@ -251,8 +251,56 @@ test('panel and supervisor', { skip, timeout: 120000 }, async (t) => {
 
     const [log] = await admin.query(`SELECT actor, action FROM ${srv}.mod_log ORDER BY id`);
     assert.deepEqual(log.map((l) => l.action), ['ban', 'mute', 'role', 'unban']);
+    const [sent] = await admin.query(`SELECT action, target, done_at FROM ${srv}.panel_actions ORDER BY id`);
+    assert.deepEqual(sent.map((a) => `${a.action} ${a.target}`), Array(4).fill('player_sync Griefer'), 'the running game was told each time');
+    assert.ok(sent.every((a) => a.done_at), 'and carried each one out');
+
+    r = await alice.get(`/servers/${id}/players`);
+    assert.match(r.text, /in TRADE/, 'shows who is online and where');
+    r = await alice.post(`${base}/kick`, { _csrf: await alice.csrf(), reason: 'spam' });
+    assert.equal(r.status, 302);
+    assert.match(JSON.parse((await alice.get(`/servers/${id}/logs.json`)).text).text, /panel action kick Griefer spam/);
     assert.equal(log[0].actor, 'web:alice');
     assert.match((await alice.get(base)).text, /Moderation history[\s\S]*unban/);
+  });
+
+  await t.test('worlds page lists worlds and deletes them through the game', async () => {
+    const srv = `srv_${id}`;
+    await admin.query(`CREATE TABLE ${srv}.world (name VARCHAR(24) NOT NULL PRIMARY KEY, owner INT DEFAULT 0, blocks MEDIUMBLOB,
+      objects MEDIUMBLOB, access VARCHAR(512) DEFAULT '', min_level INT DEFAULT 1, extras MEDIUMBLOB)`);
+    const [[psy]] = await admin.query(`SELECT uid FROM ${srv}.peer WHERE growid = 'Psy7'`);
+    const [[noob]] = await admin.query(`SELECT uid FROM ${srv}.peer WHERE growid = 'Noob'`);
+    await admin.query(`INSERT INTO ${srv}.world (name, owner, blocks, access, min_level) VALUES
+      ('TRADE', ?, REPEAT('x', 3000), ?, 5), ('START', 0, REPEAT('x', 100), '', 1)`, [psy.uid, String(noob.uid)]);
+    await admin.query(`REPLACE INTO ${srv}.panel_live (growid, world) VALUES ('Griefer', 'TRADE')`); // @note the players test kicked Griefer
+
+    let r = await alice.get(`/servers/${id}/worlds`);
+    assert.equal(r.status, 200);
+    assert.match(r.text, /TRADE/);
+    assert.match(r.text, /START/);
+    r = await alice.get(`/servers/${id}/worlds?filter=active`);
+    assert.match(r.text, /TRADE/);
+    assert.doesNotMatch(r.text, />START</);
+
+    r = await alice.get(`/servers/${id}/worlds/TRADE`);
+    assert.equal(r.status, 200);
+    assert.match(r.text, /Psy7/);
+    assert.match(r.text, /Noob/, 'access list names');
+    assert.match(r.text, /Griefer/, 'who is inside');
+    assert.equal((await bob.get(`/servers/${id}/worlds/TRADE`)).status, 404);
+    assert.equal((await alice.get(`/servers/${id}/worlds/NOPE`)).status, 404);
+
+    r = await alice.post(`/servers/${id}/worlds/TRADE/empty`, { _csrf: await alice.csrf() });
+    assert.equal(r.status, 302);
+    r = await alice.post(`/servers/${id}/worlds/TRADE/delete`, { _csrf: await alice.csrf(), confirm: 'nope' });
+    assert.equal(r.status, 400);
+    r = await alice.post(`/servers/${id}/worlds/TRADE/delete`, { _csrf: await alice.csrf(), confirm: 'trade' });
+    assert.equal(r.status, 302);
+    assert.equal(r.location, `/servers/${id}/worlds?done=worldDeleted`);
+    const [left] = await admin.query(`SELECT name FROM ${srv}.world`);
+    assert.deepEqual(left.map((w) => w.name), ['START'], 'the game deleted it');
+    const [acts] = await admin.query(`SELECT action FROM ${srv}.panel_actions WHERE action LIKE 'world%' ORDER BY id`);
+    assert.deepEqual(acts.map((a) => a.action), ['world_empty', 'world_delete']);
   });
 
   await t.test('the log shows the server output', async () => {

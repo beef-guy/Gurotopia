@@ -27,6 +27,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include "include/tools/panel_bridge.hpp"
+
 #include <chrono>
 #include <csignal>
 #include <thread>
@@ -238,6 +240,7 @@ int main(int argc, char *argv[])
 
         db.load_login(); // @note ./mysql_login.txt, or --mysql-login
         db.mysql_connect();
+        if (!platform::gateway) panel_bridge_create_tables(); // @note the website's live actions (web/src/players.js, worlds.js)
 
         decode_items_dat();
         discord::load_webhook(discord_webhook_file); // @note ./discord_webhook.txt, or --discord-webhook
@@ -276,6 +279,7 @@ int main(int argc, char *argv[])
         special_tick(); // @note Freeze and Curse Wands wearing off, Challenge Timers, Game Generator games
         carnival_tick(); // @note Carnival games: timers, targets, platforms
         render_tick(); // @note /renderworld results
+        if (!platform::gateway) panel_tick(); // @note kicks, bans, role changes and world actions from the website, and who is online
 
         if (clock::now() - last_save >= std::chrono::seconds(60)) // @note so a crash or force stop loses at most a minute
         {
@@ -288,6 +292,7 @@ int main(int argc, char *argv[])
     safe_disconnect_peers(gSignal);
     save_everything();
     platform::report("stopped", 0);
+    panel_bridge_clear();
     worlds.clear(); // @note before the database connection closes
     enet_host_destroy(host);
     if (host != nullptr) host = nullptr;
